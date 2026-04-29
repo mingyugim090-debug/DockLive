@@ -1,0 +1,29 @@
+# 가상환경
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# 환경변수
+.env
+.env.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 테스트
+.pytest_cache/
+htmlcov/
+.coverage
+
+# 빌드
+dist/
+build/
+*.egg-info/

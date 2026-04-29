@@ -1,0 +1,54 @@
+# ==========================
+# Python
+# ==========================
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# ==========================
+# 환경변수 (절대 커밋 금지)
+# ==========================
+.env
+.env.local
+.env.production
+.env.*.local
+
+# ==========================
+# Node / Next.js
+# ==========================
+node_modules/
+.next/
+out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ==========================
+# IDE
+# ==========================
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ==========================
+# 테스트 / 커버리지
+# ==========================
+.pytest_cache/
+htmlcov/
+.coverage
+coverage/
+
+# ==========================
+# 기타
+# ==========================
+*.log

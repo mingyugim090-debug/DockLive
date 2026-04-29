@@ -1,0 +1,15 @@
+# .dockerignore — Docker 빌드 시 불필요한 파일 제외
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+.env.*
+.git/
+.gitignore
+README.md
+*.md
+.pytest_cache/
+htmlcov/
+.coverage

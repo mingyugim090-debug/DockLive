@@ -1,0 +1,102 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Background */
+  --bg: #0C0C12;
+  --card: #141420;
+  --card2: #1C1C2A;
+
+  /* Border */
+  --border: rgba(255, 255, 255, 0.07);
+
+  /* Primary */
+  --primary: #7C6FF7;
+  --primary-soft: rgba(124, 111, 247, 0.15);
+
+  /* Accent */
+  --accent: #E8845C;
+
+  /* Status */
+  --green: #4ADE80;
+  --yellow: #FBBF24;
+  --red: #F87171;
+
+  /* Text */
+  --text: #F0F0F8;
+  --text2: #8888AA;
+  --text3: #4A4A6A;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+html,
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* focus 스타일 */
+*:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+
+@layer utilities {
+  .bg-bg     { background-color: var(--bg); }
+  .bg-card   { background-color: var(--card); }
+  .bg-card2  { background-color: var(--card2); }
+  .bg-primary { background-color: var(--primary); }
+  .bg-primary-soft { background-color: var(--primary-soft); }
+
+  .text-text   { color: var(--text); }
+  .text-text2  { color: var(--text2); }
+  .text-text3  { color: var(--text3); }
+  .text-primary { color: var(--primary); }
+
+  .border-primary { border-color: var(--primary); }
+  .border-primary\/30 { border-color: rgba(124,111,247,0.3); }
+
+  .bg-primary\/5  { background-color: rgba(124,111,247,0.05); }
+  .bg-primary\/10 { background-color: rgba(124,111,247,0.10); }
+
+  .bg-white\/3  { background-color: rgba(255,255,255,0.03); }
+  .bg-white\/5  { background-color: rgba(255,255,255,0.05); }
+  .bg-white\/7  { background-color: rgba(255,255,255,0.07); }
+  .bg-white\/8  { background-color: rgba(255,255,255,0.08); }
+  .border-white\/7  { border-color: rgba(255,255,255,0.07); }
+  .border-white\/10 { border-color: rgba(255,255,255,0.10); }
+  .border-white\/12 { border-color: rgba(255,255,255,0.12); }
+  .border-white\/20 { border-color: rgba(255,255,255,0.20); }
+  .border-white\/25 { border-color: rgba(255,255,255,0.25); }
+}
+
+/* 모바일 반응형 */
+@media (max-width: 640px) {
+  .max-w-2xl {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
