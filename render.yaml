@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: livedock-backend
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: MAX_PDF_SIZE_MB
+        value: "20"
+      - key: MOCK_MODE
+        value: "false"

@@ -1,4 +1,4 @@
-# Railway / 프로덕션 배포용 Dockerfile
+# 프로덕션 배포용 Dockerfile (Render / Docker 호환)
 # PyMuPDF는 공식 wheel을 사용하므로 빌드 시 libmupdf-dev 불필요
 FROM python:3.11-slim
 
@@ -19,5 +19,5 @@ COPY . .
 # 포트 노출
 EXPOSE 8000
 
-# Railway는 $PORT 환경변수를 주입함
+# Render/Railway 모두 $PORT 환경변수를 주입함
 CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]

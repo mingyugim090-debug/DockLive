@@ -40,18 +40,27 @@ git push -u origin main
 
 ---
 
-## STEP 2 — Railway 백엔드 배포 (P8-02)
+## STEP 2 — Render 백엔드 배포
 
-### 2-1. Railway 프로젝트 생성
+> 무료 티어 사용. 15분 비활성 시 슬립 → 첫 요청 콜드스타트 약 30~50초
 
-1. [railway.app](https://railway.app) → **New Project**
-2. **Deploy from GitHub repo** 선택
-3. `livedock` 저장소 선택
-4. **Root Directory** → `backend` 입력
+### 2-1. Render 프로젝트 생성
 
-### 2-2. 환경변수 설정 (P8-03)
+1. [render.com](https://render.com) → **New +** → **Web Service**
+2. **Build and deploy from a Git repository** 선택
+3. GitHub 계정 연결 후 `DockLive` 저장소 선택 → **Connect**
+4. 아래 설정 입력:
 
-Railway 대시보드 → **Variables** 탭에서 아래 값 입력:
+| 항목 | 값 |
+|------|-----|
+| **Name** | `livedock-backend` |
+| **Root Directory** | `backend` |
+| **Runtime** | `Docker` (자동 감지) |
+| **Instance Type** | `Free` |
+
+### 2-2. 환경변수 설정
+
+**Environment** 탭에서 아래 값 입력:
 
 | 키 | 값 |
 |----|-----|
@@ -62,14 +71,17 @@ Railway 대시보드 → **Variables** 탭에서 아래 값 입력:
 
 ### 2-3. 배포 확인
 
-- Railway가 Dockerfile로 자동 빌드 시작 (2~3분 소요)
-- 배포 후 **Settings → Networking → Generate Domain** 클릭
-- 부여된 URL 기록: `https://livedock-backend-xxxx.railway.app`
+- **Create Web Service** 클릭 → Dockerfile로 자동 빌드 시작 (3~5분 소요)
+- 배포 완료 후 상단 URL 기록: `https://livedock-backend.onrender.com`
 - 헬스체크 확인:
   ```
-  GET https://livedock-backend-xxxx.railway.app/health
+  GET https://livedock-backend.onrender.com/health
   → {"status": "ok", "service": "LiveDock API"}
   ```
+
+> [!NOTE]
+> 무료 플랜은 슬립 모드가 있어 첫 요청이 느릴 수 있습니다.
+> 실제 서비스 전환 시 Render Starter ($7/월) 또는 Vercel Fluid Compute 고려.
 
 ---
 
@@ -99,13 +111,13 @@ Vercel → **Settings → Environment Variables**:
 
 ## STEP 4 — CORS 업데이트 (P8-03 마무리)
 
-Railway 백엔드로 돌아가 `FRONTEND_URL` 환경변수를 Vercel 실제 URL로 업데이트:
+Render 백엔드로 돌아가 `FRONTEND_URL` 환경변수를 Vercel 실제 URL로 업데이트:
 
 ```
 FRONTEND_URL=https://livedock-xxxx.vercel.app
 ```
 
-→ Railway가 자동 재배포 트리거
+→ Render가 자동 재배포 트리거
 
 ---
 
@@ -134,28 +146,34 @@ FRONTEND_URL=https://livedock-xxxx.vercel.app
 ### 빌드 실패: PyMuPDF
 
 ```
-Railway Logs에서 확인 후 requirements.txt의 PyMuPDF 버전 고정:
+Render Logs에서 확인 후 requirements.txt의 PyMuPDF 버전 고정:
 PyMuPDF==1.25.5  (wheel 지원 확인 필요)
 ```
+
+### 콜드스타트 (무료 플랜)
+
+Render 무료 플랜은 15분 비활성 시 슬립 → 첫 요청 30~50초 지연.
+- 해결: Render Starter 플랜($7/월) 업그레이드
+- 임시 해결: UptimeRobot 등으로 14분 간격 헬스체크 핑 설정
 
 ### CORS 오류
 
 브라우저 콘솔에서 CORS 오류 발생 시:
-1. Railway `FRONTEND_URL` 값이 Vercel URL과 정확히 일치하는지 확인
+1. Render `FRONTEND_URL` 값이 Vercel URL과 정확히 일치하는지 확인
 2. `https://` 프로토콜 포함 여부 확인
 3. 후행 슬래시(`/`) 없이 설정
 
 ### 분석 실패 (500 오류)
 
-1. Railway Variables에서 `MOCK_MODE=false` 확인
+1. Render Environment에서 `MOCK_MODE=false` 확인
 2. `ANTHROPIC_API_KEY`가 정확한지 확인
-3. Railway Logs에서 실제 오류 메시지 확인
+3. Render Logs에서 실제 오류 메시지 확인
 
 ---
 
 ## 배포 후 환경변수 최종 정리
 
-### Railway (백엔드)
+### Render (백엔드)
 ```env
 ANTHROPIC_API_KEY=sk-ant-api03-...
 FRONTEND_URL=https://livedock-xxxx.vercel.app
@@ -165,5 +183,5 @@ MOCK_MODE=false
 
 ### Vercel (프론트엔드)
 ```env
-NEXT_PUBLIC_API_URL=https://livedock-backend-xxxx.railway.app
+NEXT_PUBLIC_API_URL=https://livedock-backend.onrender.com
 ```
