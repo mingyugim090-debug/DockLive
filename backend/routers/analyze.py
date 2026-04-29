@@ -32,9 +32,9 @@ async def analyze_document(file: UploadFile = File(...)):
 
     # API 키가 없거나 MOCK 모드이면 샘플 데이터 반환
     use_mock = (
-        not settings.ANTHROPIC_API_KEY
-        or settings.ANTHROPIC_API_KEY == "your_api_key_here"
-        or settings.ANTHROPIC_API_KEY.startswith("mock")
+        not settings.OPENAI_API_KEY
+        or settings.OPENAI_API_KEY == "your_api_key_here"
+        or settings.OPENAI_API_KEY.startswith("mock")
         or getattr(settings, "MOCK_MODE", False)
     )
 
