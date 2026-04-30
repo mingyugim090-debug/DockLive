@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Noto_Sans_KR } from 'next/font/google';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import './globals.css';
 
 const notoSansKR = Noto_Sans_KR({
@@ -27,7 +28,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko">
-      <body className={notoSansKR.className}>{children}</body>
+      <body className={notoSansKR.className}>
+          <ErrorBoundary>{children}</ErrorBoundary>
+        </body>
     </html>
   );
 }

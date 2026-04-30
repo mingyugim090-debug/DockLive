@@ -142,8 +142,19 @@
 | ID | 태스크 | 상태 | 비고 |
 |----|--------|------|------|
 | P10-01 | 콜드스타트 배너 | ✅ 완료 | 페이지 로드 시 /health 핑 → 느리면 "서버 준비 중" 배너 표시 |
-| P10-02 | 프롬프트 고도화 | ⏳ 예정 | 실제 테스트 결과 기반 날짜 파싱 정확도 개선 |
-| P10-03 | 결과 영속성 | ⏳ 예정 | Render PostgreSQL 또는 Vercel KV 도입 |
+| P10-02 | 프롬프트 고도화 | ✅ 완료 | 상대적 날짜 변환 예시·doc_type 기준·checklist/sections 규칙 명확화 |
+| P10-03 | 결과 영속성 | ✅ 완료 | storage.py — Redis(REDIS_URL 설정 시) + 인메모리 폴백, TTL 7일 |
+
+---
+
+## 🔧 PHASE 11 — 안정성 & 품질
+
+| ID | 태스크 | 상태 | 비고 |
+|----|--------|------|------|
+| P11-01 | 백엔드 Python 로깅 | ✅ 완료 | logging.basicConfig (main.py), 서비스별 logger 추가 |
+| P11-02 | 분석 결과 폴백 데이터 | ✅ 완료 | analyzer.py — 빈 체크리스트/섹션 시 doc_type별 기본값 자동 제공 |
+| P11-03 | React Error Boundary | ✅ 완료 | components/ErrorBoundary.tsx → app/layout.tsx 전체 래핑 |
+| P11-04 | Redis 영속성 연동 | ✅ 완료 | Upstash Redis 연동 가이드 (REDIS_URL 환경변수 설정 필요) |
 
 ---
 
