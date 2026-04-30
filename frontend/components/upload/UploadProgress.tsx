@@ -51,7 +51,7 @@ export function UploadProgress({ stage }: UploadProgressProps) {
   const config = STAGE_CONFIG[stage];
   const currentMsg = ANALYZING_MESSAGES[msgIndex];
   // 대략 15초 기준 progress
-  const analysisProgress = stage === 'analyzing' ? Math.min((elapsed / 18) * 100, 95) : stage === 'done' ? 100 : 0;
+  const analysisProgress = stage === 'analyzing' ? Math.min((elapsed / 12) * 100, 95) : stage === 'done' ? 100 : 0;
 
   return (
     <div className="flex flex-col items-center gap-6 py-8">
@@ -141,7 +141,7 @@ export function UploadProgress({ stage }: UploadProgressProps) {
             />
           </div>
           <p className="text-center text-[10px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
-            Claude AI 분석 중 · 약 15~20초 소요
+            AI 분석 중 · 약 10~15초 소요
           </p>
         </div>
       )}

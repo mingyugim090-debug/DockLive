@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DropZone } from '@/components/upload/DropZone';
 import { UploadProgress } from '@/components/upload/UploadProgress';
-import { analyzeDocument, getDemo } from '@/lib/api';
+import { analyzeDocument, getDemo, checkHealth } from '@/lib/api';
 import { useAppStore } from '@/lib/store';
 import { saveResult } from '@/lib/resultCache';
 
@@ -21,6 +21,33 @@ export default function HomePage() {
   const [file, setFile] = useState<File | null>(null);
   const [stage, setStage] = useState<'uploading' | 'analyzing' | 'done' | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [backendReady, setBackendReady] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const slowTimer = setTimeout(() => {
+      if (!cancelled) setBackendReady(false);
+    }, 2000);
+
+    checkHealth().then((ok) => {
+      if (!cancelled) {
+        clearTimeout(slowTimer);
+        setBackendReady(ok);
+        if (!ok) {
+          const retry = setInterval(() => {
+            checkHealth().then((retryOk) => {
+              if (retryOk && !cancelled) {
+                setBackendReady(true);
+                clearInterval(retry);
+              }
+            });
+          }, 10000);
+        }
+      }
+    });
+
+    return () => { cancelled = true; };
+  }, []);
 
   const handleFileAccepted = (f: File) => {
     setFile(f);
@@ -90,6 +117,21 @@ export default function HomePage() {
           <span className="text-text3 text-xs">공고문 AI 분석</span>
         </div>
       </header>
+
+      {/* 콜드스타트 배너 */}
+      <AnimatePresence>
+        {backendReady === false && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="text-center text-xs py-2 px-4"
+            style={{ background: 'rgba(124,111,247,0.1)', color: 'rgba(184,158,255,0.9)', borderBottom: '1px solid rgba(124,111,247,0.15)' }}
+          >
+            🔄 서버를 깨우는 중입니다. 잠시 후 이용해주세요 (최대 1분 소요)
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* 본문 */}
       <div className="flex-1 max-w-2xl mx-auto w-full px-6 py-12 flex flex-col gap-10">

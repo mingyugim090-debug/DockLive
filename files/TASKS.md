@@ -24,7 +24,7 @@
 | P1-02 | Tailwind CSS 설정 | ✅ 완료 | CSS 변수 커스텀 팔레트 (`globals.css`) |
 | P1-03 | 프론트 패키지 설치 | ✅ 완료 | framer-motion, zustand, react-dropzone |
 | P1-04 | FastAPI 백엔드 초기화 | ✅ 완료 | `backend/` 폴더 구조 완료 |
-| P1-05 | 백엔드 패키지 설치 | ✅ 완료 | `requirements.txt` 완성 (anthropic>=0.40.0) |
+| P1-05 | 백엔드 패키지 설치 | ✅ 완료 | `requirements.txt` 완성 (openai>=1.30.0) |
 | P1-06 | 환경변수 파일 설정 | ✅ 완료 | `.env`, `.env.local`, `.gitignore` 완료 |
 | P1-07 | CORS 설정 | ✅ 완료 | `main.py` CORSMiddleware 설정 |
 | P1-08 | 헬스체크 엔드포인트 | ✅ 완료 | `GET /health` → `{"status": "ok"}` |
@@ -49,7 +49,7 @@
 
 | ID | 태스크 | 상태 | 비고 |
 |----|--------|------|------|
-| P3-01 | `claude_service.py` 구현 | ✅ 완료 | Anthropic SDK >= 0.40 연동 |
+| P3-01 | `claude_service.py` 구현 | ✅ 완료 | OpenAI SDK (gpt-4o-mini) 연동으로 전환 |
 | P3-02 | 분석 시스템 프롬프트 작성 | ✅ 완료 | 날짜 추출, 서류 분류, 유형 판별 |
 | P3-03 | JSON 응답 파싱 로직 | ✅ 완료 | `_clean_json()` + 2차 재시도 |
 | P3-04 | `POST /api/analyze` 엔드포인트 | ✅ 완료 | `routers/analyze.py` |
@@ -120,11 +120,30 @@
 
 | ID | 태스크 | 상태 | 비고 |
 |----|--------|------|------|
-| P8-01 | Vercel 프론트엔드 배포 | 🔄 진행 중 | 빌드 검증 ✅, GitHub 푸시 후 Vercel 연결 필요 |
-| P8-02 | Railway 백엔드 배포 | 🔄 진행 중 | Dockerfile + railway.toml 준비 완료 |
-| P8-03 | 환경변수 프로덕션 설정 | 🔄 진행 중 | `.env.example` 작성 완료, 실제 값 입력 필요 |
-| P8-04 | 도메인 설정 | ⏳ 예정 | 배포 완료 후 결정 |
-| P8-05 | 실제 공고문 테스트 (5개 이상) | 🔄 진행 중 | 배포 후 테스트 예정 |
+| P8-01 | Vercel 프론트엔드 배포 | ✅ 완료 | https://dock-live-98tx.vercel.app |
+| P8-02 | Render 백엔드 배포 | ✅ 완료 | https://docklive.onrender.com (Railway → Render 전환) |
+| P8-03 | 환경변수 프로덕션 설정 | ✅ 완료 | Render OPENAI_API_KEY, FRONTEND_URL 설정 완료 |
+| P8-04 | 도메인 설정 | ⏳ 예정 | 추후 결정 |
+| P8-05 | 실제 공고문 테스트 (5개 이상) | 🔄 진행 중 | 테스트 중 |
+
+---
+
+## 🔧 PHASE 9 — 즉시 수정
+
+| ID | 태스크 | 상태 | 비고 |
+|----|--------|------|------|
+| P9-01 | "Claude AI" 텍스트 수정 | ✅ 완료 | UploadProgress.tsx → "AI 분석 중 · 약 10~15초 소요" |
+| P9-02 | TASKS.md 현행화 | ✅ 완료 | OpenAI 전환, Render/Vercel 배포 완료 반영 |
+
+---
+
+## 🎨 PHASE 10 — UX 개선
+
+| ID | 태스크 | 상태 | 비고 |
+|----|--------|------|------|
+| P10-01 | 콜드스타트 배너 | ✅ 완료 | 페이지 로드 시 /health 핑 → 느리면 "서버 준비 중" 배너 표시 |
+| P10-02 | 프롬프트 고도화 | ⏳ 예정 | 실제 테스트 결과 기반 날짜 파싱 정확도 개선 |
+| P10-03 | 결과 영속성 | ⏳ 예정 | Render PostgreSQL 또는 Vercel KV 도입 |
 
 ---
 
