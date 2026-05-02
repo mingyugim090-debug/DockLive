@@ -2,7 +2,7 @@ import logging
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from models.schemas import AnalysisResponse, AnalysisResult
 from services.pdf_parser import extract_text_from_pdf
-from services.claude_service import analyze_announcement
+from services.openai_service import analyze_announcement
 from services.analyzer import build_analysis_result
 from services.mock_data import get_mock_result
 from services import storage

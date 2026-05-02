@@ -72,20 +72,23 @@ dock-live/
 ├── backend/           # FastAPI + Python
 │   ├── main.py
 │   ├── routers/
-│   │   ├── upload.py             # PDF 업로드 처리
-│   │   └── analyze.py            # AI 분석
+│   │   ├── analyze.py            # PDF 업로드 + AI 분석 + 결과 조회
+│   │   └── demo.py               # 샘플 Demo 결과
 │   ├── services/
 │   │   ├── pdf_parser.py         # PDF 텍스트 추출
-│   │   ├── claude_service.py     # Claude API 연동
+│   │   ├── openai_service.py     # OpenAI API 연동
 │   │   └── analyzer.py           # 공고 분석 로직
 │   └── models/
 │       └── schemas.py            # Pydantic 스키마
 │
-├── README.md
-├── CLAUDE.md
-├── SKILLS.md
-├── TASKS.md
-└── ARCHITECTURE.md
+├── render.yaml
+└── files/
+    ├── README.md
+    ├── CODEX.md
+    ├── SKILLS.md
+    ├── TASKS.md
+    ├── ARCHITECTURE.md
+    └── deployment_guide.md
 ```
 
 ---
@@ -96,10 +99,10 @@ dock-live/
 |------|------|
 | **Frontend** | Next.js 14 (App Router), TypeScript, Tailwind CSS |
 | **Backend** | FastAPI, Python 3.11+ |
-| **AI** | Claude API (claude-sonnet, Tool Use) |
+| **AI** | OpenAI API (ChatGPT 모델, gpt-4o-mini) |
 | **PDF 처리** | PyMuPDF (fitz) |
 | **상태 관리** | Zustand |
-| **배포** | Vercel (Frontend), Railway/Render (Backend) |
+| **배포** | Vercel (Frontend), Render (Backend) |
 
 ---
 
@@ -108,7 +111,7 @@ dock-live/
 ### Prerequisites
 - Node.js 18+
 - Python 3.11+
-- Anthropic API Key
+- OpenAI API Key
 
 ### Frontend
 ```bash
@@ -129,7 +132,7 @@ uvicorn main:app --reload
 ### 환경변수
 ```bash
 # backend/.env
-ANTHROPIC_API_KEY=your_api_key_here
+OPENAI_API_KEY=your_api_key_here
 
 # frontend/.env.local
 NEXT_PUBLIC_API_URL=http://localhost:8000
@@ -143,7 +146,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 |------|------|------|
 | v0.1 | 프로젝트 하네스 구축 | ✅ 완료 |
 | v0.2 | PDF 업로드 + 텍스트 추출 | 🔄 진행 중 |
-| v0.3 | Claude API 연동 + 분석 | ⏳ 예정 |
+| v0.3 | OpenAI API 연동 + 분석 | ⏳ 예정 |
 | v0.4 | 타임라인 UI | ⏳ 예정 |
 | v0.5 | 체크리스트 UI | ⏳ 예정 |
 | v0.6 | 문서 틀 생성 UI | ⏳ 예정 |
@@ -154,7 +157,14 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 
 ## 📄 관련 문서
 
-- [CLAUDE.md](./CLAUDE.md) — AI 개발 지침
+- [CODEX.md](./CODEX.md) — Codex 개발 지침
 - [SKILLS.md](./SKILLS.md) — 기술 역량 및 코드 스타일
 - [TASKS.md](./TASKS.md) — 개발 태스크 목록
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — 시스템 아키텍처
+
+### Codex에게 일을 시키는 예시
+- "먼저 분석해줘"
+- "이 작업을 작은 단위로 계획해줘"
+- "수정하고 테스트까지 해줘"
+- "커밋 전 변경사항 리뷰해줘"
+- "이 파일 기준으로 다음 작업 추천해줘"

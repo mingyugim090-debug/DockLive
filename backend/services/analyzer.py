@@ -106,7 +106,7 @@ def _normalize_date(date_str: str) -> str:
 
 
 def build_analysis_result(raw: dict) -> AnalysisResult:
-    """Claude 응답 dict를 AnalysisResult Pydantic 모델로 변환합니다."""
+    """OpenAI 응답 dict를 AnalysisResult Pydantic 모델로 변환합니다."""
     result_id = str(uuid.uuid4())
 
     # 타임라인 처리

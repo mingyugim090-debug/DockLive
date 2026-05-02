@@ -20,7 +20,7 @@
                     │ REST API (JSON)
                     ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    Backend (Railway)                          │
+│                    Backend (Render)                           │
 │                    FastAPI + Python 3.11                      │
 │                                                              │
 │  POST /api/analyze   PDF 수신 + 분석 통합 엔드포인트          │
@@ -28,15 +28,15 @@
 │  GET  /health        헬스체크                                 │
 │                                                              │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
-│  │ pdf_parser   │  │claude_service│  │    analyzer      │  │
-│  │ (PyMuPDF)    │→ │(Anthropic SDK│→ │(후처리·D-Day계산) │  │
+│  │ pdf_parser   │  │openai_service│  │    analyzer      │  │
+│  │ (PyMuPDF)    │→ │ (OpenAI SDK) │→ │(후처리·D-Day계산) │  │
 │  └──────────────┘  └──────────────┘  └──────────────────┘  │
 └───────────────────┬─────────────────────────────────────────┘
                     │ HTTPS API
                     ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                  Claude API (Anthropic)                       │
-│                  claude-sonnet-4-20250514                     │
+│                  OpenAI API (ChatGPT 모델)                    │
+│                  gpt-4o-mini                                  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -62,8 +62,8 @@
    └─ PyMuPDF로 페이지별 텍스트 추출
    └─ 빈 텍스트면 에러 반환
 
-5. Backend - AI 분석 (claude_service.py)
-   └─ 추출된 텍스트를 Claude API에 전송
+5. Backend - AI 분석 (openai_service.py)
+   └─ 추출된 텍스트를 OpenAI API에 전송
    └─ JSON 응답 수신 + 파싱
 
 6. Backend - 후처리 (analyzer.py)
@@ -90,11 +90,14 @@
 ```
 dock-live/
 │
-├── 📄 README.md
-├── 📄 CLAUDE.md
-├── 📄 SKILLS.md
-├── 📄 TASKS.md
-└── 📄 ARCHITECTURE.md
+├── 📄 render.yaml
+├── 📁 files/
+│   ├── README.md
+│   ├── CODEX.md
+│   ├── SKILLS.md
+│   ├── TASKS.md
+│   ├── ARCHITECTURE.md
+│   └── deployment_guide.md
 │
 ├── 🎨 frontend/
 │   ├── app/
@@ -146,12 +149,12 @@ dock-live/
     ├── main.py                     # FastAPI 앱 초기화, 라우터 등록
     │
     ├── routers/
-    │   ├── analyze.py              # POST /api/analyze
-    │   └── result.py               # GET /api/result/{id}
+    │   ├── analyze.py              # POST /api/analyze, GET /api/result/{id}
+    │   └── demo.py                 # GET /api/demo
     │
     ├── services/
     │   ├── pdf_parser.py           # PyMuPDF 텍스트 추출
-    │   ├── claude_service.py       # Claude API 연동
+    │   ├── openai_service.py       # OpenAI API 연동
     │   └── analyzer.py             # D-Day 계산, 후처리
     │
     ├── models/
@@ -239,7 +242,7 @@ Body: file (PDF, max 20MB)
 **Response 400** — 잘못된 파일 형식  
 **Response 413** — 파일 크기 초과  
 **Response 422** — 텍스트 추출 불가 (스캔 PDF)  
-**Response 500** — Claude API 오류
+**Response 500** — OpenAI API 오류
 
 ---
 
@@ -287,6 +290,6 @@ results_cache: dict[str, AnalysisResult] = {}
 | 지표 | 목표 |
 |------|------|
 | PDF 텍스트 추출 | < 2초 |
-| Claude API 분석 | < 15초 |
+| OpenAI API 분석 | < 15초 |
 | 전체 분석 응답 | < 20초 |
 | 페이지 로드 (FCP) | < 1.5초 |

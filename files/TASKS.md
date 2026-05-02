@@ -9,7 +9,7 @@
 | ID | 태스크 | 상태 | 비고 |
 |----|--------|------|------|
 | P0-01 | README.md 작성 | ✅ 완료 | |
-| P0-02 | CLAUDE.md 작성 | ✅ 완료 | |
+| P0-02 | CODEX.md 작성 | ✅ 완료 | 기존 AI 개발 지침을 Codex 기준으로 전환 |
 | P0-03 | SKILLS.md 작성 | ✅ 완료 | |
 | P0-04 | TASKS.md 작성 | ✅ 완료 | |
 | P0-05 | ARCHITECTURE.md 작성 | ✅ 완료 | |
@@ -45,11 +45,11 @@
 
 ---
 
-## 🤖 PHASE 3 — Claude API 연동 & 분석
+## 🤖 PHASE 3 — OpenAI API 연동 & 분석
 
 | ID | 태스크 | 상태 | 비고 |
 |----|--------|------|------|
-| P3-01 | `claude_service.py` 구현 | ✅ 완료 | OpenAI SDK (gpt-4o-mini) 연동으로 전환 |
+| P3-01 | `openai_service.py` 구현 | ✅ 완료 | OpenAI SDK (gpt-4o-mini) 연동으로 전환 |
 | P3-02 | 분석 시스템 프롬프트 작성 | ✅ 완료 | 날짜 추출, 서류 분류, 유형 판별 |
 | P3-03 | JSON 응답 파싱 로직 | ✅ 완료 | `_clean_json()` + 2차 재시도 |
 | P3-04 | `POST /api/analyze` 엔드포인트 | ✅ 완료 | `routers/analyze.py` |
@@ -57,7 +57,7 @@
 | P3-06 | `GET /api/result/{id}` 엔드포인트 | ✅ 완료 | `routers/analyze.py` |
 | P3-07 | D-Day 자동 계산 후처리 | ✅ 완료 | `analyzer.py` `_calculate_d_day()` |
 | P3-08 | 공고 유형 판별 로직 검증 | 🔄 진행 중 | 실제 공고문으로 추가 테스트 필요 |
-| P3-09 | API 에러 핸들링 | ✅ 완료 | `core/errors.py` + anthropic 예외 처리 |
+| P3-09 | API 에러 핸들링 | ✅ 완료 | `core/errors.py` + OpenAI 예외 처리 |
 
 ---
 
@@ -132,7 +132,7 @@
 
 | ID | 태스크 | 상태 | 비고 |
 |----|--------|------|------|
-| P9-01 | "Claude AI" 텍스트 수정 | ✅ 완료 | UploadProgress.tsx → "AI 분석 중 · 약 10~15초 소요" |
+| P9-01 | "AI 분석" 텍스트 정리 | ✅ 완료 | UploadProgress.tsx → "AI 분석 중 · 약 10~15초 소요" |
 | P9-02 | TASKS.md 현행화 | ✅ 완료 | OpenAI 전환, Render/Vercel 배포 완료 반영 |
 
 ---
@@ -164,7 +164,7 @@
 
 | ID | 설명 | 심각도 | 상태 |
 |----|------|--------|------|
-| BUG-01 | anthropic SDK 버전 불일치 (0.28→0.40+) | 🔴 높음 | ✅ 수정 완료 |
+| BUG-01 | AI SDK 전환 후 환경변수/의존성 불일치 | 🔴 높음 | ✅ 수정 완료 |
 | BUG-02 | 인메모리 캐시 소멸 시 결과 페이지 404 | 🔴 높음 | ✅ localStorage 폴백으로 해결 |
 | BUG-03 | datetime.utcnow() deprecated (Python 3.11+) | 🟡 중간 | ✅ timezone.utc로 교체 |
 
