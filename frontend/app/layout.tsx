@@ -10,13 +10,12 @@ const notoSansKR = Noto_Sans_KR({
 });
 
 export const metadata: Metadata = {
-  title: 'LiveDock — 공고문 AI 분석 서비스',
-  description:
-    '공모전·정부사업 공고문 PDF를 업로드하면 AI가 일정·서류·문서 구조를 자동으로 분석해드립니다.',
-  keywords: ['공모전', '공고문 분석', 'AI', '대학생', '서류 준비'],
+  title: 'LiveDock - 문서 자동화 Agent',
+  description: '공고문 PDF를 분석하고 제출 문서 초안 작성까지 돕는 AI 문서 자동화 서비스',
+  keywords: ['공고문 분석', '문서 자동화', '공모전', '지원사업', 'AI'],
   openGraph: {
     title: 'LiveDock',
-    description: '공고문을 인터랙티브 서비스로 변환하는 AI 플랫폼',
+    description: '공고문 분석부터 제출 초안까지 이어지는 문서 자동화 Agent',
     type: 'website',
   },
 };
@@ -29,8 +28,8 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body className={notoSansKR.className}>
-          <ErrorBoundary>{children}</ErrorBoundary>
-        </body>
+        <ErrorBoundary>{children}</ErrorBoundary>
+      </body>
     </html>
   );
 }

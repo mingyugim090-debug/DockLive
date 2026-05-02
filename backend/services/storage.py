@@ -2,35 +2,33 @@ import json
 import logging
 from typing import Optional
 
+from core.config import settings
+
 logger = logging.getLogger(__name__)
 
 _in_memory_cache: dict[str, dict] = {}
-
-RESULT_TTL_SECONDS = 7 * 24 * 3600  # 7일
+_redis_client = None
+_redis_initialized = False
 
 
 def _make_redis_client():
-    """REDIS_URL 환경변수가 있으면 Redis 클라이언트를 반환합니다."""
+    """Return a Redis client when REDIS_URL is configured."""
     try:
-        from core.config import settings
         redis_url = getattr(settings, "REDIS_URL", "")
         if not redis_url:
             return None
         import redis as redis_lib
+
         client = redis_lib.from_url(redis_url, decode_responses=True, socket_connect_timeout=3)
         client.ping()
-        logger.info("Redis 연결 성공")
+        logger.info("Redis connected")
         return client
     except ImportError:
-        logger.warning("redis 패키지 미설치 — 인메모리 캐시 사용")
+        logger.warning("redis package is not installed; using in-memory cache")
         return None
     except Exception as e:
-        logger.warning(f"Redis 연결 실패, 인메모리 캐시 사용: {e}")
+        logger.warning(f"Redis connection failed; using in-memory cache: {e}")
         return None
-
-
-_redis_client = None
-_redis_initialized = False
 
 
 def _get_redis():
@@ -41,32 +39,48 @@ def _get_redis():
     return _redis_client
 
 
-def save_result(result_id: str, data: dict) -> None:
-    """결과를 Redis 또는 인메모리에 저장합니다."""
+def _save_json(key: str, data: dict, ttl_seconds: int) -> None:
     r = _get_redis()
     if r is not None:
         try:
-            r.setex(f"result:{result_id}", RESULT_TTL_SECONDS, json.dumps(data, ensure_ascii=False))
-            logger.info(f"Redis 저장: {result_id}")
+            r.setex(key, ttl_seconds, json.dumps(data, ensure_ascii=False))
+            logger.info(f"Redis saved: {key}")
             return
         except Exception as e:
-            logger.warning(f"Redis 저장 실패, 인메모리 대체: {e}")
-    _in_memory_cache[result_id] = data
-    logger.info(f"인메모리 저장: {result_id} (총 {len(_in_memory_cache)}개)")
+            logger.warning(f"Redis save failed; using in-memory cache: {e}")
+
+    _in_memory_cache[key] = data
+    logger.info(f"In-memory saved: {key} (total={len(_in_memory_cache)})")
+
+
+def _load_json(key: str) -> Optional[dict]:
+    r = _get_redis()
+    if r is not None:
+        try:
+            raw = r.get(key)
+            if raw:
+                logger.info(f"Redis loaded: {key}")
+                return json.loads(raw)
+        except Exception as e:
+            logger.warning(f"Redis load failed; checking in-memory cache: {e}")
+
+    cached = _in_memory_cache.get(key)
+    if cached:
+        logger.info(f"In-memory loaded: {key}")
+    return cached
+
+
+def save_result(result_id: str, data: dict) -> None:
+    _save_json(f"result:{result_id}", data, settings.WORKFLOW_TTL_SECONDS)
 
 
 def load_result(result_id: str) -> Optional[dict]:
-    """결과를 Redis 또는 인메모리에서 조회합니다."""
-    r = _get_redis()
-    if r is not None:
-        try:
-            raw = r.get(f"result:{result_id}")
-            if raw:
-                logger.info(f"Redis 조회: {result_id}")
-                return json.loads(raw)
-        except Exception as e:
-            logger.warning(f"Redis 조회 실패, 인메모리 확인: {e}")
-    cached = _in_memory_cache.get(result_id)
-    if cached:
-        logger.info(f"인메모리 조회: {result_id}")
-    return cached
+    return _load_json(f"result:{result_id}")
+
+
+def save_workflow(workflow_id: str, data: dict) -> None:
+    _save_json(f"workflow:{workflow_id}", data, settings.WORKFLOW_TTL_SECONDS)
+
+
+def load_workflow(workflow_id: str) -> Optional[dict]:
+    return _load_json(f"workflow:{workflow_id}")

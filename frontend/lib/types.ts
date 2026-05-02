@@ -1,23 +1,25 @@
-// 공고 유형
 export type DocType = 'competition' | 'research' | 'scholarship' | 'startup';
-
-// 체크리스트 항목 카테고리
 export type ItemCategory = 'required' | 'optional';
-
-// D-Day 상태
 export type DayStatus = 'safe' | 'warning' | 'danger' | 'passed';
+export type InputFieldType = 'text' | 'textarea' | 'number' | 'date' | 'file_note';
+export type DraftStatus = 'empty' | 'needs_input' | 'drafted' | 'revised' | 'confirmed';
+export type WorkflowStatus =
+  | 'analyzed'
+  | 'collecting_inputs'
+  | 'drafting'
+  | 'reviewing'
+  | 'confirmed'
+  | 'finalized';
 
-// 타임라인 아이템
 export interface TimelineItem {
   id: string;
   label: string;
-  date: string; // "YYYY-MM-DD"
+  date: string;
   d_day: number;
   is_deadline: boolean;
   status: DayStatus;
 }
 
-// 체크리스트 아이템
 export interface ChecklistItem {
   id: string;
   label: string;
@@ -26,7 +28,6 @@ export interface ChecklistItem {
   file_format?: string;
 }
 
-// 문서 섹션
 export interface DocumentSection {
   id: string;
   title: string;
@@ -34,7 +35,6 @@ export interface DocumentSection {
   order: number;
 }
 
-// 분석 결과 전체
 export interface AnalysisResult {
   id: string;
   doc_type: DocType;
@@ -44,15 +44,64 @@ export interface AnalysisResult {
   checklist: ChecklistItem[];
   document_template: DocumentSection[];
   analyzed_at: string;
+  eligibility: string[];
+  submission_method?: string | null;
+  evaluation_criteria: string[];
+  benefits: string[];
+  cautions: string[];
+  uncertain_fields: string[];
 }
 
-// API 응답
+export interface UserInputField {
+  id: string;
+  label: string;
+  field_type: InputFieldType;
+  required: boolean;
+  section_id?: string | null;
+  description?: string | null;
+  placeholder?: string | null;
+  value: string;
+}
+
+export interface DraftSection {
+  id: string;
+  section_id: string;
+  title: string;
+  content_markdown: string;
+  status: DraftStatus;
+  needs_confirmation: string[];
+  user_feedback: string;
+  updated_at?: string | null;
+}
+
+export interface FinalDocument {
+  title: string;
+  content_markdown: string;
+  created_at: string;
+}
+
+export interface WorkflowSession {
+  id: string;
+  analysis: AnalysisResult;
+  status: WorkflowStatus;
+  user_inputs: UserInputField[];
+  draft_sections: DraftSection[];
+  final_document?: FinalDocument | null;
+  confirmed_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ApiResponse {
   success: boolean;
   data: AnalysisResult;
 }
 
-// API 에러
+export interface WorkflowResponse {
+  success: boolean;
+  data: WorkflowSession;
+}
+
 export interface ApiError {
   detail: string;
 }

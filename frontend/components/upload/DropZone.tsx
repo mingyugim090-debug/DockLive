@@ -36,39 +36,22 @@ export function DropZone({ onFileAccepted, isLoading = false }: DropZoneProps) {
   return (
     <div
       {...getRootProps()}
-      className={`
-        relative overflow-hidden
-        border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer
-        transition-all duration-300
-        ${
-          isDragOver
-            ? 'border-primary bg-primary/10 scale-[1.02]'
-            : 'border-white/10 hover:border-white/25 bg-white/3 hover:bg-white/5'
-        }
-        ${isLoading ? 'cursor-not-allowed opacity-60' : ''}
-      `}
+      className={`relative overflow-hidden rounded-2xl border-2 border-dashed p-12 text-center transition-all duration-300 ${
+        isDragOver ? 'border-primary bg-primary/10 scale-[1.02]' : 'border-white/10 bg-white/3 hover:border-white/25 hover:bg-white/5'
+      } ${isLoading ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
     >
       <input {...getInputProps()} />
-
-      {/* 배경 글로우 */}
-      {isDragOver && (
-        <div className="absolute inset-0 bg-primary/5 rounded-2xl" />
-      )}
-
       <div className="relative flex flex-col items-center gap-4">
-        {/* 아이콘 */}
         <motion.div
           animate={isDragOver ? { scale: 1.15, rotate: 5 } : { scale: 1, rotate: 0 }}
           transition={{ type: 'spring', stiffness: 300 }}
-          className={`
-            w-16 h-16 rounded-2xl flex items-center justify-center text-3xl
-            ${isDragOver ? 'bg-primary/20' : 'bg-white/8'}
-          `}
+          className={`flex h-16 w-16 items-center justify-center rounded-2xl text-3xl ${
+            isDragOver ? 'bg-primary/20' : 'bg-white/8'
+          }`}
         >
-          {selectedFile ? '📄' : '📂'}
+          {selectedFile ? 'PDF' : '+'}
         </motion.div>
 
-        {/* 텍스트 */}
         <AnimatePresence mode="wait">
           {selectedFile ? (
             <motion.div
@@ -78,13 +61,9 @@ export function DropZone({ onFileAccepted, isLoading = false }: DropZoneProps) {
               exit={{ opacity: 0, y: -8 }}
               className="flex flex-col items-center gap-1"
             >
-              <p className="text-text font-semibold text-base">{selectedFile.name}</p>
-              <p className="text-text2 text-sm">
-                {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-              </p>
-              {!isLoading && (
-                <p className="text-primary text-sm mt-1">클릭하여 다른 파일 선택</p>
-              )}
+              <p className="text-base font-semibold text-text">{selectedFile.name}</p>
+              <p className="text-sm text-text2">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
+              {!isLoading && <p className="mt-1 text-sm text-primary">클릭해서 다른 파일 선택</p>}
             </motion.div>
           ) : (
             <motion.div
@@ -94,10 +73,10 @@ export function DropZone({ onFileAccepted, isLoading = false }: DropZoneProps) {
               exit={{ opacity: 0, y: -8 }}
               className="flex flex-col items-center gap-1"
             >
-              <p className="text-text font-semibold text-base">
-                {isDragOver ? 'PDF를 놓으세요!' : 'PDF 파일을 드래그하거나 클릭하세요'}
+              <p className="text-base font-semibold text-text">
+                {isDragOver ? 'PDF를 여기에 놓으세요' : 'PDF 공고문을 드래그하거나 클릭하세요'}
               </p>
-              <p className="text-text2 text-sm">최대 20MB · PDF 형식만 지원</p>
+              <p className="text-sm text-text2">최대 20MB · PDF 형식 지원</p>
             </motion.div>
           )}
         </AnimatePresence>
