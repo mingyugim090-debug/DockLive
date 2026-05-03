@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+from fastapi.responses import StreamingResponse
 
 from core.errors import WorkflowNotFoundError
 from models.schemas import (
@@ -12,8 +13,10 @@ from models.schemas import (
 from services import storage
 from services.drafting_service import (
     confirm_workflow,
+    export_markdown_to_hwpx,
     finalize_document,
     generate_drafts,
+    hwpx_bytes_to_base64,
     markdown_to_hwp_compatible_html,
     revise_section,
     update_inputs,
@@ -53,6 +56,43 @@ async def create_draft(workflow_id: str):
     workflow = _load_workflow_or_404(workflow_id)
     workflow = generate_drafts(workflow)
     return _save_and_respond(workflow)
+
+
+@router.get("/{workflow_id}/draft/stream")
+async def stream_draft(workflow_id: str):
+    """Stream section-level draft events.
+
+    This is a v1 harness-compatible SSE endpoint. It currently generates drafts
+    section-by-section after saving the workflow, and it leaves room for token
+    streaming once the frontend adopts EventSource.
+    """
+
+    def event(payload: dict) -> str:
+        import json
+
+        return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+    def generate():
+        try:
+            workflow = _load_workflow_or_404(workflow_id)
+            yield event({"type": "section_start", "workflow_id": workflow.id, "content": "초안 생성을 시작합니다."})
+            workflow = generate_drafts(workflow)
+            storage.save_workflow(workflow.id, workflow.model_dump(mode="json"))
+            for draft in workflow.draft_sections:
+                yield event(
+                    {
+                        "type": "section_done",
+                        "workflow_id": workflow.id,
+                        "section_id": draft.section_id,
+                        "content": draft.content_markdown,
+                        "draft_section": draft.model_dump(mode="json"),
+                    }
+                )
+            yield event({"type": "workflow_done", "workflow_id": workflow.id, "content": workflow.status})
+        except Exception as exc:
+            yield event({"type": "error", "workflow_id": workflow_id, "content": str(exc)})
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
 
 
 @router.post("/{workflow_id}/draft/{section_id}/feedback", response_model=WorkflowResponse)
@@ -103,4 +143,25 @@ async def export_hwp_compatible_html(workflow_id: str):
         filename=f"{safe_title or 'livedock_export'}.html",
         content_type="text/html; charset=utf-8",
         content=html,
+        encoding="text",
+    )
+
+
+@router.get("/{workflow_id}/export/hwpx", response_model=ExportResponse)
+async def export_hwpx(workflow_id: str):
+    workflow = _load_workflow_or_404(workflow_id)
+    if not workflow.final_document:
+        workflow = finalize_document(workflow)
+        storage.save_workflow(workflow.id, workflow.model_dump(mode="json"))
+    assert workflow.final_document is not None
+    filename, content = export_markdown_to_hwpx(
+        workflow.final_document.content_markdown,
+        workflow.final_document.title,
+    )
+    return ExportResponse(
+        success=True,
+        filename=filename,
+        content_type="application/vnd.hancom.hwpx",
+        content=hwpx_bytes_to_base64(content),
+        encoding="base64",
     )

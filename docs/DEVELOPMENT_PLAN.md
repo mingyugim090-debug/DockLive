@@ -1,0 +1,45 @@
+# Development Plan
+
+## Milestone 1 - Stabilize Agent Harness
+
+- Repair Korean docs and prompts.
+- Add source evidence and confirmation contracts.
+- Keep analysis, input collection, draft, confirmation, finalization as separate steps.
+- Add eval fixture definitions.
+
+## Milestone 2 - Improve Analysis Quality
+
+- Add fixture files under `docs/fixtures`.
+- Add deterministic schema validation tests.
+- Add AI-output validation and retry paths.
+- Add OCR/HWP/HWPX ingestion strategy.
+
+## Milestone 3 - Live Drafting UX
+
+- Use section-level draft generation.
+- Add frontend stream handling with EventSource.
+- Show section start/done/error state.
+- Keep user confirmation before finalization.
+
+## Milestone 4 - Supabase Persistence
+
+- Create tables for users, documents, analyses, workflows, draft sections, exports.
+- Store uploaded source files in Supabase Storage.
+- Store generated export metadata.
+- Keep Redis/in-memory only as fallback.
+
+## Milestone 5 - HWPX Export
+
+- Install HWPX toolchain in backend deployment.
+- Convert final markdown to HWPX.
+- Run namespace fix and validation.
+- Add uploaded HWPX template cloning workflow.
+- Add HWP to HWPX conversion workflow.
+
+## Milestone 6 - Community v2
+
+- Opportunity source directory.
+- Announcement feed.
+- Team recruiting.
+- Profiles and participation history.
+- Interest-based recommendations.

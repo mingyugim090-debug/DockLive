@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="LiveDock API",
     version="1.1.0",
-    description="공고문 분석과 제출 문서 초안 작성을 돕는 LiveDock 문서 자동화 API",
+    description="공고문 분석, 사용자 입력 수집, 제출 문서 초안 작성, HWPX/HTML export를 지원하는 LiveDock 문서 자동화 API",
 )
 
 app.add_middleware(

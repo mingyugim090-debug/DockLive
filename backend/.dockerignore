@@ -1,4 +1,4 @@
-# .dockerignore — Docker 빌드 시 불필요한 파일 제외
+# Files excluded from the backend Docker build context.
 venv/
 .venv/
 __pycache__/

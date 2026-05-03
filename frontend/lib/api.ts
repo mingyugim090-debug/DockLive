@@ -1,4 +1,4 @@
-import type { ApiResponse, CompanyProfile, ExportResponse, WorkflowResponse } from './types';
+import type { ApiResponse, CompanyProfile, DraftStreamEvent, ExportResponse, WorkflowResponse } from './types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
@@ -106,6 +106,14 @@ export async function generateDraft(id: string): Promise<WorkflowResponse> {
   return res.json();
 }
 
+export function createDraftStream(id: string, onEvent: (event: DraftStreamEvent) => void): EventSource {
+  const source = new EventSource(`${API_URL}/api/workflow/${id}/draft/stream`);
+  source.onmessage = (message) => {
+    onEvent(JSON.parse(message.data) as DraftStreamEvent);
+  };
+  return source;
+}
+
 export async function saveDraftFeedback(
   id: string,
   sectionId: string,
@@ -130,7 +138,7 @@ export async function reviseDraft(id: string, sectionId: string): Promise<Workfl
   });
 
   if (!res.ok) {
-    throw await readError(res, `초안 재작성 실패: ${res.status}`);
+    throw await readError(res, `초안 수정 실패: ${res.status}`);
   }
 
   return res.json();
@@ -160,7 +168,17 @@ export async function exportWorkflowHtml(id: string): Promise<ExportResponse> {
   const res = await fetch(`${API_URL}/api/workflow/${id}/export/html`);
 
   if (!res.ok) {
-    throw await readError(res, `내보내기 실패: ${res.status}`);
+    throw await readError(res, `HTML 내보내기 실패: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export async function exportWorkflowHwpx(id: string): Promise<ExportResponse> {
+  const res = await fetch(`${API_URL}/api/workflow/${id}/export/hwpx`);
+
+  if (!res.ok) {
+    throw await readError(res, `HWPX 내보내기 실패: ${res.status}`);
   }
 
   return res.json();

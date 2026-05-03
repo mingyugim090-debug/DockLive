@@ -1,4 +1,5 @@
 import fitz  # PyMuPDF
+
 from core.errors import InvalidFileTypeError, PDFParseError
 
 
@@ -22,7 +23,7 @@ def extract_text_from_pdf(pdf_bytes: bytes, filename: str = "") -> str:
         return cleaned
 
     except fitz.FileDataError:
-        raise PDFParseError("손상된 PDF 파일입니다. 다른 파일로 다시 시도해 주세요.")
+        raise PDFParseError("정상적인 PDF 파일이 아닙니다. 다른 파일로 다시 시도해 주세요.")
     except (PDFParseError, InvalidFileTypeError):
         raise
     except Exception as e:

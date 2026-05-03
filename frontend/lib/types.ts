@@ -4,6 +4,7 @@ export type DayStatus = 'safe' | 'warning' | 'danger' | 'passed';
 export type SourceType = 'pdf' | 'url' | 'text' | 'demo';
 export type InputFieldType = 'text' | 'textarea' | 'number' | 'date' | 'file_note';
 export type DraftStatus = 'empty' | 'needs_input' | 'drafted' | 'revised' | 'confirmed';
+export type DraftStreamEventType = 'section_start' | 'delta' | 'section_done' | 'workflow_done' | 'error';
 export type WorkflowStatus =
   | 'analyzed'
   | 'collecting_inputs'
@@ -36,6 +37,13 @@ export interface DocumentSection {
   order: number;
 }
 
+export interface SourceEvidence {
+  field: string;
+  quote: string;
+  page?: number | null;
+  note?: string | null;
+}
+
 export interface AnalysisResult {
   id: string;
   source_type: SourceType;
@@ -54,6 +62,7 @@ export interface AnalysisResult {
   benefits: string[];
   cautions: string[];
   uncertain_fields: string[];
+  source_evidence: SourceEvidence[];
 }
 
 export interface CompanyProfile {
@@ -99,8 +108,17 @@ export interface DraftSection {
   content_markdown: string;
   status: DraftStatus;
   needs_confirmation: string[];
+  confirmation_required: string[];
   user_feedback: string;
   updated_at?: string | null;
+}
+
+export interface DraftStreamEvent {
+  type: DraftStreamEventType;
+  workflow_id: string;
+  section_id?: string | null;
+  content: string;
+  draft_section?: DraftSection | null;
 }
 
 export interface FinalDocument {
@@ -143,4 +161,5 @@ export interface ExportResponse {
   filename: string;
   content_type: string;
   content: string;
+  encoding: 'text' | 'base64';
 }

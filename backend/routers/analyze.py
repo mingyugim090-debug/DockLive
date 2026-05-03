@@ -52,7 +52,6 @@ def _analyze_text(
     if _use_mock():
         logger.info("MOCK mode: using sample analysis data")
         raw_result = get_mock_result()
-        raw_result["summary"] = raw_result.get("summary") or "샘플 공고를 기반으로 분석 흐름을 미리 볼 수 있습니다."
     else:
         logger.info("OpenAI analysis started")
         raw_result = analyze_announcement(text, source_name=source_name)

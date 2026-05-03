@@ -14,8 +14,15 @@ if BaseSettings:
         MAX_PDF_SIZE_MB: int = 20
         MOCK_MODE: bool = False
         REDIS_URL: str = ""
+        SUPABASE_URL: str = ""
+        SUPABASE_SERVICE_ROLE_KEY: str = ""
+        SUPABASE_ANON_KEY: str = ""
+        SUPABASE_STORAGE_BUCKET: str = "livedock-documents"
         OPENAI_ANALYSIS_MODEL: str = "gpt-4o-mini"
         OPENAI_DRAFT_MODEL: str = "gpt-4o-mini"
+        HWPX_SKILL_DIR: str = ""
+        HWPX_TEMPLATE_DIR: str = ""
+        HWPX_EXPORT_ENABLED: bool = False
         MAX_DRAFT_INPUT_LENGTH: int = 60_000
         WORKFLOW_TTL_SECONDS: int = 7 * 24 * 3600
 
@@ -30,8 +37,15 @@ else:
         MAX_PDF_SIZE_MB: int = int(os.getenv("MAX_PDF_SIZE_MB", "20"))
         MOCK_MODE: bool = os.getenv("MOCK_MODE", "false").lower() == "true"
         REDIS_URL: str = os.getenv("REDIS_URL", "")
+        SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
+        SUPABASE_SERVICE_ROLE_KEY: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+        SUPABASE_ANON_KEY: str = os.getenv("SUPABASE_ANON_KEY", "")
+        SUPABASE_STORAGE_BUCKET: str = os.getenv("SUPABASE_STORAGE_BUCKET", "livedock-documents")
         OPENAI_ANALYSIS_MODEL: str = os.getenv("OPENAI_ANALYSIS_MODEL", "gpt-4o-mini")
         OPENAI_DRAFT_MODEL: str = os.getenv("OPENAI_DRAFT_MODEL", "gpt-4o-mini")
+        HWPX_SKILL_DIR: str = os.getenv("HWPX_SKILL_DIR", "")
+        HWPX_TEMPLATE_DIR: str = os.getenv("HWPX_TEMPLATE_DIR", "")
+        HWPX_EXPORT_ENABLED: bool = os.getenv("HWPX_EXPORT_ENABLED", "false").lower() == "true"
         MAX_DRAFT_INPUT_LENGTH: int = int(os.getenv("MAX_DRAFT_INPUT_LENGTH", "60000"))
         WORKFLOW_TTL_SECONDS: int = int(os.getenv("WORKFLOW_TTL_SECONDS", str(7 * 24 * 3600)))
 

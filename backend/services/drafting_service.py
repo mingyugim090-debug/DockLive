@@ -1,9 +1,13 @@
+import base64
 import html
 import json
 import logging
 import re
+import subprocess
+import tempfile
 import time
 from datetime import datetime
+from pathlib import Path
 
 from core.config import settings
 from core.errors import AnalysisError
@@ -28,15 +32,15 @@ def create_input_fields(analysis: AnalysisResult, company_profile: CompanyProfil
             label="신청자 또는 팀/회사명",
             required=True,
             description="공고에 제출할 신청자명, 팀명 또는 회사명을 입력하세요.",
-            placeholder="예: 라이브독 주식회사",
+            placeholder="예: 라이브독 팀",
             value=company_profile.name if company_profile else "",
         ),
         UserInputField(
             id="applicant_profile",
-            label="신청자/팀/회사 소개",
+            label="신청자/팀 소개",
             required=True,
             description="전공, 역할, 경험, 강점, 업종, 성장 단계 등 초안에 반영할 정보를 적어 주세요.",
-            placeholder="예: AI 문서 자동화 서비스를 만드는 초기 스타트업입니다.",
+            placeholder="예: AI 문서 자동화 서비스를 만드는 초기 팀입니다.",
             value=_profile_to_text(company_profile) if company_profile else "",
         ),
         UserInputField(
@@ -112,7 +116,7 @@ def _profile_to_text(profile: CompanyProfile | None) -> str:
     if not profile:
         return ""
     parts = [
-        f"회사/팀명: {profile.name}",
+        f"이름: {profile.name}",
         f"업종: {profile.industry}",
         f"단계: {profile.stage}",
         f"지역: {profile.region}",
@@ -122,6 +126,14 @@ def _profile_to_text(profile: CompanyProfile | None) -> str:
         f"이전 지원사업: {profile.previous_support}",
     ]
     return "\n".join(part for part in parts if part and not part.endswith(": "))
+
+
+def _confirmation_items(workflow: WorkflowSession) -> list[str]:
+    items = list(workflow.analysis.uncertain_fields)
+    if workflow.analysis.source_evidence:
+        return items
+    items.append("핵심 주장과 수치가 공고 원문 및 사용자 입력에 근거하는지 확인하세요.")
+    return items
 
 
 def _mock_draft_section(workflow: WorkflowSession, draft: DraftSection) -> DraftSection:
@@ -135,7 +147,7 @@ def _mock_draft_section(workflow: WorkflowSession, draft: DraftSection) -> Draft
     body = [
         f"## {draft.title}",
         "",
-        f"{applicant}은(는) {workflow.analysis.title}의 목적과 요건에 맞춰 다음과 같이 {draft.title} 항목을 제안합니다.",
+        f"{applicant}은(는) {workflow.analysis.title}의 목적과 요구사항에 맞춰 다음과 같이 {draft.title} 항목을 제안합니다.",
         "",
         f"핵심 제안은 {summary}입니다. 이 내용은 공고에서 요구하는 제출 서류, 평가 기준, 지원 취지에 맞춰 실행 가능성과 차별성을 중심으로 구성했습니다.",
     ]
@@ -148,9 +160,11 @@ def _mock_draft_section(workflow: WorkflowSession, draft: DraftSection) -> Draft
     if workflow.analysis.evaluation_criteria:
         body.extend(["", "평가 기준 반영:", *[f"- {item}" for item in workflow.analysis.evaluation_criteria[:3]]])
 
+    confirmations = _confirmation_items(workflow)
     draft.content_markdown = "\n".join(body)
     draft.status = "drafted" if not draft.user_feedback else "revised"
-    draft.needs_confirmation = workflow.analysis.uncertain_fields[:]
+    draft.needs_confirmation = confirmations
+    draft.confirmation_required = confirmations
     draft.updated_at = utc_now_iso()
     return draft
 
@@ -179,6 +193,7 @@ def generate_drafts(workflow: WorkflowSession) -> WorkflowSession:
         for draft in workflow.draft_sections:
             draft.status = "needs_input"
             draft.needs_confirmation = [f"필수 입력 필요: {', '.join(missing)}"]
+            draft.confirmation_required = draft.needs_confirmation
         workflow.updated_at = utc_now_iso()
         return workflow
 
@@ -197,7 +212,8 @@ def generate_drafts(workflow: WorkflowSession) -> WorkflowSession:
 
     system_prompt = """당신은 한국 공모전/지원사업 제출 문서를 작성하는 AI Agent입니다.
 공고 분석 결과와 사용자 입력만 근거로 섹션별 초안을 작성하세요.
-마감일, 자격, 금액, 제출 방식 등 핵심 사실은 절대 추측하지 마세요.
+마감일, 자격, 금액, 제출 방법 같은 핵심 사실은 새로 만들지 마세요.
+불확실하거나 검증이 필요한 주장은 needs_confirmation에 넣으세요.
 반드시 JSON 객체만 반환하세요."""
     user_payload = {
         "analysis": workflow.analysis.model_dump(mode="json"),
@@ -223,9 +239,12 @@ def generate_drafts(workflow: WorkflowSession) -> WorkflowSession:
             if not item:
                 draft.status = "needs_input"
                 draft.needs_confirmation = ["이 섹션 초안을 생성하지 못했습니다. 다시 시도해 주세요."]
+                draft.confirmation_required = draft.needs_confirmation
                 continue
+            confirmations = [str(v) for v in item.get("needs_confirmation", []) if str(v).strip()]
             draft.content_markdown = str(item.get("content_markdown", "")).strip()
-            draft.needs_confirmation = [str(v) for v in item.get("needs_confirmation", []) if str(v).strip()]
+            draft.needs_confirmation = confirmations
+            draft.confirmation_required = confirmations
             draft.status = "drafted"
             draft.updated_at = utc_now_iso()
         workflow.status = "reviewing"
@@ -282,7 +301,7 @@ def finalize_document(workflow: WorkflowSession) -> WorkflowSession:
     if workflow.match_report:
         lines.extend(
             [
-                "## 지원 적합도",
+                "## 지원 적합성",
                 "",
                 f"- 점수: {workflow.match_report.score}/100",
                 f"- 판정: {workflow.match_report.verdict}",
@@ -291,8 +310,9 @@ def finalize_document(workflow: WorkflowSession) -> WorkflowSession:
         )
     if workflow.analysis.submission_method:
         lines.extend([f"- 제출 방법: {workflow.analysis.submission_method}", ""])
-    if workflow.analysis.uncertain_fields:
-        lines.extend(["## 확인 필요", "", *[f"- {item}" for item in workflow.analysis.uncertain_fields], ""])
+    confirmations = sorted({item for draft in sections for item in draft.confirmation_required} | set(workflow.analysis.uncertain_fields))
+    if confirmations:
+        lines.extend(["## 제출 전 확인 필요", "", *[f"- {item}" for item in confirmations], ""])
     for draft in sections:
         lines.append(draft.content_markdown.strip())
         lines.append("")
@@ -308,11 +328,7 @@ def finalize_document(workflow: WorkflowSession) -> WorkflowSession:
 
 
 def markdown_to_hwp_compatible_html(markdown: str, title: str) -> str:
-    """Create a Hangul Word Processor friendly HTML document.
-
-    HWP can open HTML while preserving editable text. This is the first export step before
-    adding native HWPX packaging.
-    """
+    """Create a Hangul Word Processor friendly HTML document."""
     body_lines: list[str] = []
     for raw_line in markdown.splitlines():
         line = raw_line.strip()
@@ -326,7 +342,7 @@ def markdown_to_hwp_compatible_html(markdown: str, title: str) -> str:
         elif line.startswith("### "):
             body_lines.append(f"<h3>{html.escape(line[4:])}</h3>")
         elif line.startswith("- "):
-            body_lines.append(f"<p class=\"bullet\">• {html.escape(line[2:])}</p>")
+            body_lines.append(f"<p class=\"bullet\">- {html.escape(line[2:])}</p>")
         else:
             escaped = html.escape(line)
             escaped = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", escaped)
@@ -350,3 +366,43 @@ def markdown_to_hwp_compatible_html(markdown: str, title: str) -> str:
 {chr(10).join(body_lines)}
 </body>
 </html>"""
+
+
+def export_markdown_to_hwpx(markdown: str, title: str) -> tuple[str, bytes]:
+    """Convert final markdown to HWPX through the optional hwpx-skill toolchain.
+
+    The preferred path follows jkf87/hwpx-skill: content -> HWPX, namespace fix,
+    validation. The integration is disabled unless HWPX_EXPORT_ENABLED=true and
+    HWPX_SKILL_DIR points to a local checkout/installed skill directory.
+    """
+    if not settings.HWPX_EXPORT_ENABLED:
+        raise AnalysisError("HWPX export is not enabled. Set HWPX_EXPORT_ENABLED=true after installing the HWPX toolchain.")
+
+    skill_dir = Path(settings.HWPX_SKILL_DIR)
+    md2hwpx = skill_dir / "scripts" / "md2hwpx.py"
+    fix_namespaces = skill_dir / "scripts" / "fix_namespaces.py"
+    validate = skill_dir / "scripts" / "validate.py"
+    missing = [str(path) for path in (md2hwpx, fix_namespaces, validate) if not path.exists()]
+    if missing:
+        raise AnalysisError(f"HWPX toolchain files were not found: {', '.join(missing)}")
+
+    safe_title = "".join(ch if ch.isalnum() else "_" for ch in title).strip("_") or "livedock_export"
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpdir = Path(tmp)
+        markdown_path = tmpdir / "input.md"
+        output_path = tmpdir / f"{safe_title}.hwpx"
+        markdown_path.write_text(markdown, encoding="utf-8")
+
+        subprocess.run(
+            ["python", str(md2hwpx), str(markdown_path), "-o", str(output_path)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run(["python", str(fix_namespaces), str(output_path)], check=True, capture_output=True, text=True)
+        subprocess.run(["python", str(validate), str(output_path)], check=True, capture_output=True, text=True)
+        return output_path.name, output_path.read_bytes()
+
+
+def hwpx_bytes_to_base64(content: bytes) -> str:
+    return base64.b64encode(content).decode("ascii")

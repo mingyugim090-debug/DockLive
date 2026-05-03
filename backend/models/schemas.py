@@ -11,6 +11,7 @@ SourceType = Literal["pdf", "url", "text", "demo"]
 InputFieldType = Literal["text", "textarea", "number", "date", "file_note"]
 DraftStatus = Literal["empty", "needs_input", "drafted", "revised", "confirmed"]
 WorkflowStatus = Literal["analyzed", "collecting_inputs", "drafting", "reviewing", "confirmed", "finalized"]
+DraftStreamEventType = Literal["section_start", "delta", "section_done", "workflow_done", "error"]
 
 
 class TimelineItem(BaseModel):
@@ -37,6 +38,13 @@ class DocumentSection(BaseModel):
     order: int
 
 
+class SourceEvidence(BaseModel):
+    field: str
+    quote: str
+    page: Optional[int] = None
+    note: Optional[str] = None
+
+
 class AnalysisResult(BaseModel):
     id: str
     source_type: SourceType = "pdf"
@@ -55,6 +63,7 @@ class AnalysisResult(BaseModel):
     benefits: list[str] = Field(default_factory=list)
     cautions: list[str] = Field(default_factory=list)
     uncertain_fields: list[str] = Field(default_factory=list)
+    source_evidence: list[SourceEvidence] = Field(default_factory=list)
 
 
 class CompanyProfile(BaseModel):
@@ -127,8 +136,17 @@ class DraftSection(BaseModel):
     content_markdown: str = ""
     status: DraftStatus = "empty"
     needs_confirmation: list[str] = Field(default_factory=list)
+    confirmation_required: list[str] = Field(default_factory=list)
     user_feedback: str = ""
     updated_at: Optional[str] = None
+
+
+class DraftStreamEvent(BaseModel):
+    type: DraftStreamEventType
+    workflow_id: str
+    section_id: Optional[str] = None
+    content: str = ""
+    draft_section: Optional[DraftSection] = None
 
 
 class DraftFeedbackRequest(BaseModel):
@@ -170,6 +188,7 @@ class ExportResponse(BaseModel):
     filename: str
     content_type: str
     content: str
+    encoding: Literal["text", "base64"] = "text"
 
 
 def utc_now_iso() -> str:

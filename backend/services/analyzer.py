@@ -2,45 +2,45 @@ import logging
 import uuid
 from datetime import date, datetime, timezone
 
-from models.schemas import AnalysisResult, ChecklistItem, DocumentSection, TimelineItem
+from models.schemas import AnalysisResult, ChecklistItem, DocumentSection, SourceEvidence, TimelineItem
 
 logger = logging.getLogger(__name__)
 
-_FALLBACK_CHECKLIST: dict[str, list[dict]] = {
+_FALLBACK_CHECKLIST: dict[str, list[dict[str, str]]] = {
     "competition": [
-        {"label": "참가 신청서", "category": "required", "description": "공고에서 지정한 양식", "file_format": "HWP, PDF"},
-        {"label": "제안서 또는 사업계획서", "category": "required", "description": "공고 양식과 분량 확인 필요", "file_format": "HWP, PDF"},
+        {"label": "참가 신청서", "category": "required", "description": "공고에서 지정한 신청 양식", "file_format": "HWP, PDF"},
+        {"label": "제안서 또는 활동 계획서", "category": "required", "description": "분량과 서식은 공고 원문 확인 필요", "file_format": "HWP, PDF"},
         {"label": "팀 구성원 정보", "category": "optional", "description": "팀 참가 시 제출", "file_format": "PDF"},
     ],
     "research": [
-        {"label": "연구계획서", "category": "required", "description": "지정 양식", "file_format": "HWP, PDF"},
+        {"label": "연구계획서", "category": "required", "description": "지원기관 지정 양식", "file_format": "HWP, PDF"},
         {"label": "연구책임자 이력서", "category": "required", "description": "책임연구자 기준", "file_format": "PDF"},
     ],
     "scholarship": [
-        {"label": "장학금 신청서", "category": "required", "description": "지정 양식", "file_format": "HWP, PDF"},
+        {"label": "장학금 신청서", "category": "required", "description": "지원기관 지정 양식", "file_format": "HWP, PDF"},
         {"label": "성적증명서", "category": "required", "description": "최근 발급본", "file_format": "PDF"},
         {"label": "재학증명서", "category": "required", "description": "최근 발급본", "file_format": "PDF"},
     ],
     "startup": [
-        {"label": "창업 신청서", "category": "required", "description": "지정 양식", "file_format": "HWP, PDF"},
-        {"label": "사업계획서", "category": "required", "description": "공고 양식과 분량 확인 필요", "file_format": "HWP, PDF"},
+        {"label": "창업 신청서", "category": "required", "description": "지원기관 지정 양식", "file_format": "HWP, PDF"},
+        {"label": "사업계획서", "category": "required", "description": "공고 서식과 분량 확인 필요", "file_format": "HWP, PDF"},
         {"label": "팀 구성원 이력서", "category": "optional", "description": "팀 참가 시 제출", "file_format": "PDF"},
     ],
 }
 
-_FALLBACK_SECTIONS: dict[str, list[dict]] = {
+_FALLBACK_SECTIONS: dict[str, list[dict[str, str | int]]] = {
     "competition": [
         {"title": "문제 정의", "hint": "해결하려는 문제와 배경을 구체적으로 작성하세요.", "order": 1},
         {"title": "아이디어 개요", "hint": "제안하는 아이디어와 차별점을 요약하세요.", "order": 2},
         {"title": "실행 방법", "hint": "구현 방식, 일정, 필요한 자원을 설명하세요.", "order": 3},
-        {"title": "기대 효과", "hint": "정량적·정성적 효과를 작성하세요.", "order": 4},
-        {"title": "팀 소개", "hint": "팀원 역할과 관련 경험을 소개하세요.", "order": 5},
+        {"title": "기대 효과", "hint": "정량적/정성적 효과를 작성하세요.", "order": 4},
+        {"title": "팀 소개", "hint": "팀원의 역할과 관련 경험을 소개하세요.", "order": 5},
     ],
     "research": [
         {"title": "연구 배경", "hint": "연구 필요성과 기존 연구 대비 차별점을 작성하세요.", "order": 1},
         {"title": "연구 목적", "hint": "측정 가능한 연구 목표를 명확히 작성하세요.", "order": 2},
         {"title": "연구 방법", "hint": "수행 방법, 실험 설계, 데이터 수집 계획을 작성하세요.", "order": 3},
-        {"title": "기대 성과", "hint": "학술적·사회적 활용 방안을 작성하세요.", "order": 4},
+        {"title": "기대 성과", "hint": "학술적/사회적 활용 방안을 작성하세요.", "order": 4},
     ],
     "scholarship": [
         {"title": "지원 동기", "hint": "장학금이 필요한 이유와 계기를 작성하세요.", "order": 1},
@@ -49,8 +49,8 @@ _FALLBACK_SECTIONS: dict[str, list[dict]] = {
         {"title": "향후 목표", "hint": "진로 방향과 장기 목표를 작성하세요.", "order": 4},
     ],
     "startup": [
-        {"title": "문제 정의", "hint": "고객의 pain point와 시장 문제를 작성하세요.", "order": 1},
-        {"title": "솔루션 개요", "hint": "제품·서비스의 핵심 기능과 차별점을 작성하세요.", "order": 2},
+        {"title": "문제 정의", "hint": "고객 pain point와 시장 문제를 작성하세요.", "order": 1},
+        {"title": "솔루션 개요", "hint": "제품/서비스의 핵심 기능과 차별점을 작성하세요.", "order": 2},
         {"title": "비즈니스 모델", "hint": "수익 구조, 고객, 가격 전략을 작성하세요.", "order": 3},
         {"title": "시장 분석", "hint": "시장 규모, 경쟁 상황, 진입 전략을 작성하세요.", "order": 4},
         {"title": "팀 구성", "hint": "팀원의 역할과 역량을 작성하세요.", "order": 5},
@@ -79,15 +79,15 @@ def _get_d_day_status(d_day: int) -> str:
 def _normalize_date(date_str: str) -> str:
     if not date_str:
         return ""
-    date_str = str(date_str).strip()
+    value = str(date_str).strip()
     try:
-        date.fromisoformat(date_str)
-        return date_str
+        date.fromisoformat(value)
+        return value
     except ValueError:
         pass
 
     for sep in (".", "/"):
-        parts = date_str.split(sep)
+        parts = value.split(sep)
         if len(parts) == 3:
             try:
                 normalized = f"{parts[0]}-{parts[1].zfill(2)}-{parts[2].zfill(2)}"
@@ -106,6 +106,28 @@ def _as_list(value) -> list[str]:
     return []
 
 
+def _source_evidence(value) -> list[SourceEvidence]:
+    if not isinstance(value, list):
+        return []
+    evidence: list[SourceEvidence] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        field = str(item.get("field", "")).strip()
+        quote = str(item.get("quote", "")).strip()
+        if not field or not quote:
+            continue
+        evidence.append(
+            SourceEvidence(
+                field=field,
+                quote=quote[:500],
+                page=item.get("page") if isinstance(item.get("page"), int) else None,
+                note=str(item.get("note")).strip() if item.get("note") else None,
+            )
+        )
+    return evidence
+
+
 def build_analysis_result(raw: dict, source_type: str = "pdf", source_name: str | None = None) -> AnalysisResult:
     result_id = str(uuid.uuid4())
 
@@ -115,7 +137,8 @@ def build_analysis_result(raw: dict, source_type: str = "pdf", source_name: str 
         date_str = _normalize_date(item.get("date", ""))
         if not date_str:
             continue
-        dedup_key = f"{date_str}:{item.get('label', '')}"
+        label = str(item.get("label", "")).strip() or "일정"
+        dedup_key = f"{date_str}:{label}"
         if dedup_key in seen_dates:
             continue
         seen_dates.add(dedup_key)
@@ -124,7 +147,7 @@ def build_analysis_result(raw: dict, source_type: str = "pdf", source_name: str 
         timeline.append(
             TimelineItem(
                 id=f"timeline-{i + 1}",
-                label=str(item.get("label", "")).strip(),
+                label=label,
                 date=date_str,
                 d_day=d_day,
                 is_deadline=bool(item.get("is_deadline", False)),
@@ -187,9 +210,9 @@ def build_analysis_result(raw: dict, source_type: str = "pdf", source_name: str 
             sections.append(
                 DocumentSection(
                     id=f"section-{item['order']}",
-                    title=item["title"],
-                    hint=item["hint"],
-                    order=item["order"],
+                    title=str(item["title"]),
+                    hint=str(item["hint"]),
+                    order=int(item["order"]),
                 )
             )
 
@@ -214,4 +237,5 @@ def build_analysis_result(raw: dict, source_type: str = "pdf", source_name: str 
         benefits=_as_list(raw.get("benefits")),
         cautions=_as_list(raw.get("cautions")),
         uncertain_fields=_as_list(raw.get("uncertain_fields")),
+        source_evidence=_source_evidence(raw.get("source_evidence")),
     )
