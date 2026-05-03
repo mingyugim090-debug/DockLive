@@ -4,6 +4,7 @@ import json
 import logging
 import re
 import subprocess
+import sys
 import tempfile
 import time
 from datetime import datetime
@@ -37,10 +38,10 @@ def create_input_fields(analysis: AnalysisResult, company_profile: CompanyProfil
         ),
         UserInputField(
             id="applicant_profile",
-            label="신청자/팀 소개",
+            label="신청 주체 소개",
             required=True,
             description="전공, 역할, 경험, 강점, 업종, 성장 단계 등 초안에 반영할 정보를 적어 주세요.",
-            placeholder="예: AI 문서 자동화 서비스를 만드는 초기 팀입니다.",
+            placeholder="예: AI 문서 자동화 서비스를 만드는 초기 스타트업입니다.",
             value=_profile_to_text(company_profile) if company_profile else "",
         ),
         UserInputField(
@@ -130,9 +131,8 @@ def _profile_to_text(profile: CompanyProfile | None) -> str:
 
 def _confirmation_items(workflow: WorkflowSession) -> list[str]:
     items = list(workflow.analysis.uncertain_fields)
-    if workflow.analysis.source_evidence:
-        return items
-    items.append("핵심 주장과 수치가 공고 원문 및 사용자 입력에 근거하는지 확인하세요.")
+    if not workflow.analysis.source_evidence:
+        items.append("핵심 주장과 수치가 공고 원문 및 사용자 입력에 근거하는지 확인하세요.")
     return items
 
 
@@ -147,9 +147,9 @@ def _mock_draft_section(workflow: WorkflowSession, draft: DraftSection) -> Draft
     body = [
         f"## {draft.title}",
         "",
-        f"{applicant}은(는) {workflow.analysis.title}의 목적과 요구사항에 맞춰 다음과 같이 {draft.title} 항목을 제안합니다.",
+        f"{applicant}은(는) {workflow.analysis.title}의 목적과 요구사항에 맞추어 다음과 같이 {draft.title} 항목을 제안합니다.",
         "",
-        f"핵심 제안은 {summary}입니다. 이 내용은 공고에서 요구하는 제출 서류, 평가 기준, 지원 취지에 맞춰 실행 가능성과 차별성을 중심으로 구성했습니다.",
+        f"핵심 제안은 {summary}입니다. 이 내용은 공고에서 요구하는 제출 서류, 평가 기준, 지원 취지에 맞추어 실행 가능성과 차별성을 중심으로 구성했습니다.",
     ]
     if profile:
         body.extend(["", f"신청 주체 소개: {profile}"])
@@ -210,9 +210,9 @@ def generate_drafts(workflow: WorkflowSession) -> WorkflowSession:
         workflow.updated_at = utc_now_iso()
         return workflow
 
-    system_prompt = """당신은 한국 공모전/지원사업 제출 문서를 작성하는 AI Agent입니다.
+    system_prompt = """당신은 한국 공모전, 지원사업, 장학금, 연구과제 제출 문서를 작성하는 AI Agent입니다.
 공고 분석 결과와 사용자 입력만 근거로 섹션별 초안을 작성하세요.
-마감일, 자격, 금액, 제출 방법 같은 핵심 사실은 새로 만들지 마세요.
+마감일, 자격, 금액, 제출 방법 같은 핵심 사실을 새로 만들지 마세요.
 불확실하거나 검증이 필요한 주장은 needs_confirmation에 넣으세요.
 반드시 JSON 객체만 반환하세요."""
     user_payload = {
@@ -301,7 +301,7 @@ def finalize_document(workflow: WorkflowSession) -> WorkflowSession:
     if workflow.match_report:
         lines.extend(
             [
-                "## 지원 적합성",
+                "## 지원 적합도",
                 "",
                 f"- 점수: {workflow.match_report.score}/100",
                 f"- 판정: {workflow.match_report.verdict}",
@@ -369,14 +369,9 @@ def markdown_to_hwp_compatible_html(markdown: str, title: str) -> str:
 
 
 def export_markdown_to_hwpx(markdown: str, title: str) -> tuple[str, bytes]:
-    """Convert final markdown to HWPX through the optional hwpx-skill toolchain.
-
-    The preferred path follows jkf87/hwpx-skill: content -> HWPX, namespace fix,
-    validation. The integration is disabled unless HWPX_EXPORT_ENABLED=true and
-    HWPX_SKILL_DIR points to a local checkout/installed skill directory.
-    """
+    """Convert final markdown to HWPX through the optional hwpx-skill toolchain."""
     if not settings.HWPX_EXPORT_ENABLED:
-        raise AnalysisError("HWPX export is not enabled. Set HWPX_EXPORT_ENABLED=true after installing the HWPX toolchain.")
+        raise AnalysisError("HWPX export가 비활성화되어 있습니다. HTML export를 사용하거나 HWPX_EXPORT_ENABLED=true와 HWPX_SKILL_DIR를 설정하세요.")
 
     skill_dir = Path(settings.HWPX_SKILL_DIR)
     md2hwpx = skill_dir / "scripts" / "md2hwpx.py"
@@ -384,7 +379,7 @@ def export_markdown_to_hwpx(markdown: str, title: str) -> tuple[str, bytes]:
     validate = skill_dir / "scripts" / "validate.py"
     missing = [str(path) for path in (md2hwpx, fix_namespaces, validate) if not path.exists()]
     if missing:
-        raise AnalysisError(f"HWPX toolchain files were not found: {', '.join(missing)}")
+        raise AnalysisError(f"HWPX toolchain 파일을 찾을 수 없습니다: {', '.join(missing)}")
 
     safe_title = "".join(ch if ch.isalnum() else "_" for ch in title).strip("_") or "livedock_export"
     with tempfile.TemporaryDirectory() as tmp:
@@ -393,14 +388,15 @@ def export_markdown_to_hwpx(markdown: str, title: str) -> tuple[str, bytes]:
         output_path = tmpdir / f"{safe_title}.hwpx"
         markdown_path.write_text(markdown, encoding="utf-8")
 
+        python_bin = sys.executable or "python"
         subprocess.run(
-            ["python", str(md2hwpx), str(markdown_path), "-o", str(output_path)],
+            [python_bin, str(md2hwpx), str(markdown_path), "-o", str(output_path)],
             check=True,
             capture_output=True,
             text=True,
         )
-        subprocess.run(["python", str(fix_namespaces), str(output_path)], check=True, capture_output=True, text=True)
-        subprocess.run(["python", str(validate), str(output_path)], check=True, capture_output=True, text=True)
+        subprocess.run([python_bin, str(fix_namespaces), str(output_path)], check=True, capture_output=True, text=True)
+        subprocess.run([python_bin, str(validate), str(output_path)], check=True, capture_output=True, text=True)
         return output_path.name, output_path.read_bytes()
 
 

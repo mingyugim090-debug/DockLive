@@ -62,5 +62,5 @@ async def fetch_announcement_url(url: str) -> tuple[str, str]:
 
     title, text = _strip_html(response.text)
     if len(text) < 100:
-        raise AnalysisError("URL에서 분석할 만한 본문을 찾지 못했습니다. 공고문 PDF나 본문 텍스트를 직접 넣어 주세요.")
+        raise AnalysisError("URL에서 분석할 만한 본문을 찾지 못했습니다. 공고문 PDF 또는 본문 텍스트를 직접 넣어 주세요.")
     return title or parsed.netloc, text

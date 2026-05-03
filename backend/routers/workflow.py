@@ -60,12 +60,7 @@ async def create_draft(workflow_id: str):
 
 @router.get("/{workflow_id}/draft/stream")
 async def stream_draft(workflow_id: str):
-    """Stream section-level draft events.
-
-    This is a v1 harness-compatible SSE endpoint. It currently generates drafts
-    section-by-section after saving the workflow, and it leaves room for token
-    streaming once the frontend adopts EventSource.
-    """
+    """Stream section-level draft events."""
 
     def event(payload: dict) -> str:
         import json
@@ -88,7 +83,7 @@ async def stream_draft(workflow_id: str):
                         "draft_section": draft.model_dump(mode="json"),
                     }
                 )
-            yield event({"type": "workflow_done", "workflow_id": workflow.id, "content": workflow.status})
+            yield event({"type": "workflow_done", "workflow_id": workflow.id, "content": "초안 생성이 완료되었습니다."})
         except Exception as exc:
             yield event({"type": "error", "workflow_id": workflow_id, "content": str(exc)})
 

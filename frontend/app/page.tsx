@@ -112,7 +112,7 @@ export default function HomePage() {
           <div>
             <h1 className="text-3xl font-bold leading-tight">공고를 넣으면 제출 준비 흐름까지 이어갑니다</h1>
             <p className="mt-3 text-sm leading-relaxed text-text2">
-              PDF, URL, 텍스트 공고문을 분석하고 필요한 입력을 받은 뒤 섹션별 초안을 생성합니다. 최종 제출 전에는 반드시 확인 단계를 거칩니다.
+              PDF, URL, 텍스트 공고문을 분석하고 필요한 입력을 받은 뒤 섹션별 초안을 생성합니다. 최종 제출 전에는 확인 단계를 반드시 거칩니다.
             </p>
           </div>
 
@@ -198,7 +198,7 @@ export default function HomePage() {
         <aside className="flex flex-col gap-4">
           <div className="rounded-xl border border-white/10 bg-card p-4">
             <h2 className="text-sm font-bold">사용자/팀 프로필</h2>
-            <p className="mt-1 text-xs leading-relaxed text-text2">입력하면 지원 적합성 판단과 초안 작성에 반영됩니다.</p>
+            <p className="mt-1 text-xs leading-relaxed text-text2">입력하면 지원 적합성 판단과 초안 작성에 반영합니다.</p>
             <div className="mt-4 grid gap-3">
               {[
                 ['name', '팀/회사명'],
@@ -223,7 +223,7 @@ export default function HomePage() {
               <textarea
                 value={company.needs}
                 onChange={(event) => setCompany((prev) => ({ ...prev, needs: event.target.value }))}
-                placeholder="필요한 지원금, 멘토링, 인프라 등"
+                placeholder="필요한 지원금, 멘토링, 인프라"
                 className="min-h-[70px] resize-y rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none placeholder:text-text3 focus:border-primary"
               />
             </div>
@@ -232,8 +232,8 @@ export default function HomePage() {
           {[
             ['1', '근거 기반 분석', '원문에 있는 사실과 불확실한 항목을 구분합니다.'],
             ['2', '필수 입력 수집', '초안에 필요한 사용자 정보를 먼저 확인합니다.'],
-            ['3', '섹션별 라이브 초안', '문서를 한 번에 덮어쓰지 않고 섹션 단위로 확인합니다.'],
-            ['4', '최종 export', 'HTML export를 기본 제공하고 HWPX 툴체인 연동을 준비합니다.'],
+            ['3', '섹션별 라이브 초안', '문서를 한 번에 뭉개지 않고 섹션 단위로 확인합니다.'],
+            ['4', '최종 export', 'HTML export를 기본 제공하고 HWPX toolchain 연동을 지원합니다.'],
           ].map(([num, title, desc]) => (
             <div key={num} className="rounded-xl border border-white/10 bg-card p-4">
               <div className="mb-3 flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold text-primary">{num}</div>

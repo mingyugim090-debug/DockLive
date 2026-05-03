@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 _FALLBACK_CHECKLIST: dict[str, list[dict[str, str]]] = {
     "competition": [
         {"label": "참가 신청서", "category": "required", "description": "공고에서 지정한 신청 양식", "file_format": "HWP, PDF"},
-        {"label": "제안서 또는 활동 계획서", "category": "required", "description": "분량과 서식은 공고 원문 확인 필요", "file_format": "HWP, PDF"},
+        {"label": "제안서 또는 활동 계획서", "category": "required", "description": "분량과 형식은 공고 원문 확인 필요", "file_format": "HWP, PDF"},
         {"label": "팀 구성원 정보", "category": "optional", "description": "팀 참가 시 제출", "file_format": "PDF"},
     ],
     "research": [
@@ -23,7 +23,7 @@ _FALLBACK_CHECKLIST: dict[str, list[dict[str, str]]] = {
     ],
     "startup": [
         {"label": "창업 신청서", "category": "required", "description": "지원기관 지정 양식", "file_format": "HWP, PDF"},
-        {"label": "사업계획서", "category": "required", "description": "공고 서식과 분량 확인 필요", "file_format": "HWP, PDF"},
+        {"label": "사업계획서", "category": "required", "description": "공고 양식과 분량 확인 필요", "file_format": "HWP, PDF"},
         {"label": "팀 구성원 이력서", "category": "optional", "description": "팀 참가 시 제출", "file_format": "PDF"},
     ],
 }

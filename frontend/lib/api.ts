@@ -46,10 +46,11 @@ export async function analyzeUrl(url: string, company?: CompanyProfile): Promise
 }
 
 export async function analyzeText(text: string, title: string, company?: CompanyProfile): Promise<ApiResponse> {
+  const sourceName = title || '직접 입력한 공고문';
   const res = await fetch(`${API_URL}/api/analyze/text`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, title, source_name: title || '직접 입력한 공고문', company_profile: company }),
+    body: JSON.stringify({ text, title, source_name: sourceName, company_profile: company }),
   });
 
   if (!res.ok) {
@@ -168,7 +169,7 @@ export async function exportWorkflowHtml(id: string): Promise<ExportResponse> {
   const res = await fetch(`${API_URL}/api/workflow/${id}/export/html`);
 
   if (!res.ok) {
-    throw await readError(res, `HTML 내보내기 실패: ${res.status}`);
+    throw await readError(res, `HTML export 실패: ${res.status}`);
   }
 
   return res.json();
@@ -178,7 +179,7 @@ export async function exportWorkflowHwpx(id: string): Promise<ExportResponse> {
   const res = await fetch(`${API_URL}/api/workflow/${id}/export/hwpx`);
 
   if (!res.ok) {
-    throw await readError(res, `HWPX 내보내기 실패: ${res.status}`);
+    throw await readError(res, `HWPX export 실패: ${res.status}`);
   }
 
   return res.json();

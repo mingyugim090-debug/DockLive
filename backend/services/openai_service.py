@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 MAX_TEXT_LENGTH = 60_000
 
-SYSTEM_PROMPT = """당신은 한국의 공모전, 정부지원사업, 장학금, 연구과제, 창업지원 공고를 분석하는 전문 AI입니다.
+SYSTEM_PROMPT = """당신은 한국 공모전, 정부지원사업, 장학금, 연구과제, 창업지원 공고를 분석하는 전문 AI입니다.
 반드시 유효한 JSON 객체만 반환하세요. 마크다운 코드블록이나 설명 문장은 포함하지 마세요.
 문서에 없는 핵심 사실은 추측하지 말고 uncertain_fields에 기록하세요.
 분석 결과에는 가능한 경우 source_evidence를 포함해 각 핵심 필드가 원문 어디에 근거하는지 짧은 인용으로 남기세요."""
@@ -145,7 +145,7 @@ def _call_json(model: str, system_prompt: str, user_prompt: str, max_tokens: int
 def analyze_announcement(text: str, source_name: str = "uploaded document") -> dict:
     """Analyze announcement text with OpenAI and return a validated dict."""
     if not settings.OPENAI_API_KEY:
-        raise AnalysisError("OpenAI API 키가 설정되지 않았습니다. 환경변수를 확인해 주세요.")
+        raise AnalysisError("OpenAI API 키가 설정되지 않았습니다. 환경 변수를 확인해 주세요.")
 
     truncated_text = text[:MAX_TEXT_LENGTH]
     if len(text) > MAX_TEXT_LENGTH:
@@ -214,7 +214,7 @@ def _mock_match_report(company_profile: CompanyProfile) -> dict:
             {
                 "label": "지원 자격",
                 "status": "unknown",
-                "detail": "사용자/팀 정보와 공고의 자격 조건을 더 대조해야 합니다.",
+                "detail": "사용자 정보와 공고의 자격 조건을 대조할 추가 정보가 필요합니다.",
             },
             {
                 "label": "작성 가능성",
@@ -222,6 +222,6 @@ def _mock_match_report(company_profile: CompanyProfile) -> dict:
                 "detail": "프로필 정보가 있으면 초안에 바로 반영할 수 있습니다.",
             },
         ],
-        "missing_inputs": ["소속/재학 상태", "역할", "최근 실적", "지원 제외 이력"],
+        "missing_inputs": ["소속/학적 상태", "역할", "최근 실적", "지원 제외 이력"],
         "recommended_next_steps": ["필수 제출 서류를 확인하세요.", "불확실한 자격 조건은 주관 기관에 확인하세요."],
     }

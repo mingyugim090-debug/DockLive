@@ -1,0 +1,16 @@
+{
+  "id": "ambiguous_url_notice",
+  "name": "Ambiguous URL Notice",
+  "announcement_text": "지역 청소년 미디어 프로젝트 참여팀 모집 예고. 운영: 새봄문화센터. 청소년이 지역 문제를 영상으로 기록하는 프로젝트이며 세부 접수 일정과 제출 방식은 추후 공지합니다. 참여 대상은 지역 내 중고등학생 팀입니다. 제출 예정 자료는 신청서와 활동 계획서입니다.",
+  "expected": {
+    "doc_type": "competition",
+    "organization": "새봄문화센터",
+    "required_documents": ["신청서", "활동 계획서"],
+    "uncertain_fields": ["접수 일정", "제출 방식"]
+  },
+  "fail_if": [
+    "마감일을 임의로 만든다.",
+    "제출 방법을 이메일 또는 온라인 접수로 추정한다."
+  ],
+  "uncertainty_rule": "마감일과 제출 방식은 반드시 uncertain_fields에 남긴다."
+}

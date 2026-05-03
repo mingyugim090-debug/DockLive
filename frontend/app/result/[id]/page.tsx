@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   confirmWorkflow,
+  createDraftStream,
   exportWorkflowHtml,
   exportWorkflowHwpx,
   finalizeWorkflow,
@@ -17,7 +18,7 @@ import {
 } from '@/lib/api';
 import { loadResult, saveResult } from '@/lib/resultCache';
 import { useAppStore } from '@/lib/store';
-import type { AnalysisResult, DraftSection, UserInputField, WorkflowSession } from '@/lib/types';
+import type { AnalysisResult, DraftSection, DraftStreamEvent, UserInputField, WorkflowSession } from '@/lib/types';
 
 const TABS = [
   { step: 1 as const, label: '분석' },
@@ -25,6 +26,14 @@ const TABS = [
   { step: 3 as const, label: '초안' },
   { step: 4 as const, label: '최종' },
 ];
+
+const STATUS_LABEL: Record<DraftSection['status'], string> = {
+  empty: '대기',
+  needs_input: '입력 필요',
+  drafted: '초안 완료',
+  revised: '수정됨',
+  confirmed: '확인 완료',
+};
 
 function Section({ title, desc, children }: { title: string; desc: string; children: ReactNode }) {
   return (
@@ -75,6 +84,7 @@ function InputField({ field, value, onChange }: { field: UserInputField; value: 
 function DraftCard({
   draft,
   feedback,
+  streamState,
   onFeedbackChange,
   onSaveFeedback,
   onRevise,
@@ -82,6 +92,7 @@ function DraftCard({
 }: {
   draft: DraftSection;
   feedback: string;
+  streamState?: string;
   onFeedbackChange: (value: string) => void;
   onSaveFeedback: () => void;
   onRevise: () => void;
@@ -91,7 +102,7 @@ function DraftCard({
     <div className="rounded-lg border border-white/10 bg-white/5">
       <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
         <h3 className="text-sm font-bold text-text">{draft.title}</h3>
-        <span className="rounded-md bg-bg px-2 py-1 text-xs text-text2">{draft.status}</span>
+        <span className="rounded-md bg-bg px-2 py-1 text-xs text-text2">{streamState ?? STATUS_LABEL[draft.status]}</span>
       </div>
       <div className="flex flex-col gap-3 p-4">
         {draft.confirmation_required.length > 0 && (
@@ -135,13 +146,18 @@ export default function ResultPage() {
   const [workflow, setLocalWorkflow] = useState<WorkflowSession | null>(workflowSession);
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
   const [feedbackValues, setFeedbackValues] = useState<Record<string, string>>({});
+  const [streamStates, setStreamStates] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(!analysisResult);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const streamRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
     setStep(1);
+    return () => {
+      streamRef.current?.close();
+    };
   }, [id, setStep]);
 
   useEffect(() => {
@@ -180,7 +196,7 @@ export default function ResultPage() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [analysisResult, id, setResult, setWorkflow]);
 
   const activeAnalysis = workflow?.analysis ?? result;
   const requiredMissing = useMemo(() => {
@@ -196,7 +212,7 @@ export default function ResultPage() {
   };
 
   const handleSaveInputs = async () => {
-    if (!workflow) return;
+    if (!workflow) return null;
     setBusy(true);
     setError(null);
     try {
@@ -206,10 +222,51 @@ export default function ResultPage() {
       );
       applyWorkflow(res.data);
       setNotice('입력을 저장했습니다.');
+      return res.data;
     } catch (err) {
       setError(err instanceof Error ? err.message : '입력 저장에 실패했습니다.');
+      return null;
     } finally {
       setBusy(false);
+    }
+  };
+
+  const mergeDraftEvent = (event: DraftStreamEvent) => {
+    if (event.type === 'section_start') {
+      setNotice(event.content || '초안 생성을 시작합니다.');
+      setStreamStates((prev) => {
+        const next = { ...prev };
+        workflow?.draft_sections.forEach((draft) => {
+          next[draft.section_id] = '생성 대기';
+        });
+        return next;
+      });
+      return;
+    }
+    if (event.type === 'section_done' && event.draft_section) {
+      setStreamStates((prev) => ({ ...prev, [event.draft_section!.section_id]: '완료' }));
+      setLocalWorkflow((prev) => {
+        if (!prev) return prev;
+        const draftSections = prev.draft_sections.map((draft) =>
+          draft.section_id === event.draft_section?.section_id ? event.draft_section : draft,
+        );
+        const next = { ...prev, draft_sections: draftSections, status: 'reviewing' as const };
+        setWorkflow(next);
+        return next;
+      });
+      return;
+    }
+    if (event.type === 'workflow_done') {
+      setNotice(event.content || '초안 생성이 완료되었습니다.');
+      setBusy(false);
+      setStep(3);
+      streamRef.current?.close();
+      return;
+    }
+    if (event.type === 'error') {
+      setError(event.content || '초안 생성 중 오류가 발생했습니다.');
+      setBusy(false);
+      streamRef.current?.close();
     }
   };
 
@@ -217,15 +274,47 @@ export default function ResultPage() {
     if (!workflow) return;
     setBusy(true);
     setError(null);
-    try {
-      await handleSaveInputs();
-      const drafted = await generateDraft(workflow.id);
-      applyWorkflow(drafted.data);
-      setStep(3);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '초안 생성에 실패했습니다.');
-    } finally {
+    setNotice(null);
+    setStreamStates({});
+    streamRef.current?.close();
+
+    const savedWorkflow = await handleSaveInputs();
+    if (!savedWorkflow) {
       setBusy(false);
+      return;
+    }
+
+    let completed = false;
+    try {
+      const source = createDraftStream(savedWorkflow.id, (event) => {
+        if (event.type === 'workflow_done') completed = true;
+        mergeDraftEvent(event);
+      });
+      streamRef.current = source;
+      source.onerror = async () => {
+        source.close();
+        if (completed) return;
+        setNotice('라이브 스트리밍 연결이 끊겨 일괄 생성으로 다시 시도합니다.');
+        try {
+          const drafted = await generateDraft(savedWorkflow.id);
+          applyWorkflow(drafted.data);
+          setStep(3);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : '초안 생성에 실패했습니다.');
+        } finally {
+          setBusy(false);
+        }
+      };
+    } catch (err) {
+      try {
+        const drafted = await generateDraft(savedWorkflow.id);
+        applyWorkflow(drafted.data);
+        setStep(3);
+      } catch (fallbackErr) {
+        setError(fallbackErr instanceof Error ? fallbackErr.message : err instanceof Error ? err.message : '초안 생성에 실패했습니다.');
+      } finally {
+        setBusy(false);
+      }
     }
   };
 
@@ -303,7 +392,7 @@ export default function ResultPage() {
       const exported = await exportWorkflowHwpx(workflow.id);
       downloadExport(exported.filename, exported.content_type, exported.content, exported.encoding);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'HWPX export는 아직 서버 툴체인 설정이 필요합니다.');
+      setError(err instanceof Error ? err.message : 'HWPX export에는 서버 toolchain 설정이 필요합니다. HTML export를 먼저 사용할 수 있습니다.');
     }
   };
 
@@ -370,7 +459,7 @@ export default function ResultPage() {
               <InfoList title="혜택" items={activeAnalysis.benefits} />
               <InfoList title="평가 기준" items={activeAnalysis.evaluation_criteria} />
               <InfoList title="주의사항" items={activeAnalysis.cautions} />
-              <InfoList title="불확실 항목" items={activeAnalysis.uncertain_fields} />
+              <InfoList title="불확실한 항목" items={activeAnalysis.uncertain_fields} />
               <InfoList title="근거 인용" items={(activeAnalysis.source_evidence ?? []).map((item) => `${item.field}: ${item.quote}`)} />
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -429,6 +518,7 @@ export default function ResultPage() {
                 <DraftCard
                   key={draft.id}
                   draft={draft}
+                  streamState={streamStates[draft.section_id]}
                   feedback={feedbackValues[draft.section_id] ?? ''}
                   onFeedbackChange={(value) => setFeedbackValues((prev) => ({ ...prev, [draft.section_id]: value }))}
                   onSaveFeedback={() => handleSaveFeedback(draft.section_id)}
