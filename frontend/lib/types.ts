@@ -1,6 +1,7 @@
 export type DocType = 'competition' | 'research' | 'scholarship' | 'startup';
 export type ItemCategory = 'required' | 'optional';
 export type DayStatus = 'safe' | 'warning' | 'danger' | 'passed';
+export type SourceType = 'pdf' | 'url' | 'text' | 'demo';
 export type InputFieldType = 'text' | 'textarea' | 'number' | 'date' | 'file_note';
 export type DraftStatus = 'empty' | 'needs_input' | 'drafted' | 'revised' | 'confirmed';
 export type WorkflowStatus =
@@ -37,6 +38,9 @@ export interface DocumentSection {
 
 export interface AnalysisResult {
   id: string;
+  source_type: SourceType;
+  source_name?: string | null;
+  summary: string;
   doc_type: DocType;
   title: string;
   organization: string;
@@ -50,6 +54,31 @@ export interface AnalysisResult {
   benefits: string[];
   cautions: string[];
   uncertain_fields: string[];
+}
+
+export interface CompanyProfile {
+  name: string;
+  industry: string;
+  stage: string;
+  region: string;
+  team_size?: number | null;
+  strengths: string;
+  needs: string;
+  previous_support: string;
+}
+
+export interface MatchSignal {
+  label: string;
+  status: 'match' | 'gap' | 'unknown';
+  detail: string;
+}
+
+export interface MatchReport {
+  score: number;
+  verdict: string;
+  signals: MatchSignal[];
+  missing_inputs: string[];
+  recommended_next_steps: string[];
 }
 
 export interface UserInputField {
@@ -83,6 +112,8 @@ export interface FinalDocument {
 export interface WorkflowSession {
   id: string;
   analysis: AnalysisResult;
+  company_profile?: CompanyProfile | null;
+  match_report?: MatchReport | null;
   status: WorkflowStatus;
   user_inputs: UserInputField[];
   draft_sections: DraftSection[];
@@ -95,6 +126,7 @@ export interface WorkflowSession {
 export interface ApiResponse {
   success: boolean;
   data: AnalysisResult;
+  match_report?: MatchReport | null;
 }
 
 export interface WorkflowResponse {
@@ -104,4 +136,11 @@ export interface WorkflowResponse {
 
 export interface ApiError {
   detail: string;
+}
+
+export interface ExportResponse {
+  success: boolean;
+  filename: string;
+  content_type: string;
+  content: string;
 }

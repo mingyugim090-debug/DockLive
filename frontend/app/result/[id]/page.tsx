@@ -8,6 +8,7 @@ import { Checklist } from '@/components/checklist/Checklist';
 import { DocTemplate } from '@/components/document/DocTemplate';
 import {
   confirmWorkflow,
+  exportWorkflowHtml,
   finalizeWorkflow,
   generateDraft,
   getResult,
@@ -19,11 +20,11 @@ import {
 import { useAppStore } from '@/lib/store';
 import { getDocTypeLabel } from '@/lib/utils';
 import { loadResult, saveResult } from '@/lib/resultCache';
-import type { AnalysisResult, DraftSection, UserInputField, WorkflowSession } from '@/lib/types';
+import type { AnalysisResult, DraftSection, MatchReport, UserInputField, WorkflowSession } from '@/lib/types';
 
 const TABS = [
   { step: 1 as const, label: '일정' },
-  { step: 2 as const, label: '제출 서류' },
+  { step: 2 as const, label: '요건' },
   { step: 3 as const, label: '작성 항목' },
   { step: 4 as const, label: '초안 작성' },
   { step: 5 as const, label: '최종본' },
@@ -50,6 +51,42 @@ function InfoList({ title, items }: { title: string; items: string[] }) {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+function MatchReportCard({ report }: { report?: MatchReport | null }) {
+  if (!report) return null;
+  const statusClass = {
+    match: 'border-green-400/20 bg-green-400/10 text-green-200',
+    gap: 'border-red-400/20 bg-red-400/10 text-red-200',
+    unknown: 'border-yellow-400/20 bg-yellow-400/10 text-yellow-100',
+  };
+  return (
+    <div className="mb-5 rounded-xl border border-primary/30 bg-primary/10 p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-sm font-bold text-text">지원 적합도</h3>
+          <p className="mt-1 text-sm leading-relaxed text-text2">{report.verdict}</p>
+        </div>
+        <div className="shrink-0 rounded-lg bg-card px-3 py-2 text-right">
+          <p className="text-2xl font-bold text-primary">{report.score}</p>
+          <p className="text-[11px] text-text3">/100</p>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-2 md:grid-cols-2">
+        {report.signals.map((signal) => (
+          <div key={`${signal.label}-${signal.detail}`} className={`rounded-lg border p-3 ${statusClass[signal.status]}`}>
+            <p className="text-xs font-bold">{signal.label}</p>
+            <p className="mt-1 text-xs leading-relaxed opacity-90">{signal.detail}</p>
+          </div>
+        ))}
+      </div>
+      {report.missing_inputs.length > 0 && (
+        <p className="mt-3 text-xs leading-relaxed text-yellow-100">
+          추가 확인 필요: {report.missing_inputs.join(', ')}
+        </p>
+      )}
     </div>
   );
 }
@@ -115,12 +152,12 @@ function DraftCard({
           </div>
         )}
         <pre className="whitespace-pre-wrap rounded-lg bg-white/5 p-3 text-sm leading-relaxed text-text2">
-          {draft.content_markdown || '아직 초안이 없습니다. 사용자 입력을 저장한 뒤 초안을 생성하세요.'}
+          {draft.content_markdown || '아직 초안이 없습니다. 필수 정보를 입력한 뒤 초안을 생성하세요.'}
         </pre>
         <textarea
           value={feedback}
           onChange={(event) => onFeedbackChange(event.target.value)}
-          placeholder="수정 방향을 입력하세요. 예: 시장 규모 근거를 더 강조하고, 표현은 대학생 팀답게 자연스럽게 바꿔줘."
+          placeholder="수정 방향을 입력하세요. 예: 시장 규모 근거를 더 강조하고 문장을 더 자연스럽게 바꿔줘."
           className="min-h-[72px] w-full resize-y rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-text outline-none placeholder:text-text3 focus:border-primary"
         />
         <div className="flex flex-wrap gap-2">
@@ -177,9 +214,7 @@ export default function ResultPage() {
       setError(null);
       try {
         let nextResult = analysisResult?.id === id ? analysisResult : null;
-        if (!nextResult) {
-          nextResult = loadResult(id);
-        }
+        if (!nextResult) nextResult = loadResult(id);
         if (!nextResult) {
           const res = await getResult(id);
           nextResult = res.data;
@@ -314,12 +349,32 @@ export default function ResultPage() {
     });
   };
 
+  const handleExportHtml = async () => {
+    if (!workflow) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const exported = await exportWorkflowHtml(workflow.id);
+      const blob = new Blob([exported.content], { type: exported.content_type });
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = exported.filename;
+      link.click();
+      URL.revokeObjectURL(objectUrl);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '내보내기에 실패했습니다.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center">
         <div className="flex flex-col items-center gap-4 text-text2">
           <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          <p>Agent 작업실을 불러오는 중입니다.</p>
+          <p>Agent 작업을 불러오는 중입니다.</p>
         </div>
       </div>
     );
@@ -331,10 +386,7 @@ export default function ResultPage() {
         <div className="flex flex-col items-center gap-4 text-center max-w-sm">
           <p className="text-text font-bold text-lg">결과를 찾을 수 없습니다</p>
           <p className="text-text2 text-sm">{error}</p>
-          <button
-            onClick={() => router.push('/')}
-            className="mt-2 px-6 py-3 rounded-xl text-white font-semibold text-sm bg-primary"
-          >
+          <button onClick={() => router.push('/')} className="mt-2 px-6 py-3 rounded-xl text-white font-semibold text-sm bg-primary">
             다시 분석하기
           </button>
         </div>
@@ -373,9 +425,7 @@ export default function ResultPage() {
                 key={tab.step}
                 onClick={() => setStep(tab.step)}
                 className={`min-w-[92px] flex-1 border-b-2 py-3 text-sm font-semibold transition-all ${
-                  currentStep === tab.step
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-text2 hover:text-text'
+                  currentStep === tab.step ? 'border-primary text-primary' : 'border-transparent text-text2 hover:text-text'
                 }`}
               >
                 {tab.step}. {tab.label}
@@ -386,29 +436,32 @@ export default function ResultPage() {
       </div>
 
       <div className="max-w-4xl mx-auto w-full px-6 py-6">
-        {error && (
-          <div className="mb-4 rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-200">
-            {error}
-          </div>
-        )}
+        {error && <div className="mb-4 rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-200">{error}</div>}
 
         <AnimatePresence mode="wait">
           {currentStep === 1 && (
             <motion.div key="timeline" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <SectionTitle title="일정 분석" desc="공고문에서 추출한 주요 일정과 마감일입니다." />
+              {activeAnalysis.summary && (
+                <div className="mb-4 rounded-xl border border-white/7 bg-card p-4 text-sm leading-relaxed text-text2">
+                  <span className="font-bold text-text">AI 요약: </span>
+                  {activeAnalysis.summary}
+                </div>
+              )}
               <Timeline items={activeAnalysis.timeline} />
             </motion.div>
           )}
 
           {currentStep === 2 && (
-            <motion.div key="checklist" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <SectionTitle title="제출 서류 체크리스트" desc="공고문 기준 필수·선택 제출 서류입니다." />
+            <motion.div key="requirements" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <SectionTitle title="제출 요건과 적합도" desc="필수 서류, 자격 조건, 회사 프로필 기반 매칭 결과입니다." />
+              <MatchReportCard report={workflow.match_report} />
               <Checklist items={activeAnalysis.checklist} />
               <div className="mt-5 grid gap-3 md:grid-cols-2">
                 <InfoList title="지원 자격" items={activeAnalysis.eligibility} />
                 <InfoList title="혜택" items={activeAnalysis.benefits} />
                 <InfoList title="평가 기준" items={activeAnalysis.evaluation_criteria} />
-                <InfoList title="유의사항" items={activeAnalysis.cautions} />
+                <InfoList title="주의사항" items={activeAnalysis.cautions} />
               </div>
               {activeAnalysis.submission_method && (
                 <div className="mt-3 rounded-xl border border-white/7 bg-white/3 p-4 text-sm text-text2">
@@ -428,10 +481,7 @@ export default function ResultPage() {
 
           {currentStep === 4 && (
             <motion.div key="draft" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <SectionTitle
-                title="초안 작성 Agent"
-                desc="필수 정보를 입력하면 섹션별 초안을 생성하고 피드백을 반영할 수 있습니다."
-              />
+              <SectionTitle title="초안 작성 Agent" desc="필수 정보를 입력하면 섹션별 초안을 생성하고 피드백을 반영할 수 있습니다." />
               <div className="mb-5 flex flex-col gap-3">
                 {workflow.user_inputs.map((field) => (
                   <InputField
@@ -448,18 +498,10 @@ export default function ResultPage() {
                 </div>
               )}
               <div className="mb-6 flex flex-wrap gap-2">
-                <button
-                  onClick={handleSaveInputs}
-                  disabled={busy}
-                  className="rounded-xl border border-white/10 px-4 py-3 text-sm font-semibold text-text2 transition hover:border-white/20 hover:text-text disabled:opacity-50"
-                >
+                <button onClick={handleSaveInputs} disabled={busy} className="rounded-xl border border-white/10 px-4 py-3 text-sm font-semibold text-text2 transition hover:border-white/20 hover:text-text disabled:opacity-50">
                   입력 저장
                 </button>
-                <button
-                  onClick={handleGenerateDraft}
-                  disabled={busy}
-                  className="rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white transition disabled:opacity-50"
-                >
+                <button onClick={handleGenerateDraft} disabled={busy} className="rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white transition disabled:opacity-50">
                   {busy ? '처리 중...' : '초안 생성'}
                 </button>
               </div>
@@ -469,9 +511,7 @@ export default function ResultPage() {
                     key={draft.id}
                     draft={draft}
                     feedback={feedbackValues[draft.section_id] ?? ''}
-                    onFeedbackChange={(value) =>
-                      setFeedbackValues((prev) => ({ ...prev, [draft.section_id]: value }))
-                    }
+                    onFeedbackChange={(value) => setFeedbackValues((prev) => ({ ...prev, [draft.section_id]: value }))}
                     onSaveFeedback={() => handleSaveFeedback(draft.section_id)}
                     onRevise={() => handleRevise(draft.section_id)}
                     busy={busy}
@@ -492,28 +532,26 @@ export default function ResultPage() {
 
           {currentStep === 5 && (
             <motion.div key="final" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <SectionTitle title="최종 Markdown 문서" desc="제출 전 사용자가 한 번 더 검토해야 하는 최종 초안입니다." />
+              <SectionTitle title="최종 제출 초안" desc="제출 전 사용자가 반드시 검토해야 하는 최종 초안입니다." />
               {!workflow.final_document ? (
                 <div className="rounded-xl border border-white/7 bg-card p-6 text-center">
                   <p className="text-sm text-text2">아직 최종 문서가 없습니다.</p>
-                  <button
-                    onClick={handleFinalize}
-                    disabled={busy}
-                    className="mt-4 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
-                  >
+                  <button onClick={handleFinalize} disabled={busy} className="mt-4 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-white disabled:opacity-50">
                     최종 문서 생성
                   </button>
                 </div>
               ) : (
                 <div className="rounded-xl border border-white/7 bg-card overflow-hidden">
-                  <div className="flex items-center justify-between gap-3 border-b border-white/7 px-4 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/7 px-4 py-3">
                     <h3 className="text-sm font-bold text-text">{workflow.final_document.title}</h3>
-                    <button
-                      onClick={handleCopyFinal}
-                      className="rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold text-text2 hover:text-text"
-                    >
-                      {copied ? '복사됨' : 'Markdown 복사'}
-                    </button>
+                    <div className="flex gap-2">
+                      <button onClick={handleExportHtml} disabled={busy} className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary disabled:opacity-50">
+                        HWP 호환 HTML 내보내기
+                      </button>
+                      <button onClick={handleCopyFinal} className="rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold text-text2 hover:text-text">
+                        {copied ? '복사됨' : 'Markdown 복사'}
+                      </button>
+                    </div>
                   </div>
                   <pre className="max-h-[70vh] overflow-auto whitespace-pre-wrap p-4 text-sm leading-relaxed text-text2">
                     {workflow.final_document.content_markdown}

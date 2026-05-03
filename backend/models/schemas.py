@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 DocType = Literal["competition", "research", "scholarship", "startup"]
 ItemCategory = Literal["required", "optional"]
 DayStatus = Literal["safe", "warning", "danger", "passed"]
+SourceType = Literal["pdf", "url", "text", "demo"]
 InputFieldType = Literal["text", "textarea", "number", "date", "file_note"]
 DraftStatus = Literal["empty", "needs_input", "drafted", "revised", "confirmed"]
 WorkflowStatus = Literal["analyzed", "collecting_inputs", "drafting", "reviewing", "confirmed", "finalized"]
@@ -38,6 +39,9 @@ class DocumentSection(BaseModel):
 
 class AnalysisResult(BaseModel):
     id: str
+    source_type: SourceType = "pdf"
+    source_name: Optional[str] = None
+    summary: str = ""
     doc_type: DocType
     title: str
     organization: str
@@ -51,6 +55,49 @@ class AnalysisResult(BaseModel):
     benefits: list[str] = Field(default_factory=list)
     cautions: list[str] = Field(default_factory=list)
     uncertain_fields: list[str] = Field(default_factory=list)
+
+
+class CompanyProfile(BaseModel):
+    name: str = ""
+    industry: str = ""
+    stage: str = ""
+    region: str = ""
+    team_size: Optional[int] = None
+    strengths: str = ""
+    needs: str = ""
+    previous_support: str = ""
+
+
+class MatchSignal(BaseModel):
+    label: str
+    status: Literal["match", "gap", "unknown"]
+    detail: str
+
+
+class MatchReport(BaseModel):
+    score: int = Field(ge=0, le=100)
+    verdict: str
+    signals: list[MatchSignal] = Field(default_factory=list)
+    missing_inputs: list[str] = Field(default_factory=list)
+    recommended_next_steps: list[str] = Field(default_factory=list)
+
+
+class AnalyzeTextRequest(BaseModel):
+    title: Optional[str] = None
+    text: str
+    source_name: Optional[str] = None
+    company_profile: Optional[CompanyProfile] = None
+
+
+class AnalyzeUrlRequest(BaseModel):
+    url: str
+    company_profile: Optional[CompanyProfile] = None
+
+
+class AnalyzeResponse(BaseModel):
+    success: bool
+    data: AnalysisResult
+    match_report: Optional[MatchReport] = None
 
 
 class UserInputField(BaseModel):
@@ -97,6 +144,8 @@ class FinalDocument(BaseModel):
 class WorkflowSession(BaseModel):
     id: str
     analysis: AnalysisResult
+    company_profile: Optional[CompanyProfile] = None
+    match_report: Optional[MatchReport] = None
     status: WorkflowStatus = "analyzed"
     user_inputs: list[UserInputField] = Field(default_factory=list)
     draft_sections: list[DraftSection] = Field(default_factory=list)
@@ -106,7 +155,7 @@ class WorkflowSession(BaseModel):
     updated_at: str
 
 
-class AnalysisResponse(BaseModel):
+class AnalysisResponse(AnalyzeResponse):
     success: bool
     data: AnalysisResult
 
@@ -114,6 +163,13 @@ class AnalysisResponse(BaseModel):
 class WorkflowResponse(BaseModel):
     success: bool
     data: WorkflowSession
+
+
+class ExportResponse(BaseModel):
+    success: bool
+    filename: str
+    content_type: str
+    content: str
 
 
 def utc_now_iso() -> str:

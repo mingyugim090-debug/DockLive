@@ -106,7 +106,7 @@ def _as_list(value) -> list[str]:
     return []
 
 
-def build_analysis_result(raw: dict) -> AnalysisResult:
+def build_analysis_result(raw: dict, source_type: str = "pdf", source_name: str | None = None) -> AnalysisResult:
     result_id = str(uuid.uuid4())
 
     timeline: list[TimelineItem] = []
@@ -198,6 +198,9 @@ def build_analysis_result(raw: dict) -> AnalysisResult:
 
     return AnalysisResult(
         id=result_id,
+        source_type=source_type,
+        source_name=source_name,
+        summary=raw.get("summary") or "",
         doc_type=doc_type,
         title=raw.get("title") or "제목 미상",
         organization=raw.get("organization") or "기관 미상",

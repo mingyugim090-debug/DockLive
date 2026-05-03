@@ -1,5 +1,7 @@
+import html
 import json
 import logging
+import re
 import time
 from datetime import datetime
 
@@ -7,8 +9,10 @@ from core.config import settings
 from core.errors import AnalysisError
 from models.schemas import (
     AnalysisResult,
+    CompanyProfile,
     DraftSection,
     FinalDocument,
+    MatchReport,
     UserInputField,
     WorkflowSession,
     utc_now_iso,
@@ -17,21 +21,23 @@ from models.schemas import (
 logger = logging.getLogger(__name__)
 
 
-def create_input_fields(analysis: AnalysisResult) -> list[UserInputField]:
+def create_input_fields(analysis: AnalysisResult, company_profile: CompanyProfile | None = None) -> list[UserInputField]:
     fields: list[UserInputField] = [
         UserInputField(
             id="applicant_name",
-            label="신청자 또는 팀명",
+            label="신청자 또는 팀/회사명",
             required=True,
-            description="공고에 제출할 대표 신청자명 또는 팀명을 입력하세요.",
-            placeholder="예: 라이브독 팀",
+            description="공고에 제출할 신청자명, 팀명 또는 회사명을 입력하세요.",
+            placeholder="예: 라이브독 주식회사",
+            value=company_profile.name if company_profile else "",
         ),
         UserInputField(
             id="applicant_profile",
-            label="신청자/팀 소개",
+            label="신청자/팀/회사 소개",
             required=True,
-            description="전공, 역할, 경험, 강점 등 초안에 반영할 소개 정보를 적어 주세요.",
-            placeholder="예: 컴퓨터공학 전공 대학생 3명으로 구성된 팀입니다...",
+            description="전공, 역할, 경험, 강점, 업종, 성장 단계 등 초안에 반영할 정보를 적어 주세요.",
+            placeholder="예: AI 문서 자동화 서비스를 만드는 초기 스타트업입니다.",
+            value=_profile_to_text(company_profile) if company_profile else "",
         ),
         UserInputField(
             id="project_summary",
@@ -45,7 +51,8 @@ def create_input_fields(analysis: AnalysisResult) -> list[UserInputField]:
             label="근거 자료와 성과",
             required=False,
             description="수상, 실험, 인터뷰, 시장 조사, 포트폴리오 등 근거로 쓸 내용을 적어 주세요.",
-            placeholder="예: 사용자 인터뷰 12건, MVP 테스트 결과...",
+            placeholder="예: 사용자 인터뷰 12건, MVP 테스트 결과, 이전 수상 이력...",
+            value=company_profile.strengths if company_profile else "",
         ),
     ]
 
@@ -63,20 +70,21 @@ def create_input_fields(analysis: AnalysisResult) -> list[UserInputField]:
     return fields
 
 
-def create_workflow_session(analysis: AnalysisResult) -> WorkflowSession:
+def create_workflow_session(
+    analysis: AnalysisResult,
+    company_profile: CompanyProfile | None = None,
+    match_report: MatchReport | None = None,
+) -> WorkflowSession:
     now = utc_now_iso()
     return WorkflowSession(
         id=analysis.id,
         analysis=analysis,
+        company_profile=company_profile,
+        match_report=match_report,
         status="collecting_inputs",
-        user_inputs=create_input_fields(analysis),
+        user_inputs=create_input_fields(analysis, company_profile),
         draft_sections=[
-            DraftSection(
-                id=f"draft-{section.id}",
-                section_id=section.id,
-                title=section.title,
-                status="empty",
-            )
+            DraftSection(id=f"draft-{section.id}", section_id=section.id, title=section.title, status="empty")
             for section in sorted(analysis.document_template, key=lambda item: item.order)
         ],
         created_at=now,
@@ -100,21 +108,43 @@ def _input_map(workflow: WorkflowSession) -> dict[str, str]:
     return {field.id: field.value for field in workflow.user_inputs if field.value.strip()}
 
 
+def _profile_to_text(profile: CompanyProfile | None) -> str:
+    if not profile:
+        return ""
+    parts = [
+        f"회사/팀명: {profile.name}",
+        f"업종: {profile.industry}",
+        f"단계: {profile.stage}",
+        f"지역: {profile.region}",
+        f"팀 규모: {profile.team_size}명" if profile.team_size else "",
+        f"강점: {profile.strengths}",
+        f"필요 지원: {profile.needs}",
+        f"이전 지원사업: {profile.previous_support}",
+    ]
+    return "\n".join(part for part in parts if part and not part.endswith(": "))
+
+
 def _mock_draft_section(workflow: WorkflowSession, draft: DraftSection) -> DraftSection:
     inputs = _input_map(workflow)
     applicant = inputs.get("applicant_name", "신청자")
-    summary = inputs.get("project_summary", "사용자가 입력한 아이디어")
+    profile = inputs.get("applicant_profile", "")
+    summary = inputs.get("project_summary", "사용자가 입력한 프로젝트")
+    evidence = inputs.get("evidence", "")
     section_specific = inputs.get(f"section_input_{draft.section_id}", "")
 
     body = [
         f"## {draft.title}",
         "",
-        f"{applicant}은(는) 「{workflow.analysis.title}」의 취지에 맞춰 다음과 같은 방향으로 {draft.title} 항목을 제안합니다.",
+        f"{applicant}은(는) {workflow.analysis.title}의 목적과 요건에 맞춰 다음과 같이 {draft.title} 항목을 제안합니다.",
         "",
-        f"핵심 아이디어는 {summary}입니다. 공고문에서 요구하는 자격, 제출 서류, 평가 기준을 기준으로 실행 가능성과 차별성을 분명히 드러내겠습니다.",
+        f"핵심 제안은 {summary}입니다. 이 내용은 공고에서 요구하는 제출 서류, 평가 기준, 지원 취지에 맞춰 실행 가능성과 차별성을 중심으로 구성했습니다.",
     ]
+    if profile:
+        body.extend(["", f"신청 주체 소개: {profile}"])
+    if evidence:
+        body.extend(["", f"근거 및 성과: {evidence}"])
     if section_specific:
-        body.extend(["", f"사용자가 제공한 추가 정보: {section_specific}"])
+        body.extend(["", f"섹션별 추가 반영 사항: {section_specific}"])
     if workflow.analysis.evaluation_criteria:
         body.extend(["", "평가 기준 반영:", *[f"- {item}" for item in workflow.analysis.evaluation_criteria[:3]]])
 
@@ -171,6 +201,8 @@ def generate_drafts(workflow: WorkflowSession) -> WorkflowSession:
 반드시 JSON 객체만 반환하세요."""
     user_payload = {
         "analysis": workflow.analysis.model_dump(mode="json"),
+        "match_report": workflow.match_report.model_dump(mode="json") if workflow.match_report else None,
+        "company_profile": workflow.company_profile.model_dump(mode="json") if workflow.company_profile else None,
         "user_inputs": [field.model_dump(mode="json") for field in workflow.user_inputs],
         "sections": [draft.model_dump(mode="json") for draft in workflow.draft_sections],
     }
@@ -242,11 +274,23 @@ def finalize_document(workflow: WorkflowSession) -> WorkflowSession:
         "",
         f"- 주관 기관: {workflow.analysis.organization}",
         f"- 문서 유형: {workflow.analysis.doc_type}",
+        f"- 출처: {workflow.analysis.source_name or workflow.analysis.source_type}",
         "",
     ]
+    if workflow.analysis.summary:
+        lines.extend(["## AI 요약", "", workflow.analysis.summary, ""])
+    if workflow.match_report:
+        lines.extend(
+            [
+                "## 지원 적합도",
+                "",
+                f"- 점수: {workflow.match_report.score}/100",
+                f"- 판정: {workflow.match_report.verdict}",
+                "",
+            ]
+        )
     if workflow.analysis.submission_method:
-        lines.append(f"- 제출 방법: {workflow.analysis.submission_method}")
-        lines.append("")
+        lines.extend([f"- 제출 방법: {workflow.analysis.submission_method}", ""])
     if workflow.analysis.uncertain_fields:
         lines.extend(["## 확인 필요", "", *[f"- {item}" for item in workflow.analysis.uncertain_fields], ""])
     for draft in sections:
@@ -261,3 +305,48 @@ def finalize_document(workflow: WorkflowSession) -> WorkflowSession:
     workflow.status = "finalized"
     workflow.updated_at = utc_now_iso()
     return workflow
+
+
+def markdown_to_hwp_compatible_html(markdown: str, title: str) -> str:
+    """Create a Hangul Word Processor friendly HTML document.
+
+    HWP can open HTML while preserving editable text. This is the first export step before
+    adding native HWPX packaging.
+    """
+    body_lines: list[str] = []
+    for raw_line in markdown.splitlines():
+        line = raw_line.strip()
+        if not line:
+            body_lines.append("<p>&nbsp;</p>")
+            continue
+        if line.startswith("# "):
+            body_lines.append(f"<h1>{html.escape(line[2:])}</h1>")
+        elif line.startswith("## "):
+            body_lines.append(f"<h2>{html.escape(line[3:])}</h2>")
+        elif line.startswith("### "):
+            body_lines.append(f"<h3>{html.escape(line[4:])}</h3>")
+        elif line.startswith("- "):
+            body_lines.append(f"<p class=\"bullet\">• {html.escape(line[2:])}</p>")
+        else:
+            escaped = html.escape(line)
+            escaped = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", escaped)
+            body_lines.append(f"<p>{escaped}</p>")
+
+    return f"""<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>{html.escape(title)}</title>
+  <style>
+    body {{ font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; line-height: 1.65; color: #111; }}
+    h1 {{ font-size: 22pt; margin: 0 0 18pt; }}
+    h2 {{ font-size: 16pt; margin: 18pt 0 8pt; border-bottom: 1px solid #ddd; padding-bottom: 4pt; }}
+    h3 {{ font-size: 13pt; margin: 12pt 0 6pt; }}
+    p {{ font-size: 10.5pt; margin: 0 0 6pt; }}
+    .bullet {{ margin-left: 12pt; }}
+  </style>
+</head>
+<body>
+{chr(10).join(body_lines)}
+</body>
+</html>"""

@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from core.errors import WorkflowNotFoundError
 from models.schemas import (
     DraftFeedbackRequest,
+    ExportResponse,
     UserInputsRequest,
     WorkflowResponse,
     WorkflowSession,
@@ -13,6 +14,7 @@ from services.drafting_service import (
     confirm_workflow,
     finalize_document,
     generate_drafts,
+    markdown_to_hwp_compatible_html,
     revise_section,
     update_inputs,
 )
@@ -82,3 +84,23 @@ async def finalize_workflow(workflow_id: str):
     workflow = _load_workflow_or_404(workflow_id)
     workflow = finalize_document(workflow)
     return _save_and_respond(workflow)
+
+
+@router.get("/{workflow_id}/export/html", response_model=ExportResponse)
+async def export_hwp_compatible_html(workflow_id: str):
+    workflow = _load_workflow_or_404(workflow_id)
+    if not workflow.final_document:
+        workflow = finalize_document(workflow)
+        storage.save_workflow(workflow.id, workflow.model_dump(mode="json"))
+    assert workflow.final_document is not None
+    html = markdown_to_hwp_compatible_html(
+        workflow.final_document.content_markdown,
+        workflow.final_document.title,
+    )
+    safe_title = "".join(ch if ch.isalnum() else "_" for ch in workflow.final_document.title).strip("_")
+    return ExportResponse(
+        success=True,
+        filename=f"{safe_title or 'livedock_export'}.html",
+        content_type="text/html; charset=utf-8",
+        content=html,
+    )
