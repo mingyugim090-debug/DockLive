@@ -10,12 +10,12 @@ const notoSansKR = Noto_Sans_KR({
 });
 
 export const metadata: Metadata = {
-  title: 'LiveDock - 문서 자동화 Agent',
-  description: '공고문 PDF를 분석하고 제출 문서 초안 작성까지 돕는 AI 문서 자동화 서비스',
-  keywords: ['공고문 분석', '문서 자동화', '공모전', '지원사업', 'AI'],
+  title: 'LiveDock - Document Automation Agent',
+  description: 'AI document automation for public notice analysis, drafting, and HWPX export.',
+  keywords: ['LiveDock', 'document automation', 'public notices', 'HWPX', 'AI'],
   openGraph: {
     title: 'LiveDock',
-    description: '공고문 분석부터 제출 초안까지 이어지는 문서 자동화 Agent',
+    description: 'Document automation agent for public notice analysis, drafting, and HWPX export.',
     type: 'website',
   },
 };

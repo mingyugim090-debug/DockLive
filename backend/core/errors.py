@@ -33,5 +33,5 @@ class WorkflowNotFoundError(HTTPException):
     def __init__(self):
         super().__init__(
             status_code=404,
-            detail="워크플로우를 찾을 수 없습니다. 링크가 만료되었거나 서버가 다시 시작되었을 수 있습니다.",
+            detail="워크플로를 찾을 수 없습니다. 링크가 만료되었거나 서버가 다시 시작되었을 수 있습니다.",
         )

@@ -14,6 +14,7 @@ from models.schemas import (
 )
 from services import storage
 from services.analyzer import build_analysis_result
+from services.ai_provider import provider_name, should_use_mock_ai
 from services.drafting_service import create_workflow_session
 from services.mock_data import get_mock_result
 from services.openai_service import analyze_announcement, evaluate_match
@@ -25,12 +26,7 @@ router = APIRouter()
 
 
 def _use_mock() -> bool:
-    return (
-        not settings.OPENAI_API_KEY
-        or settings.OPENAI_API_KEY == "your_api_key_here"
-        or settings.OPENAI_API_KEY.startswith("mock")
-        or settings.MOCK_MODE
-    )
+    return should_use_mock_ai()
 
 
 def persist_analysis_and_workflow(
@@ -53,7 +49,7 @@ def _analyze_text(
         logger.info("MOCK mode: using sample analysis data")
         raw_result = get_mock_result()
     else:
-        logger.info("OpenAI analysis started")
+        logger.info("%s analysis started", provider_name())
         raw_result = analyze_announcement(text, source_name=source_name)
 
     result = build_analysis_result(raw_result, source_type=source_type, source_name=source_name)

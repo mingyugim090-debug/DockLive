@@ -9,7 +9,10 @@ except ImportError:  # Allows lightweight local checks without installed backend
 if BaseSettings:
 
     class Settings(BaseSettings):
+        AI_PROVIDER: str = "openai"
         OPENAI_API_KEY: str = ""
+        GEMINI_API_KEY: str = ""
+        GOOGLE_API_KEY: str = ""
         FRONTEND_URL: str = "http://localhost:3000"
         MAX_PDF_SIZE_MB: int = 20
         MOCK_MODE: bool = False
@@ -20,6 +23,8 @@ if BaseSettings:
         SUPABASE_STORAGE_BUCKET: str = "livedock-documents"
         OPENAI_ANALYSIS_MODEL: str = "gpt-4o-mini"
         OPENAI_DRAFT_MODEL: str = "gpt-4o-mini"
+        GEMMA_ANALYSIS_MODEL: str = "gemma-4-26b-a4b-it"
+        GEMMA_DRAFT_MODEL: str = "gemma-4-31b-it"
         HWPX_SKILL_DIR: str = ""
         HWPX_TEMPLATE_DIR: str = ""
         HWPX_EXPORT_ENABLED: bool = False
@@ -32,7 +37,10 @@ if BaseSettings:
 else:
 
     class Settings:
+        AI_PROVIDER: str = os.getenv("AI_PROVIDER", "openai")
         OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+        GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+        GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY", "")
         FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
         MAX_PDF_SIZE_MB: int = int(os.getenv("MAX_PDF_SIZE_MB", "20"))
         MOCK_MODE: bool = os.getenv("MOCK_MODE", "false").lower() == "true"
@@ -43,6 +51,8 @@ else:
         SUPABASE_STORAGE_BUCKET: str = os.getenv("SUPABASE_STORAGE_BUCKET", "livedock-documents")
         OPENAI_ANALYSIS_MODEL: str = os.getenv("OPENAI_ANALYSIS_MODEL", "gpt-4o-mini")
         OPENAI_DRAFT_MODEL: str = os.getenv("OPENAI_DRAFT_MODEL", "gpt-4o-mini")
+        GEMMA_ANALYSIS_MODEL: str = os.getenv("GEMMA_ANALYSIS_MODEL", "gemma-4-26b-a4b-it")
+        GEMMA_DRAFT_MODEL: str = os.getenv("GEMMA_DRAFT_MODEL", "gemma-4-31b-it")
         HWPX_SKILL_DIR: str = os.getenv("HWPX_SKILL_DIR", "")
         HWPX_TEMPLATE_DIR: str = os.getenv("HWPX_TEMPLATE_DIR", "")
         HWPX_EXPORT_ENABLED: bool = os.getenv("HWPX_EXPORT_ENABLED", "false").lower() == "true"

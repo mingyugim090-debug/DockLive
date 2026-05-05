@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "hwp": {
+      "command": "C:\\Users\\alseh\\OneDrive\\바탕 화면\\LiveDock\\tools\\hwp-mcp\\.venv\\Scripts\\python.exe",
+      "args": [
+        "C:\\Users\\alseh\\OneDrive\\바탕 화면\\LiveDock\\tools\\hwp-mcp\\hwp_mcp_stdio_server.py"
+      ],
+      "cwd": "C:\\Users\\alseh\\OneDrive\\바탕 화면\\LiveDock\\tools\\hwp-mcp"
+    }
+  }
+}

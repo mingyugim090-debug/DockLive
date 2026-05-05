@@ -12,15 +12,30 @@ if str(BACKEND) not in sys.path:
 os.environ.setdefault("MOCK_MODE", "true")
 
 try:
+    from core.errors import AnalysisError  # noqa: E402
     from models.schemas import AnalysisResult  # noqa: E402
+    from services.ai_provider import provider_name, should_use_mock_ai  # noqa: E402
     from services.analyzer import build_analysis_result  # noqa: E402
-    from services.drafting_service import confirm_workflow, create_workflow_session, finalize_document, generate_drafts, update_inputs  # noqa: E402
+    from services.drafting_service import (  # noqa: E402
+        build_template_replacements,
+        clone_hwpx_template,
+        confirm_workflow,
+        create_workflow_session,
+        finalize_document,
+        generate_drafts,
+        update_inputs,
+    )
     from services.mock_data import get_mock_result  # noqa: E402
 except ModuleNotFoundError as exc:  # pragma: no cover - local minimal Python fallback
     if exc.name != "pydantic":
         raise
+    AnalysisError = None
     AnalysisResult = None
+    provider_name = None
+    should_use_mock_ai = None
     build_analysis_result = None
+    build_template_replacements = None
+    clone_hwpx_template = None
     confirm_workflow = None
     create_workflow_session = None
     finalize_document = None
@@ -30,6 +45,12 @@ except ModuleNotFoundError as exc:  # pragma: no cover - local minimal Python fa
 
 
 class AgentMvpContractTests(unittest.TestCase):
+    def test_ai_provider_uses_mock_when_mock_mode_enabled(self):
+        if should_use_mock_ai is None:
+            self.skipTest("backend dependencies are not installed in this Python environment")
+        self.assertIn(provider_name(), {"openai", "gemma"})
+        self.assertTrue(should_use_mock_ai())
+
     def test_fixture_metadata_is_complete(self):
         fixture_dir = ROOT / "docs" / "fixtures"
         fixtures = sorted(fixture_dir.glob("*.json"))
@@ -49,7 +70,7 @@ class AgentMvpContractTests(unittest.TestCase):
         restored = AnalysisResult(**result.model_dump(mode="json"))
 
         self.assertEqual(restored.doc_type, "startup")
-        self.assertTrue(restored.title)
+        self.assertIn("청년 창업", restored.title)
         self.assertTrue(restored.organization)
         self.assertGreaterEqual(len(restored.checklist), 1)
         self.assertGreaterEqual(len(restored.document_template), 1)
@@ -73,6 +94,35 @@ class AgentMvpContractTests(unittest.TestCase):
         self.assertEqual(workflow.status, "finalized")
         self.assertIsNotNone(workflow.final_document)
         self.assertIn("제출 전 확인 필요", workflow.final_document.content_markdown)
+
+    def test_template_replacements_include_final_document_and_sections(self):
+        if AnalysisResult is None:
+            self.skipTest("pydantic is not installed in this Python environment")
+        result = build_analysis_result(get_mock_result(), source_type="demo", source_name="mock")
+        workflow = create_workflow_session(result)
+        updates = {field.id: f"{field.label} 테스트 입력" for field in workflow.user_inputs if field.required}
+        workflow = update_inputs(workflow, updates)
+        workflow = finalize_document(generate_drafts(workflow))
+
+        replacements = build_template_replacements(workflow, {"동아리명": "LiveDock"})
+        self.assertIn("{{content}}", replacements)
+        self.assertIn("청년 창업", replacements["{{announcement_title}}"])
+        self.assertIn("LiveDock", replacements["동아리명"])
+        self.assertTrue(any(key.startswith("{{section:") for key in replacements))
+
+    def test_hwpx_clone_requires_enabled_toolchain(self):
+        if AnalysisResult is None:
+            self.skipTest("pydantic is not installed in this Python environment")
+        result = build_analysis_result(get_mock_result(), source_type="demo", source_name="mock")
+        workflow = finalize_document(generate_drafts(update_inputs(create_workflow_session(result), {
+            "applicant_name": "LiveDock",
+            "applicant_profile": "문서 자동화 팀",
+            "project_summary": "공고 분석과 제출 문서 자동화",
+        })))
+
+        with self.assertRaises(Exception) as ctx:
+            clone_hwpx_template(b"PK\x03\x04", workflow)
+        self.assertIn("HWPX", str(ctx.exception))
 
 
 if __name__ == "__main__":

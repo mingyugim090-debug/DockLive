@@ -8,6 +8,7 @@ import {
   createDraftStream,
   exportWorkflowHtml,
   exportWorkflowHwpx,
+  exportWorkflowHwpxTemplate,
   finalizeWorkflow,
   generateDraft,
   getResult,
@@ -147,6 +148,8 @@ export default function ResultPage() {
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
   const [feedbackValues, setFeedbackValues] = useState<Record<string, string>>({});
   const [streamStates, setStreamStates] = useState<Record<string, string>>({});
+  const [templateFile, setTemplateFile] = useState<File | null>(null);
+  const [templateMap, setTemplateMap] = useState('{}');
   const [loading, setLoading] = useState(!analysisResult);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -294,7 +297,7 @@ export default function ResultPage() {
       source.onerror = async () => {
         source.close();
         if (completed) return;
-        setNotice('라이브 스트리밍 연결이 끊겨 일괄 생성으로 다시 시도합니다.');
+        setNotice('라이브 스트림 연결이 끊겨 일괄 생성으로 다시 시도합니다.');
         try {
           const drafted = await generateDraft(savedWorkflow.id);
           applyWorkflow(drafted.data);
@@ -393,6 +396,18 @@ export default function ResultPage() {
       downloadExport(exported.filename, exported.content_type, exported.content, exported.encoding);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'HWPX export에는 서버 toolchain 설정이 필요합니다. HTML export를 먼저 사용할 수 있습니다.');
+    }
+  };
+
+  const handleExportTemplate = async () => {
+    if (!workflow || !templateFile) return;
+    setError(null);
+    try {
+      JSON.parse(templateMap || '{}');
+      const exported = await exportWorkflowHwpxTemplate(workflow.id, templateFile, templateMap || '{}');
+      downloadExport(exported.filename, exported.content_type, exported.content, exported.encoding);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'HWPX 템플릿 export에 실패했습니다.');
     }
   };
 
@@ -554,6 +569,33 @@ export default function ResultPage() {
                   </button>
                   <button onClick={() => navigator.clipboard.writeText(workflow.final_document?.content_markdown ?? '')} className="rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold text-text2">
                     Markdown 복사
+                  </button>
+                </div>
+                <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                  <label className="flex flex-col gap-2">
+                    <span className="text-sm font-bold">공식 HWPX 양식에 채우기</span>
+                    <span className="text-xs leading-relaxed text-text2">
+                      HWPX 템플릿을 업로드하면 표, 스타일, 이미지는 보존하고 텍스트만 치환합니다. 기본 placeholder는 {'{{content}}'}, {'{{title}}'}, {'{{applicant_name}}'} 등을 지원합니다.
+                    </span>
+                    <input
+                      type="file"
+                      accept=".hwpx,application/vnd.hancom.hwpx"
+                      onChange={(event) => setTemplateFile(event.target.files?.[0] ?? null)}
+                      className="rounded-lg border border-white/10 bg-bg px-3 py-2 text-xs text-text2"
+                    />
+                  </label>
+                  <textarea
+                    value={templateMap}
+                    onChange={(event) => setTemplateMap(event.target.value)}
+                    className="mt-3 min-h-[90px] w-full resize-y rounded-lg border border-white/10 bg-bg px-3 py-2 text-xs text-text outline-none focus:border-primary"
+                    spellCheck={false}
+                  />
+                  <button
+                    onClick={handleExportTemplate}
+                    disabled={!templateFile}
+                    className="mt-3 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-text3"
+                  >
+                    템플릿 HWPX export
                   </button>
                 </div>
                 <pre className="max-h-[70vh] overflow-auto whitespace-pre-wrap rounded-lg bg-bg p-4 text-sm leading-relaxed text-text2">

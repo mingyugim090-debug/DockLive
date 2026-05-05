@@ -81,7 +81,7 @@ export default function HomePage() {
       saveResult(res.data);
       router.push(`/result/${res.data.id}`);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Demo 로딩에 실패했습니다.';
+      const msg = err instanceof Error ? err.message : '데모를 불러오지 못했습니다.';
       setErrorMsg(msg);
       setError(msg);
     } finally {
@@ -103,7 +103,7 @@ export default function HomePage() {
 
       {backendReady === false && (
         <div className="border-b border-yellow-400/20 bg-yellow-400/10 px-4 py-2 text-center text-xs text-yellow-100">
-          백엔드 연결을 확인하는 중입니다. 배포 환경에서는 첫 요청이 느릴 수 있습니다.
+          백엔드 연결을 확인하는 중입니다. 배포 환경에서는 첫 요청이 잠시 느릴 수 있습니다.
         </div>
       )}
 
@@ -112,7 +112,7 @@ export default function HomePage() {
           <div>
             <h1 className="text-3xl font-bold leading-tight">공고를 넣으면 제출 준비 흐름까지 이어갑니다</h1>
             <p className="mt-3 text-sm leading-relaxed text-text2">
-              PDF, URL, 텍스트 공고문을 분석하고 필요한 입력을 받은 뒤 섹션별 초안을 생성합니다. 최종 제출 전에는 확인 단계를 반드시 거칩니다.
+              PDF, URL, 텍스트 공고문을 분석하고 필요한 입력을 받은 뒤 섹션별 초안을 만듭니다. 최종 제출 전에는 확인이 필요한 주장과 근거를 반드시 보여줍니다.
             </p>
           </div>
 
@@ -183,7 +183,7 @@ export default function HomePage() {
             disabled={!canAnalyze || isAnalyzing}
             className="rounded-xl bg-primary py-4 text-base font-bold text-white disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-text3"
           >
-            {isAnalyzing ? '분석 중...' : 'Agent로 분석하고 워크플로우 만들기'}
+            {isAnalyzing ? '분석 중...' : 'Agent로 분석하고 워크플로 만들기'}
           </button>
 
           <button
@@ -197,7 +197,7 @@ export default function HomePage() {
 
         <aside className="flex flex-col gap-4">
           <div className="rounded-xl border border-white/10 bg-card p-4">
-            <h2 className="text-sm font-bold">사용자/팀 프로필</h2>
+            <h2 className="text-sm font-bold">사용자 프로필</h2>
             <p className="mt-1 text-xs leading-relaxed text-text2">입력하면 지원 적합성 판단과 초안 작성에 반영합니다.</p>
             <div className="mt-4 grid gap-3">
               {[
@@ -232,8 +232,8 @@ export default function HomePage() {
           {[
             ['1', '근거 기반 분석', '원문에 있는 사실과 불확실한 항목을 구분합니다.'],
             ['2', '필수 입력 수집', '초안에 필요한 사용자 정보를 먼저 확인합니다.'],
-            ['3', '섹션별 라이브 초안', '문서를 한 번에 뭉개지 않고 섹션 단위로 확인합니다.'],
-            ['4', '최종 export', 'HTML export를 기본 제공하고 HWPX toolchain 연동을 지원합니다.'],
+            ['3', '섹션별 초안', '문서를 한 번에 뭉개지 않고 섹션 단위로 확인합니다.'],
+            ['4', 'HWPX export', 'HTML export와 HWPX 템플릿 클로닝을 지원합니다.'],
           ].map(([num, title, desc]) => (
             <div key={num} className="rounded-xl border border-white/10 bg-card p-4">
               <div className="mb-3 flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold text-primary">{num}</div>

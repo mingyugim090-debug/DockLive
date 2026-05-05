@@ -2,6 +2,7 @@ import base64
 import html
 import json
 import logging
+import os
 import re
 import subprocess
 import sys
@@ -22,6 +23,7 @@ from models.schemas import (
     WorkflowSession,
     utc_now_iso,
 )
+from services.ai_provider import call_json, provider_name, should_use_mock_ai
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +57,7 @@ def create_input_fields(analysis: AnalysisResult, company_profile: CompanyProfil
             id="evidence",
             label="근거 자료와 성과",
             required=False,
-            description="수상, 실험, 인터뷰, 시장 조사, 포트폴리오 등 근거로 쓸 내용을 적어 주세요.",
+            description="수상, 실험, 인터뷰, 시장 조사, 포트폴리오처럼 근거가 될 내용을 적어 주세요.",
             placeholder="예: 사용자 인터뷰 12건, MVP 테스트 결과, 이전 수상 이력...",
             value=company_profile.strengths if company_profile else "",
         ),
@@ -131,6 +133,7 @@ def _profile_to_text(profile: CompanyProfile | None) -> str:
 
 def _confirmation_items(workflow: WorkflowSession) -> list[str]:
     items = list(workflow.analysis.uncertain_fields)
+    items.append("제출 전 공고 원문, 사용자 입력, 증빙자료와 초안의 핵심 주장이 일치하는지 확인하세요.")
     if not workflow.analysis.source_evidence:
         items.append("핵심 주장과 수치가 공고 원문 및 사용자 입력에 근거하는지 확인하세요.")
     return items
@@ -169,20 +172,8 @@ def _mock_draft_section(workflow: WorkflowSession, draft: DraftSection) -> Draft
     return draft
 
 
-def _call_openai_json(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> dict:
-    from openai import OpenAI
-
-    client = OpenAI(api_key=settings.OPENAI_API_KEY)
-    completion = client.chat.completions.create(
-        model=settings.OPENAI_DRAFT_MODEL,
-        max_tokens=max_tokens,
-        response_format={"type": "json_object"},
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-    )
-    return json.loads(completion.choices[0].message.content or "{}")
+def _call_draft_json(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> dict:
+    return call_json("draft", system_prompt, user_prompt, max_tokens=max_tokens)
 
 
 def generate_drafts(workflow: WorkflowSession) -> WorkflowSession:
@@ -197,12 +188,7 @@ def generate_drafts(workflow: WorkflowSession) -> WorkflowSession:
         workflow.updated_at = utc_now_iso()
         return workflow
 
-    use_mock = (
-        settings.MOCK_MODE
-        or not settings.OPENAI_API_KEY
-        or settings.OPENAI_API_KEY == "your_api_key_here"
-        or settings.OPENAI_API_KEY.startswith("mock")
-    )
+    use_mock = should_use_mock_ai()
 
     if use_mock:
         workflow.draft_sections = [_mock_draft_section(workflow, draft) for draft in workflow.draft_sections]
@@ -231,8 +217,8 @@ def generate_drafts(workflow: WorkflowSession) -> WorkflowSession:
 
     try:
         t0 = time.time()
-        data = _call_openai_json(system_prompt, user_prompt)
-        logger.info(f"Draft response received ({time.time() - t0:.1f}s)")
+        data = _call_draft_json(system_prompt, user_prompt)
+        logger.info("%s draft response received (%.1fs)", provider_name(), time.time() - t0)
         by_section = {item.get("section_id"): item for item in data.get("draft_sections", [])}
         for draft in workflow.draft_sections:
             item = by_section.get(draft.section_id)
@@ -301,7 +287,7 @@ def finalize_document(workflow: WorkflowSession) -> WorkflowSession:
     if workflow.match_report:
         lines.extend(
             [
-                "## 지원 적합도",
+                "## 지원 적합성",
                 "",
                 f"- 점수: {workflow.match_report.score}/100",
                 f"- 판정: {workflow.match_report.verdict}",
@@ -368,20 +354,55 @@ def markdown_to_hwp_compatible_html(markdown: str, title: str) -> str:
 </html>"""
 
 
+def _safe_title(title: str) -> str:
+    return "".join(ch if ch.isalnum() else "_" for ch in title).strip("_") or "livedock_export"
+
+
+def _hwpx_skill_dir() -> Path:
+    configured = settings.HWPX_SKILL_DIR.strip()
+    if configured:
+        return Path(configured)
+    codex_home = os.environ.get("CODEX_HOME")
+    if codex_home:
+        return Path(codex_home) / "skills" / "hwpx"
+    return Path.home() / ".codex" / "skills" / "hwpx"
+
+
+def _require_hwpx_scripts(*names: str) -> dict[str, Path]:
+    skill_dir = _hwpx_skill_dir()
+    scripts = {name: skill_dir / "scripts" / name for name in names}
+    missing = [str(path) for path in scripts.values() if not path.exists()]
+    if missing:
+        raise AnalysisError(f"HWPX toolchain 파일을 찾을 수 없습니다: {', '.join(missing)}")
+    return scripts
+
+
+def _hwpx_subprocess_env() -> dict[str, str]:
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
+    return env
+
+
+def _run_hwpx_command(command: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        command,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=_hwpx_subprocess_env(),
+    )
+
+
 def export_markdown_to_hwpx(markdown: str, title: str) -> tuple[str, bytes]:
     """Convert final markdown to HWPX through the optional hwpx-skill toolchain."""
     if not settings.HWPX_EXPORT_ENABLED:
-        raise AnalysisError("HWPX export가 비활성화되어 있습니다. HTML export를 사용하거나 HWPX_EXPORT_ENABLED=true와 HWPX_SKILL_DIR를 설정하세요.")
+        raise AnalysisError("HWPX export가 비활성화되어 있습니다. HTML export를 사용하거나 HWPX_EXPORT_ENABLED=true로 설정하세요.")
 
-    skill_dir = Path(settings.HWPX_SKILL_DIR)
-    md2hwpx = skill_dir / "scripts" / "md2hwpx.py"
-    fix_namespaces = skill_dir / "scripts" / "fix_namespaces.py"
-    validate = skill_dir / "scripts" / "validate.py"
-    missing = [str(path) for path in (md2hwpx, fix_namespaces, validate) if not path.exists()]
-    if missing:
-        raise AnalysisError(f"HWPX toolchain 파일을 찾을 수 없습니다: {', '.join(missing)}")
-
-    safe_title = "".join(ch if ch.isalnum() else "_" for ch in title).strip("_") or "livedock_export"
+    scripts = _require_hwpx_scripts("md2hwpx.py", "fix_namespaces.py", "validate.py")
+    safe_title = _safe_title(title)
     with tempfile.TemporaryDirectory() as tmp:
         tmpdir = Path(tmp)
         markdown_path = tmpdir / "input.md"
@@ -389,14 +410,103 @@ def export_markdown_to_hwpx(markdown: str, title: str) -> tuple[str, bytes]:
         markdown_path.write_text(markdown, encoding="utf-8")
 
         python_bin = sys.executable or "python"
-        subprocess.run(
-            [python_bin, str(md2hwpx), str(markdown_path), "-o", str(output_path)],
-            check=True,
-            capture_output=True,
-            text=True,
+        _run_hwpx_command([python_bin, str(scripts["md2hwpx.py"]), str(markdown_path), "-o", str(output_path)])
+        _run_hwpx_command([python_bin, str(scripts["fix_namespaces.py"]), str(output_path)])
+        _run_hwpx_command([python_bin, str(scripts["validate.py"]), str(output_path)])
+        return output_path.name, output_path.read_bytes()
+
+
+def build_template_replacements(workflow: WorkflowSession, extra: dict[str, str] | None = None) -> dict[str, str]:
+    """Build safe default replacements for uploaded HWPX application forms."""
+    if not workflow.final_document:
+        workflow = finalize_document(workflow)
+    assert workflow.final_document is not None
+
+    inputs = _input_map(workflow)
+    replacements: dict[str, str] = {
+        "{{title}}": workflow.final_document.title,
+        "{{document_title}}": workflow.final_document.title,
+        "{{content}}": workflow.final_document.content_markdown,
+        "{{application_content}}": workflow.final_document.content_markdown,
+        "{{applicant_name}}": inputs.get("applicant_name", ""),
+        "{{applicant_profile}}": inputs.get("applicant_profile", ""),
+        "{{project_summary}}": inputs.get("project_summary", ""),
+        "{{evidence}}": inputs.get("evidence", ""),
+        "{{organization}}": workflow.analysis.organization,
+        "{{announcement_title}}": workflow.analysis.title,
+        "{{created_date}}": datetime.now().strftime("%Y. %-m. %-d.") if os.name != "nt" else datetime.now().strftime("%Y. %#m. %#d."),
+    }
+    for draft in workflow.draft_sections:
+        replacements[f"{{{{section:{draft.section_id}}}}}"] = draft.content_markdown
+        replacements[f"{{{{section:{draft.title}}}}}"] = draft.content_markdown
+        replacements[f"{{{{{draft.title}}}}}"] = draft.content_markdown
+    if extra:
+        replacements.update({str(key): str(value) for key, value in extra.items()})
+    return {key: value for key, value in replacements.items() if key}
+
+
+def clone_hwpx_template(
+    template_content: bytes,
+    workflow: WorkflowSession,
+    replacements: dict[str, str] | None = None,
+    keywords: dict[str, str] | None = None,
+) -> tuple[str, bytes]:
+    """Clone an uploaded HWPX form and replace text while preserving tables/styles."""
+    if not settings.HWPX_EXPORT_ENABLED:
+        raise AnalysisError("HWPX 템플릿 클로닝이 비활성화되어 있습니다. HWPX_EXPORT_ENABLED=true로 설정하세요.")
+
+    scripts = _require_hwpx_scripts("clone_form.py", "fix_namespaces.py", "validate.py", "verify_hwpx.py")
+    if not template_content.startswith(b"PK"):
+        raise AnalysisError("업로드한 파일이 HWPX ZIP 패키지 형식이 아닙니다.")
+
+    if not workflow.final_document:
+        workflow = finalize_document(workflow)
+    assert workflow.final_document is not None
+
+    safe_title = _safe_title(workflow.final_document.title)
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpdir = Path(tmp)
+        source_path = tmpdir / "template.hwpx"
+        output_path = tmpdir / f"{safe_title}_filled.hwpx"
+        map_path = tmpdir / "replacements.json"
+        keyword_path = tmpdir / "keywords.json"
+        verify_path = tmpdir / "verify.json"
+
+        source_path.write_bytes(template_content)
+        map_path.write_text(json.dumps(build_template_replacements(workflow, replacements), ensure_ascii=False, indent=2), encoding="utf-8")
+        keyword_path.write_text(json.dumps(keywords or {}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        python_bin = sys.executable or "python"
+        command = [
+            python_bin,
+            str(scripts["clone_form.py"]),
+            str(source_path),
+            str(output_path),
+            "--map",
+            str(map_path),
+            "--keywords",
+            str(keyword_path),
+            "--title",
+            workflow.final_document.title,
+            "--creator",
+            "LiveDock Agent",
+            "--validate",
+        ]
+        _run_hwpx_command(command)
+        _run_hwpx_command([python_bin, str(scripts["fix_namespaces.py"]), str(output_path)])
+        _run_hwpx_command([python_bin, str(scripts["validate.py"]), str(output_path)])
+        _run_hwpx_command(
+            [
+                python_bin,
+                str(scripts["verify_hwpx.py"]),
+                "--source",
+                str(source_path),
+                "--result",
+                str(output_path),
+                "--json",
+                str(verify_path),
+            ]
         )
-        subprocess.run([python_bin, str(fix_namespaces), str(output_path)], check=True, capture_output=True, text=True)
-        subprocess.run([python_bin, str(validate), str(output_path)], check=True, capture_output=True, text=True)
         return output_path.name, output_path.read_bytes()
 
 

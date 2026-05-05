@@ -1,7 +1,9 @@
-from fastapi import APIRouter
+import json
+
+from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import StreamingResponse
 
-from core.errors import WorkflowNotFoundError
+from core.errors import AnalysisError, WorkflowNotFoundError
 from models.schemas import (
     DraftFeedbackRequest,
     ExportResponse,
@@ -12,6 +14,7 @@ from models.schemas import (
 )
 from services import storage
 from services.drafting_service import (
+    clone_hwpx_template,
     confirm_workflow,
     export_markdown_to_hwpx,
     finalize_document,
@@ -36,6 +39,13 @@ def _save_and_respond(workflow: WorkflowSession) -> WorkflowResponse:
     workflow.updated_at = utc_now_iso()
     storage.save_workflow(workflow.id, workflow.model_dump(mode="json"))
     return WorkflowResponse(success=True, data=workflow)
+
+
+def _ensure_finalized(workflow: WorkflowSession) -> WorkflowSession:
+    if not workflow.final_document:
+        workflow = finalize_document(workflow)
+        storage.save_workflow(workflow.id, workflow.model_dump(mode="json"))
+    return workflow
 
 
 @router.get("/{workflow_id}", response_model=WorkflowResponse)
@@ -63,8 +73,6 @@ async def stream_draft(workflow_id: str):
     """Stream section-level draft events."""
 
     def event(payload: dict) -> str:
-        import json
-
         return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
     def generate():
@@ -123,10 +131,7 @@ async def finalize_workflow(workflow_id: str):
 
 @router.get("/{workflow_id}/export/html", response_model=ExportResponse)
 async def export_hwp_compatible_html(workflow_id: str):
-    workflow = _load_workflow_or_404(workflow_id)
-    if not workflow.final_document:
-        workflow = finalize_document(workflow)
-        storage.save_workflow(workflow.id, workflow.model_dump(mode="json"))
+    workflow = _ensure_finalized(_load_workflow_or_404(workflow_id))
     assert workflow.final_document is not None
     html = markdown_to_hwp_compatible_html(
         workflow.final_document.content_markdown,
@@ -144,14 +149,45 @@ async def export_hwp_compatible_html(workflow_id: str):
 
 @router.get("/{workflow_id}/export/hwpx", response_model=ExportResponse)
 async def export_hwpx(workflow_id: str):
-    workflow = _load_workflow_or_404(workflow_id)
-    if not workflow.final_document:
-        workflow = finalize_document(workflow)
-        storage.save_workflow(workflow.id, workflow.model_dump(mode="json"))
+    workflow = _ensure_finalized(_load_workflow_or_404(workflow_id))
     assert workflow.final_document is not None
     filename, content = export_markdown_to_hwpx(
         workflow.final_document.content_markdown,
         workflow.final_document.title,
+    )
+    return ExportResponse(
+        success=True,
+        filename=filename,
+        content_type="application/vnd.hancom.hwpx",
+        content=hwpx_bytes_to_base64(content),
+        encoding="base64",
+    )
+
+
+@router.post("/{workflow_id}/export/hwpx/template", response_model=ExportResponse)
+async def export_hwpx_from_template(
+    workflow_id: str,
+    template: UploadFile = File(...),
+    replacements_json: str = Form("{}"),
+    keywords_json: str = Form("{}"),
+):
+    workflow = _ensure_finalized(_load_workflow_or_404(workflow_id))
+    if not template.filename or not template.filename.lower().endswith(".hwpx"):
+        raise AnalysisError("HWPX 템플릿 파일만 업로드할 수 있습니다.")
+
+    try:
+        replacements = json.loads(replacements_json or "{}")
+        keywords = json.loads(keywords_json or "{}")
+    except json.JSONDecodeError as exc:
+        raise AnalysisError(f"치환 JSON 형식이 올바르지 않습니다: {exc}")
+    if not isinstance(replacements, dict) or not isinstance(keywords, dict):
+        raise AnalysisError("치환 값과 키워드 값은 JSON 객체여야 합니다.")
+
+    filename, content = clone_hwpx_template(
+        await template.read(),
+        workflow,
+        replacements={str(key): str(value) for key, value in replacements.items()},
+        keywords={str(key): str(value) for key, value in keywords.items()},
     )
     return ExportResponse(
         success=True,

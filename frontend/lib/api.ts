@@ -1,6 +1,18 @@
 import type { ApiResponse, CompanyProfile, DraftStreamEvent, ExportResponse, WorkflowResponse } from './types';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+function resolveApiUrl(): string {
+  const configured = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+  if (
+    typeof window !== 'undefined' &&
+    ['localhost', '127.0.0.1'].includes(window.location.hostname) &&
+    configured.includes('docklive.onrender.com')
+  ) {
+    return 'http://127.0.0.1:8000';
+  }
+  return configured;
+}
+
+const API_URL = resolveApiUrl();
 
 async function readError(res: Response, fallback: string): Promise<Error> {
   const err = await res.json().catch(() => ({ detail: fallback }));
@@ -74,7 +86,7 @@ export async function getWorkflow(id: string): Promise<WorkflowResponse> {
   const res = await fetch(`${API_URL}/api/workflow/${id}`);
 
   if (!res.ok) {
-    throw await readError(res, `워크플로우 조회 실패: ${res.status}`);
+    throw await readError(res, `워크플로 조회 실패: ${res.status}`);
   }
 
   return res.json();
@@ -180,6 +192,29 @@ export async function exportWorkflowHwpx(id: string): Promise<ExportResponse> {
 
   if (!res.ok) {
     throw await readError(res, `HWPX export 실패: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export async function exportWorkflowHwpxTemplate(
+  id: string,
+  template: File,
+  replacementsJson = '{}',
+  keywordsJson = '{}',
+): Promise<ExportResponse> {
+  const formData = new FormData();
+  formData.append('template', template);
+  formData.append('replacements_json', replacementsJson || '{}');
+  formData.append('keywords_json', keywordsJson || '{}');
+
+  const res = await fetch(`${API_URL}/api/workflow/${id}/export/hwpx/template`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!res.ok) {
+    throw await readError(res, `HWPX 템플릿 export 실패: ${res.status}`);
   }
 
   return res.json();

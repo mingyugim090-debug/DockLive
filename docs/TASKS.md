@@ -11,20 +11,20 @@ Status labels:
 
 | ID | Task | Status |
 | --- | --- | --- |
-| P0-01 | Repair broken Korean docs | Done |
+| P0-01 | Repair broken Korean docs and UI copy | Done |
 | P0-02 | Add product plan, harness, eval, environment docs | Done |
 | P0-03 | Clarify Agent MVP priority in AGENTS.md | Done |
 | P0-04 | Add HWPX skill direction to docs | Done |
-| P0-05 | Normalize backend/frontend API contracts | In progress |
+| P0-05 | Normalize backend/frontend API contracts | Done |
 
 ## Phase 1 - Reliable Analysis
 
 | ID | Task | Status |
 | --- | --- | --- |
-| P1-01 | Add source evidence to analysis output | In progress |
+| P1-01 | Add source evidence to analysis output | Done |
 | P1-02 | Add uncertain field handling to prompts | Done |
-| P1-03 | Create 5 representative eval fixtures | Planned |
-| P1-04 | Add backend schema validation tests | Planned |
+| P1-03 | Create 5 representative eval fixtures | Done |
+| P1-04 | Add backend schema validation tests | Done |
 | P1-05 | Add OCR/HWP/HWPX ingestion strategy | Planned |
 
 ## Phase 2 - Workflow and Drafting
@@ -35,7 +35,7 @@ Status labels:
 | P2-02 | Add confirmation_required to drafts | Done |
 | P2-03 | Add section-level draft stream endpoint | Done |
 | P2-04 | Improve real token streaming from OpenAI | Planned |
-| P2-05 | Add frontend EventSource UI for live section updates | Planned |
+| P2-05 | Add frontend EventSource UI for live section updates | Done |
 
 ## Phase 3 - Export
 
@@ -44,8 +44,8 @@ Status labels:
 | P3-01 | Keep HTML export fallback | Done |
 | P3-02 | Install hwpx skill locally | Done |
 | P3-03 | Add optional HWPX export endpoint | Done |
-| P3-04 | Validate HWPX export with installed toolchain | Planned |
-| P3-05 | Add form cloning path for uploaded HWPX templates | Planned |
+| P3-04 | Validate HWPX export with installed toolchain | In progress |
+| P3-05 | Add form cloning path for uploaded HWPX templates | Done |
 | P3-06 | Add HWP to HWPX conversion path | Planned |
 
 ## Phase 4 - Supabase

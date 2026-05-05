@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 _FALLBACK_CHECKLIST: dict[str, list[dict[str, str]]] = {
     "competition": [
         {"label": "참가 신청서", "category": "required", "description": "공고에서 지정한 신청 양식", "file_format": "HWP, PDF"},
-        {"label": "제안서 또는 활동 계획서", "category": "required", "description": "분량과 형식은 공고 원문 확인 필요", "file_format": "HWP, PDF"},
+        {"label": "제안서 또는 활동 계획서", "category": "required", "description": "분량과 양식은 공고 원문 확인 필요", "file_format": "HWP, PDF"},
         {"label": "팀 구성원 정보", "category": "optional", "description": "팀 참가 시 제출", "file_format": "PDF"},
     ],
     "research": [
@@ -87,7 +87,7 @@ def _normalize_date(date_str: str) -> str:
         pass
 
     for sep in (".", "/"):
-        parts = value.split(sep)
+        parts = [part.strip() for part in value.split(sep) if part.strip()]
         if len(parts) == 3:
             try:
                 normalized = f"{parts[0]}-{parts[1].zfill(2)}-{parts[2].zfill(2)}"

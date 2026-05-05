@@ -10,7 +10,10 @@ def get_mock_result() -> dict:
         "doc_type": "startup",
         "title": "2026 청년 창업 아이디어 공모전",
         "organization": "서울청년경제진흥원",
-        "summary": "예비 창업자와 초기 창업팀을 대상으로 창업 아이디어와 실행 계획을 평가하는 공모전입니다. 선정팀에는 상금, 멘토링, 공유오피스 이용권이 제공됩니다.",
+        "summary": (
+            "예비 창업자와 초기 창업팀을 대상으로 창업 아이디어와 실행 계획을 평가하는 공모전입니다. "
+            "선정팀에는 상금, 창업 멘토링, 공유오피스 이용권이 제공됩니다."
+        ),
         "timeline": [
             {"label": "접수 시작", "date": (today + timedelta(days=1)).isoformat(), "is_deadline": False},
             {"label": "서류 접수 마감", "date": deadline.isoformat(), "is_deadline": True},
@@ -31,7 +34,7 @@ def get_mock_result() -> dict:
                 "file_format": "HWP, PDF",
             },
             {
-                "label": "팀원 재학증명서",
+                "label": "팀원 재학 또는 재직 증명서",
                 "category": "required",
                 "description": "팀 참가 시 구성원 전원 제출이 필요합니다.",
                 "file_format": "PDF",
@@ -89,19 +92,12 @@ def get_mock_result() -> dict:
         ],
         "cautions": [
             "타 공모전 수상작과 동일한 아이디어는 심사에서 제외될 수 있습니다.",
-            "제출 마감 이후에는 서류 수정이 불가합니다.",
+            "제출 마감 이후에는 서류 수정이 불가능합니다.",
         ],
         "uncertain_fields": [],
         "source_evidence": [
-            {
-                "field": "title",
-                "quote": "2026 청년 창업 아이디어 공모전",
-                "note": "mock fixture",
-            },
-            {
-                "field": "submission_deadline",
-                "quote": f"서류 접수 마감: {deadline.isoformat()}",
-                "note": "mock fixture",
-            },
+            {"field": "title", "quote": "2026 청년 창업 아이디어 공모전", "note": "mock fixture"},
+            {"field": "submission_deadline", "quote": f"서류 접수 마감: {deadline.isoformat()}", "note": "mock fixture"},
+            {"field": "submission_method", "quote": "온라인 접수 시스템을 통한 PDF 파일 제출", "note": "mock fixture"},
         ],
     }

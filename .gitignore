@@ -55,6 +55,9 @@ Thumbs.db
 htmlcov/
 .coverage
 coverage/
+.uv-cache/
+outputs/
+tools/hwp-mcp/pytest-cache-files-*/
 
 # ==========================
 # Misc
