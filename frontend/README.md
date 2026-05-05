@@ -1,36 +1,44 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# LiveDock Frontend
 
-## Getting Started
+Next.js 14 기반의 LiveDock 사용자 화면입니다.
 
-First, run the development server:
+사용자가 공고문을 업로드하거나 샘플 Agent 흐름을 실행하고, 분석 결과, 체크리스트, 초안, 확인 필요 항목, export 상태를 확인하는 역할을 맡습니다.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## 구조
+
+```text
+frontend/
+  app/             App Router 페이지와 레이아웃
+  components/      화면 단위 UI 컴포넌트
+    checklist/     요구사항 체크리스트 UI
+    document/      제출 문서 초안 UI
+    timeline/      Agent 진행 단계 UI
+    ui/            공통 UI 요소
+    upload/        파일 업로드 UI
+  lib/             API client, result cache, store, shared types
+  vercel.json      Vercel frontend build 설정
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 실행
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```powershell
+npm install
+copy .env.example .env.local
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+기본 주소는 `http://localhost:3000`입니다.
 
-## Learn More
+## 환경변수
 
-To learn more about Next.js, take a look at the following resources:
+`frontend/.env.example`을 기준으로 `frontend/.env.local`을 만듭니다.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `NEXT_PUBLIC_API_URL`: FastAPI backend base URL
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+실제 `.env.local`은 커밋하지 않습니다.
 
-## Deploy on Vercel
+## 검증
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```powershell
+npm run build
+```

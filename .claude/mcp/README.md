@@ -13,6 +13,8 @@ Example config:
 .claude/mcp/hwp-mcp.local.example.json
 ```
 
+Copy it into your local MCP client config and replace `<absolute-path-to-LiveDock>` with this repository's absolute path.
+
 Use it only when the local machine has:
 
 - Windows

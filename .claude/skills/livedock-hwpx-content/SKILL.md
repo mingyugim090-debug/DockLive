@@ -53,7 +53,7 @@ When a form has empty cells, prefer backend-assisted cell mapping:
 2. Replace only the empty cell's existing run with `<hp:t>value</hp:t>`.
 3. Preserve table, paragraph, run, and style counts whenever possible.
 
-The soccer-club test follows this pattern through `backend/tests/manual_hwpx_soccer_application.py`.
+The soccer-club test follows this pattern through `backend/tests/manual/manual_hwpx_soccer_application.py`.
 
 ## User Confirmation Gate
 

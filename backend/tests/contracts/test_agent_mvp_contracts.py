@@ -4,7 +4,7 @@ import sys
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 BACKEND = ROOT / "backend"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
@@ -52,7 +52,7 @@ class AgentMvpContractTests(unittest.TestCase):
         self.assertTrue(should_use_mock_ai())
 
     def test_fixture_metadata_is_complete(self):
-        fixture_dir = ROOT / "docs" / "fixtures"
+        fixture_dir = ROOT / "docs" / "evaluation" / "fixtures"
         fixtures = sorted(fixture_dir.glob("*.json"))
         self.assertEqual(len(fixtures), 5)
 

@@ -9,7 +9,7 @@
 
 ## Milestone 2 - Improve Analysis Quality
 
-- Add fixture files under `docs/fixtures`.
+- Add fixture files under `docs/evaluation/fixtures`.
 - Add deterministic schema validation tests.
 - Add AI-output validation and retry paths.
 - Add OCR/HWP/HWPX ingestion strategy.
