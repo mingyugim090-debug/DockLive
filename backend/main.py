@@ -28,6 +28,8 @@ app.add_middleware(
         "http://localhost:3002",
         "http://localhost:3010",
         "http://localhost:3011",
+        "http://localhost:3111",
+        "http://127.0.0.1:3111",
     ],
     allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,

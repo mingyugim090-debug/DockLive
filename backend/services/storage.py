@@ -1,5 +1,6 @@
 import json
 import logging
+from pathlib import Path
 from typing import Optional
 
 from core.config import settings
@@ -7,8 +8,33 @@ from core.config import settings
 logger = logging.getLogger(__name__)
 
 _in_memory_cache: dict[str, dict] = {}
+_file_cache_dir = Path(__file__).resolve().parents[1] / ".livedock_storage"
 _redis_client = None
 _redis_initialized = False
+
+
+def _file_path_for_key(key: str) -> Path:
+    safe_key = "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in key)
+    return _file_cache_dir / f"{safe_key}.json"
+
+
+def _save_file_cache(key: str, data: dict) -> None:
+    try:
+        _file_cache_dir.mkdir(parents=True, exist_ok=True)
+        _file_path_for_key(key).write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    except Exception as e:
+        logger.warning(f"File cache save failed for {key}: {e}")
+
+
+def _load_file_cache(key: str) -> Optional[dict]:
+    try:
+        path = _file_path_for_key(key)
+        if not path.exists():
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception as e:
+        logger.warning(f"File cache load failed for {key}: {e}")
+        return None
 
 
 def _make_redis_client():
@@ -50,6 +76,7 @@ def _save_json(key: str, data: dict, ttl_seconds: int) -> None:
             logger.warning(f"Redis save failed; using in-memory cache: {e}")
 
     _in_memory_cache[key] = data
+    _save_file_cache(key, data)
     logger.info(f"In-memory saved: {key} (total={len(_in_memory_cache)})")
 
 
@@ -67,7 +94,12 @@ def _load_json(key: str) -> Optional[dict]:
     cached = _in_memory_cache.get(key)
     if cached:
         logger.info(f"In-memory loaded: {key}")
-    return cached
+        return cached
+
+    file_cached = _load_file_cache(key)
+    if file_cached:
+        logger.info(f"File cache loaded: {key}")
+    return file_cached
 
 
 def save_result(result_id: str, data: dict) -> None:

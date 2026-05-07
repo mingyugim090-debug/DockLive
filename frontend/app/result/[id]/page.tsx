@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { motion } from 'framer-motion';
 import { useParams, useRouter } from 'next/navigation';
 import {
   confirmWorkflow,
@@ -19,121 +19,108 @@ import {
 } from '@/lib/api';
 import { loadResult, saveResult } from '@/lib/resultCache';
 import { useAppStore } from '@/lib/store';
-import type { AnalysisResult, DraftSection, DraftStreamEvent, UserInputField, WorkflowSession } from '@/lib/types';
+import type { AnalysisResult, DraftStreamEvent, UserInputField, WorkflowSession } from '@/lib/types';
+import {
+  AppHeader,
+  Button,
+  DayStatusBadge,
+  DraftSectionCard,
+  EmptyState,
+  ErrorBanner,
+  EvidenceList,
+  ExportPanel,
+  InfoCard,
+  LoadingState,
+  NoticeBanner,
+  SectionCard,
+  StatusBadge,
+  WorkflowStatusBadge,
+  WorkflowStepper,
+  cn,
+  fadeUp,
+  stagger,
+} from '@/components/livedock/ui';
 
-const TABS = [
-  { step: 1 as const, label: '분석' },
-  { step: 2 as const, label: '입력' },
-  { step: 3 as const, label: '초안' },
-  { step: 4 as const, label: '최종' },
-];
-
-const STATUS_LABEL: Record<DraftSection['status'], string> = {
-  empty: '대기',
-  needs_input: '입력 필요',
-  drafted: '초안 완료',
-  revised: '수정됨',
-  confirmed: '확인 완료',
-};
-
-function Section({ title, desc, children }: { title: string; desc: string; children: ReactNode }) {
-  return (
-    <section className="rounded-xl border border-white/10 bg-card p-5">
-      <div className="mb-4">
-        <h2 className="text-base font-bold text-text">{title}</h2>
-        <p className="mt-1 text-xs leading-relaxed text-text2">{desc}</p>
-      </div>
-      {children}
-    </section>
-  );
+function getDocTypeLabel(docType: string): string {
+  const map: Record<string, string> = {
+    competition: '공모전',
+    research: '연구과제',
+    scholarship: '장학금',
+    startup: '창업지원',
+  };
+  return map[docType] ?? '기타 공고';
 }
 
-function InfoList({ title, items }: { title: string; items: string[] }) {
-  if (items.length === 0) return null;
+function formatDate(dateStr: string): string {
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return dateStr;
+  return new Intl.DateTimeFormat('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+}
+
+function formatDDay(dDay: number): string {
+  if (dDay < 0) return '마감';
+  if (dDay === 0) return 'D-Day';
+  return `D-${dDay}`;
+}
+
+function WorkflowInputField({
+  field,
+  value,
+  onChange,
+}: {
+  field: UserInputField;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const isShort = field.field_type === 'text' || field.field_type === 'number' || field.field_type === 'date';
+  const inputType = field.field_type === 'number' ? 'number' : field.field_type === 'date' ? 'date' : 'text';
+
   return (
-    <div className="rounded-lg border border-white/10 bg-white/5 p-3">
-      <h3 className="text-sm font-bold text-text">{title}</h3>
-      <ul className="mt-2 flex flex-col gap-1">
-        {items.map((item) => (
-          <li key={item} className="text-xs leading-relaxed text-text2">
-            - {item}
-          </li>
-        ))}
-      </ul>
+    <div className="rounded-lg border border-white/10 bg-white/[0.035] p-4">
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-text">{field.label}</p>
+          {field.description ? <p className="mt-1 text-xs leading-5 text-text3">{field.description}</p> : null}
+        </div>
+        {field.required ? <StatusBadge label="필수" tone="warning" /> : <StatusBadge label="선택" tone="neutral" />}
+      </div>
+      {isShort ? (
+        <input
+          type={inputType}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={field.placeholder ?? ''}
+          className="input-shell w-full rounded-md px-3 py-2.5 text-sm"
+        />
+      ) : (
+        <textarea
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={field.placeholder ?? ''}
+          className="input-shell min-h-[118px] w-full resize-y rounded-md px-3 py-2.5 text-sm leading-6"
+        />
+      )}
     </div>
   );
 }
 
-function InputField({ field, value, onChange }: { field: UserInputField; value: string; onChange: (value: string) => void }) {
+function MetricCard({ label, value, desc, tone = 'neutral' }: { label: string; value: ReactNode; desc?: string; tone?: 'neutral' | 'info' | 'warning' | 'success' }) {
   return (
-    <label className="flex flex-col gap-2 rounded-lg border border-white/10 bg-white/5 p-3">
-      <span className="flex items-center justify-between gap-3">
-        <span className="text-sm font-bold text-text">{field.label}</span>
-        {field.required && <span className="text-xs font-semibold text-primary">필수</span>}
-      </span>
-      {field.description && <span className="text-xs leading-relaxed text-text2">{field.description}</span>}
-      <textarea
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={field.placeholder ?? ''}
-        className="min-h-[86px] resize-y rounded-lg border border-white/10 bg-bg px-3 py-2 text-sm text-text outline-none placeholder:text-text3 focus:border-primary"
-      />
-    </label>
-  );
-}
-
-function DraftCard({
-  draft,
-  feedback,
-  streamState,
-  onFeedbackChange,
-  onSaveFeedback,
-  onRevise,
-  busy,
-}: {
-  draft: DraftSection;
-  feedback: string;
-  streamState?: string;
-  onFeedbackChange: (value: string) => void;
-  onSaveFeedback: () => void;
-  onRevise: () => void;
-  busy: boolean;
-}) {
-  return (
-    <div className="rounded-lg border border-white/10 bg-white/5">
-      <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
-        <h3 className="text-sm font-bold text-text">{draft.title}</h3>
-        <span className="rounded-md bg-bg px-2 py-1 text-xs text-text2">{streamState ?? STATUS_LABEL[draft.status]}</span>
-      </div>
-      <div className="flex flex-col gap-3 p-4">
-        {draft.confirmation_required.length > 0 && (
-          <div className="rounded-lg border border-yellow-400/20 bg-yellow-400/10 p-3 text-xs text-yellow-100">
-            <p className="font-bold">제출 전 확인 필요</p>
-            <ul className="mt-2 flex flex-col gap-1">
-              {draft.confirmation_required.map((item) => (
-                <li key={item}>- {item}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-        <pre className="whitespace-pre-wrap rounded-lg bg-bg p-3 text-sm leading-relaxed text-text2">
-          {draft.content_markdown || '아직 초안이 없습니다. 필수 정보를 입력한 뒤 초안을 생성하세요.'}
-        </pre>
-        <textarea
-          value={feedback}
-          onChange={(event) => onFeedbackChange(event.target.value)}
-          placeholder="수정 방향을 입력하세요."
-          className="min-h-[70px] resize-y rounded-lg border border-white/10 bg-bg px-3 py-2 text-sm text-text outline-none placeholder:text-text3 focus:border-primary"
-        />
-        <div className="flex flex-wrap gap-2">
-          <button onClick={onSaveFeedback} disabled={busy} className="rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold text-text2 hover:text-text disabled:opacity-50">
-            피드백 저장
-          </button>
-          <button onClick={onRevise} disabled={busy || !draft.content_markdown} className="rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white disabled:opacity-50">
-            피드백 반영
-          </button>
-        </div>
-      </div>
+    <div
+      className={cn(
+        'rounded-lg border p-4',
+        tone === 'info'
+          ? 'border-sky-400/20 bg-sky-400/[0.05]'
+          : tone === 'warning'
+            ? 'border-amber-400/20 bg-amber-400/[0.06]'
+            : tone === 'success'
+              ? 'border-emerald-400/20 bg-emerald-400/[0.05]'
+              : 'border-white/10 bg-white/[0.035]',
+      )}
+    >
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text3">{label}</p>
+      <div className="mt-2 text-lg font-semibold text-text">{value}</div>
+      {desc ? <p className="mt-1 text-xs leading-5 text-text3">{desc}</p> : null}
     </div>
   );
 }
@@ -172,6 +159,7 @@ export default function ResultPage() {
 
   useEffect(() => {
     let cancelled = false;
+
     async function loadData() {
       setLoading(true);
       setError(null);
@@ -195,6 +183,7 @@ export default function ResultPage() {
         if (!cancelled) setLoading(false);
       }
     }
+
     loadData();
     return () => {
       cancelled = true;
@@ -202,16 +191,35 @@ export default function ResultPage() {
   }, [analysisResult, id, setResult, setWorkflow]);
 
   const activeAnalysis = workflow?.analysis ?? result;
-  const requiredMissing = useMemo(() => {
-    if (!workflow) return [];
-    return workflow.user_inputs.filter((field) => field.required && !inputValues[field.id]?.trim());
+
+  const requiredStats = useMemo(() => {
+    if (!workflow) return { total: 0, filled: 0, missing: [] as UserInputField[], percent: 100 };
+    const required = workflow.user_inputs.filter((field) => field.required);
+    const filled = required.filter((field) => inputValues[field.id]?.trim()).length;
+    return {
+      total: required.length,
+      filled,
+      missing: required.filter((field) => !inputValues[field.id]?.trim()),
+      percent: required.length ? Math.round((filled / required.length) * 100) : 100,
+    };
   }, [workflow, inputValues]);
+
+  const mainDeadline = useMemo(() => {
+    if (!activeAnalysis?.timeline.length) return null;
+    const deadlines = activeAnalysis.timeline
+      .filter((item) => item.is_deadline)
+      .sort((a, b) => a.d_day - b.d_day);
+    return deadlines.find((item) => item.d_day >= 0) ?? deadlines[0] ?? activeAnalysis.timeline[0];
+  }, [activeAnalysis]);
+
+  const draftReady = Boolean(workflow?.draft_sections.some((draft) => draft.content_markdown.trim()));
 
   const applyWorkflow = (next: WorkflowSession) => {
     setLocalWorkflow(next);
     setWorkflow(next);
     setLocalResult(next.analysis);
     setResult(next.analysis);
+    saveResult(next.analysis);
   };
 
   const handleSaveInputs = async () => {
@@ -224,7 +232,7 @@ export default function ResultPage() {
         workflow.user_inputs.map((field) => ({ field_id: field.id, value: inputValues[field.id] ?? '' })),
       );
       applyWorkflow(res.data);
-      setNotice('입력을 저장했습니다.');
+      setNotice('입력값을 저장했습니다.');
       return res.data;
     } catch (err) {
       setError(err instanceof Error ? err.message : '입력 저장에 실패했습니다.');
@@ -236,18 +244,25 @@ export default function ResultPage() {
 
   const mergeDraftEvent = (event: DraftStreamEvent) => {
     if (event.type === 'section_start') {
-      setNotice(event.content || '초안 생성을 시작합니다.');
+      setNotice(event.content || '섹션별 초안 생성을 시작합니다.');
       setStreamStates((prev) => {
         const next = { ...prev };
         workflow?.draft_sections.forEach((draft) => {
           next[draft.section_id] = '생성 대기';
         });
+        if (event.section_id) next[event.section_id] = '작성 중';
         return next;
       });
       return;
     }
+
+    if (event.type === 'delta' && event.section_id) {
+      setStreamStates((prev) => ({ ...prev, [event.section_id!]: '작성 중' }));
+      return;
+    }
+
     if (event.type === 'section_done' && event.draft_section) {
-      setStreamStates((prev) => ({ ...prev, [event.draft_section!.section_id]: '완료' }));
+      setStreamStates((prev) => ({ ...prev, [event.draft_section!.section_id]: '초안 완료' }));
       setLocalWorkflow((prev) => {
         if (!prev) return prev;
         const draftSections = prev.draft_sections.map((draft) =>
@@ -259,13 +274,15 @@ export default function ResultPage() {
       });
       return;
     }
+
     if (event.type === 'workflow_done') {
-      setNotice(event.content || '초안 생성이 완료되었습니다.');
+      setNotice(event.content || '섹션별 초안 생성이 완료되었습니다.');
       setBusy(false);
       setStep(3);
       streamRef.current?.close();
       return;
     }
+
     if (event.type === 'error') {
       setError(event.content || '초안 생성 중 오류가 발생했습니다.');
       setBusy(false);
@@ -287,6 +304,9 @@ export default function ResultPage() {
       return;
     }
 
+    setBusy(true);
+    setStep(3);
+
     let completed = false;
     try {
       const source = createDraftStream(savedWorkflow.id, (event) => {
@@ -297,11 +317,12 @@ export default function ResultPage() {
       source.onerror = async () => {
         source.close();
         if (completed) return;
-        setNotice('라이브 스트림 연결이 끊겨 일괄 생성으로 다시 시도합니다.');
+        setNotice('라이브 스트림 연결이 닫혀 일반 생성으로 다시 시도합니다.');
         try {
           const drafted = await generateDraft(savedWorkflow.id);
           applyWorkflow(drafted.data);
           setStep(3);
+          setNotice('초안 생성이 완료되었습니다.');
         } catch (err) {
           setError(err instanceof Error ? err.message : '초안 생성에 실패했습니다.');
         } finally {
@@ -313,6 +334,7 @@ export default function ResultPage() {
         const drafted = await generateDraft(savedWorkflow.id);
         applyWorkflow(drafted.data);
         setStep(3);
+        setNotice('초안 생성이 완료되었습니다.');
       } catch (fallbackErr) {
         setError(fallbackErr instanceof Error ? fallbackErr.message : err instanceof Error ? err.message : '초안 생성에 실패했습니다.');
       } finally {
@@ -344,6 +366,7 @@ export default function ResultPage() {
       await saveDraftFeedback(workflow.id, sectionId, feedbackValues[sectionId] ?? '');
       const res = await reviseDraft(workflow.id, sectionId);
       applyWorkflow(res.data);
+      setNotice('피드백을 반영해 초안을 수정했습니다.');
     } catch (err) {
       setError(err instanceof Error ? err.message : '초안 수정에 실패했습니다.');
     } finally {
@@ -361,6 +384,7 @@ export default function ResultPage() {
       const finalized = await finalizeWorkflow(workflow.id);
       applyWorkflow(finalized.data);
       setStep(4);
+      setNotice('최종 문서를 생성했습니다. 제출 전 내용을 다시 검토해 주세요.');
     } catch (err) {
       setError(err instanceof Error ? err.message : '최종 문서 생성에 실패했습니다.');
     } finally {
@@ -369,61 +393,98 @@ export default function ResultPage() {
   };
 
   const downloadExport = (filename: string, contentType: string, content: string, encoding: 'text' | 'base64') => {
-    const payload =
-      encoding === 'base64'
-        ? Uint8Array.from(atob(content), (char) => char.charCodeAt(0))
-        : content;
+    const payload = encoding === 'base64' ? Uint8Array.from(atob(content), (char) => char.charCodeAt(0)) : content;
     const blob = new Blob([payload], { type: contentType });
     const objectUrl = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = objectUrl;
     link.download = filename;
     link.click();
-    URL.revokeObjectURL(objectUrl);
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
   };
 
   const handleExportHtml = async () => {
     if (!workflow) return;
-    const exported = await exportWorkflowHtml(workflow.id);
-    downloadExport(exported.filename, exported.content_type, exported.content, exported.encoding);
+    setBusy(true);
+    setError(null);
+    try {
+      const exported = await exportWorkflowHtml(workflow.id);
+      downloadExport(exported.filename, exported.content_type, exported.content, exported.encoding);
+      setNotice('HTML export를 생성했습니다.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'HTML export에 실패했습니다.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleExportHwpx = async () => {
     if (!workflow) return;
+    setBusy(true);
     setError(null);
     try {
       const exported = await exportWorkflowHwpx(workflow.id);
       downloadExport(exported.filename, exported.content_type, exported.content, exported.encoding);
+      setNotice('HWPX export를 생성했습니다.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'HWPX export에는 서버 toolchain 설정이 필요합니다. HTML export를 먼저 사용할 수 있습니다.');
+      setError(
+        err instanceof Error
+          ? `${err.message} HTML export를 fallback으로 먼저 사용할 수 있습니다.`
+          : 'HWPX export에는 서버 toolchain 설정이 필요합니다. HTML export를 fallback으로 먼저 사용할 수 있습니다.',
+      );
+    } finally {
+      setBusy(false);
     }
   };
 
   const handleExportTemplate = async () => {
     if (!workflow || !templateFile) return;
+    setBusy(true);
     setError(null);
     try {
       JSON.parse(templateMap || '{}');
       const exported = await exportWorkflowHwpxTemplate(workflow.id, templateFile, templateMap || '{}');
       downloadExport(exported.filename, exported.content_type, exported.content, exported.encoding);
+      setNotice('템플릿 HWPX export를 생성했습니다.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'HWPX 템플릿 export에 실패했습니다.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCopyShare = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setNotice('공유 링크를 복사했습니다.');
+    } catch {
+      setError('공유 링크를 복사하지 못했습니다.');
+    }
+  };
+
+  const handleCopyMarkdown = async () => {
+    if (!workflow?.final_document) return;
+    try {
+      await navigator.clipboard.writeText(workflow.final_document.content_markdown);
+      setNotice('Markdown 내용을 복사했습니다.');
+    } catch {
+      setError('Markdown 복사에 실패했습니다.');
     }
   };
 
   if (loading) {
-    return <div className="flex min-h-screen items-center justify-center bg-bg text-text2">Agent 작업을 불러오는 중입니다.</div>;
+    return <LoadingState />;
   }
 
   if (error && !activeAnalysis) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-bg px-6 text-center">
-        <div>
-          <p className="text-lg font-bold text-text">결과를 찾을 수 없습니다</p>
-          <p className="mt-2 text-sm text-text2">{error}</p>
-          <button onClick={() => router.push('/')} className="mt-5 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-white">
+        <div className="glass-panel max-w-md rounded-lg border border-white/10 p-8">
+          <p className="text-lg font-semibold text-text">결과를 찾을 수 없습니다</p>
+          <p className="mt-3 text-sm leading-6 text-text2">{error}</p>
+          <Button type="button" className="mt-6" onClick={() => router.push('/')}>
             다시 분석하기
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -433,178 +494,277 @@ export default function ResultPage() {
 
   return (
     <main className="min-h-screen bg-bg text-text">
-      <header className="sticky top-0 z-10 border-b border-white/10 bg-card/95 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-5 py-4">
-          <button onClick={() => router.push('/')} className="text-sm text-text2 hover:text-text">이전</button>
-          <div className="min-w-0 flex-1 text-center">
-            <p className="truncate text-sm font-bold">{activeAnalysis.title}</p>
-            <p className="text-xs text-text2">{activeAnalysis.organization} · {workflow.status}</p>
+      <AppHeader
+        onBack={() => router.push('/')}
+        title={activeAnalysis.title}
+        subtitle={`${activeAnalysis.organization || '기관 미확인'} · ${getDocTypeLabel(activeAnalysis.doc_type)}`}
+        status={<WorkflowStatusBadge status={workflow.status} />}
+        right={
+          <>
+            <span className="hidden md:inline-flex">
+              <Button type="button" variant="ghost" onClick={handleCopyShare}>
+                공유
+              </Button>
+            </span>
+            <Button type="button" onClick={() => setStep(4)}>
+              최종 export
+            </Button>
+          </>
+        }
+      />
+
+      <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[270px_minmax(0,1fr)]">
+        <aside className="space-y-4 lg:sticky lg:top-24 lg:h-fit">
+          <WorkflowStepper currentStep={currentStep} onChange={setStep} />
+          <div className="glass-panel hidden rounded-lg border border-white/10 p-4 lg:block">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text3">Session</p>
+            <div className="mt-4 space-y-3">
+              <MetricCard label="필수 입력" value={`${requiredStats.filled}/${requiredStats.total}`} desc={`${requiredStats.percent}% 완료`} tone="warning" />
+              <MetricCard label="초안 섹션" value={workflow.draft_sections.length} desc={draftReady ? '초안 내용 있음' : '생성 대기'} tone="info" />
+            </div>
           </div>
-          <button onClick={() => navigator.clipboard.writeText(window.location.href)} className="text-sm text-text2 hover:text-primary">
-            공유
-          </button>
-        </div>
-      </header>
+        </aside>
 
-      <div className="sticky top-[65px] z-10 border-b border-white/10 bg-bg">
-        <div className="mx-auto flex max-w-5xl overflow-x-auto px-5">
-          {TABS.map((tab) => (
-            <button
-              key={tab.step}
-              onClick={() => setStep(tab.step)}
-              className={`min-w-[96px] flex-1 border-b-2 py-3 text-sm font-semibold ${
-                currentStep === tab.step ? 'border-primary text-primary' : 'border-transparent text-text2 hover:text-text'
-              }`}
+        <motion.div variants={stagger} initial={false} animate="show" className="min-w-0 space-y-5">
+          {error ? <ErrorBanner>{error}</ErrorBanner> : null}
+          {notice ? <NoticeBanner tone="success">{notice}</NoticeBanner> : null}
+
+          {currentStep === 1 ? (
+            <div className="space-y-5">
+              <SectionCard
+                title="공고 분석 요약"
+                eyebrow="Analysis"
+                desc="공고 원문에서 추출한 핵심 요구사항과 불확실한 항목을 먼저 검토합니다."
+                action={<StatusBadge label={activeAnalysis.source_type.toUpperCase()} tone="neutral" />}
+              >
+                <div className="grid gap-4 lg:grid-cols-[1fr_0.7fr]">
+                  <div className="rounded-lg border border-white/10 bg-white/[0.035] p-5">
+                    <p className="text-sm leading-7 text-text2">{activeAnalysis.summary || '요약 정보가 없습니다.'}</p>
+                    <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                      <MetricCard label="주관/운영기관" value={activeAnalysis.organization || '확인 필요'} />
+                      <MetricCard label="제출 방식" value={activeAnalysis.submission_method || '확인 필요'} tone="info" />
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-amber-400/20 bg-amber-400/[0.06] p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-200">Timeline</p>
+                        <h3 className="mt-3 text-lg font-semibold text-text">{mainDeadline?.label ?? '주요 일정 없음'}</h3>
+                      </div>
+                      {mainDeadline ? <DayStatusBadge status={mainDeadline.status} label={formatDDay(mainDeadline.d_day)} /> : null}
+                    </div>
+                    {mainDeadline ? (
+                      <p className="mt-3 text-sm leading-6 text-text2">
+                        {formatDate(mainDeadline.date)}
+                        {mainDeadline.is_deadline ? '까지 제출 마감으로 표시되었습니다.' : ' 일정으로 표시되었습니다.'}
+                      </p>
+                    ) : (
+                      <p className="mt-3 text-sm text-text2">분석 결과에 일정이 포함되지 않았습니다.</p>
+                    )}
+                  </div>
+                </div>
+              </SectionCard>
+
+              <SectionCard title="요구사항 보드" desc="지원 자격, 혜택, 평가 기준, 주의사항을 분리해 검토합니다.">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <InfoCard title="지원 자격" items={activeAnalysis.eligibility} tone="info" />
+                  <InfoCard title="혜택/지원 내용" items={activeAnalysis.benefits} tone="success" />
+                  <InfoCard title="평가 기준" items={activeAnalysis.evaluation_criteria} tone="neutral" />
+                  <InfoCard title="주의사항" items={activeAnalysis.cautions} tone="warning" />
+                  <InfoCard title="불확실한 항목" items={activeAnalysis.uncertain_fields} tone="warning" emptyText="확인 필요한 불확실 항목이 없습니다." />
+                </div>
+              </SectionCard>
+
+              <SectionCard title="일정과 제출서류" desc="required/optional 구분과 파일 형식 요구사항을 확인합니다.">
+                <div className="grid gap-4 lg:grid-cols-[0.84fr_1fr]">
+                  <div className="rounded-lg border border-white/10 bg-white/[0.035] p-4">
+                    <h3 className="text-sm font-semibold text-text">일정</h3>
+                    <div className="mt-4 space-y-3">
+                      {activeAnalysis.timeline.length ? (
+                        activeAnalysis.timeline.map((item) => (
+                          <div key={item.id} className="flex items-start justify-between gap-4 rounded-md border border-white/8 bg-bg/45 p-3">
+                            <div>
+                              <p className="text-sm font-semibold text-text">{item.label}</p>
+                              <p className="mt-1 text-xs text-text3">{formatDate(item.date)}</p>
+                            </div>
+                            <DayStatusBadge status={item.status} label={formatDDay(item.d_day)} />
+                          </div>
+                        ))
+                      ) : (
+                        <EmptyState title="일정 정보가 없습니다." />
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-white/10 bg-white/[0.035] p-4">
+                    <h3 className="text-sm font-semibold text-text">제출서류 체크리스트</h3>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      {activeAnalysis.checklist.length ? (
+                        activeAnalysis.checklist.map((item) => (
+                          <div key={item.id} className="rounded-md border border-white/8 bg-bg/45 p-3">
+                            <div className="mb-3 flex items-start justify-between gap-3">
+                              <p className="text-sm font-semibold text-text">{item.label}</p>
+                              <StatusBadge label={item.category === 'required' ? '필수' : '선택'} tone={item.category === 'required' ? 'warning' : 'neutral'} />
+                            </div>
+                            {item.description ? <p className="text-xs leading-5 text-text3">{item.description}</p> : null}
+                            {item.file_format ? <p className="mt-2 text-xs text-sky-200">{item.file_format}</p> : null}
+                          </div>
+                        ))
+                      ) : (
+                        <EmptyState title="제출서류 정보가 없습니다." />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </SectionCard>
+
+              <SectionCard title="Source evidence" desc="중요 추출값의 원문 근거를 접어서 확인할 수 있습니다.">
+                <EvidenceList evidence={activeAnalysis.source_evidence ?? []} />
+              </SectionCard>
+            </div>
+          ) : null}
+
+          {currentStep === 2 ? (
+            <SectionCard
+              title="필수 입력 수집"
+              eyebrow="Input"
+              desc="비어 있는 필수 입력이 많을수록 초안의 정확도가 떨어집니다. 저장 후 섹션별 초안을 생성하세요."
+              action={<StatusBadge label={`${requiredStats.percent}% 완료`} tone={requiredStats.percent === 100 ? 'success' : 'warning'} />}
             >
-              {tab.step}. {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="mx-auto flex max-w-5xl flex-col gap-5 px-5 py-6">
-        {error && <div className="rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-100">{error}</div>}
-        {notice && <div className="rounded-xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm text-primary">{notice}</div>}
-
-        {currentStep === 1 && (
-          <Section title="공고 분석" desc="원문에서 추출한 사실, 불확실한 항목, 근거 인용을 확인합니다.">
-            <p className="mb-4 text-sm leading-relaxed text-text2">{activeAnalysis.summary || '요약 정보가 없습니다.'}</p>
-            <div className="grid gap-3 md:grid-cols-2">
-              <InfoList title="지원 자격" items={activeAnalysis.eligibility} />
-              <InfoList title="혜택" items={activeAnalysis.benefits} />
-              <InfoList title="평가 기준" items={activeAnalysis.evaluation_criteria} />
-              <InfoList title="주의사항" items={activeAnalysis.cautions} />
-              <InfoList title="불확실한 항목" items={activeAnalysis.uncertain_fields} />
-              <InfoList title="근거 인용" items={(activeAnalysis.source_evidence ?? []).map((item) => `${item.field}: ${item.quote}`)} />
-            </div>
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <div className="rounded-lg border border-white/10 bg-white/5 p-3">
-                <h3 className="text-sm font-bold">일정</h3>
-                <ul className="mt-2 flex flex-col gap-1 text-xs text-text2">
-                  {activeAnalysis.timeline.map((item) => (
-                    <li key={item.id}>{item.date} · {item.label} · D{item.d_day >= 0 ? '-' : '+'}{Math.abs(item.d_day)}</li>
-                  ))}
-                </ul>
+              <div className="mb-5 rounded-lg border border-white/10 bg-white/[0.035] p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-text">필수 입력 진행률</p>
+                    <p className="mt-1 text-xs text-text3">
+                      {requiredStats.total ? `${requiredStats.total - requiredStats.filled}개 항목이 남았습니다.` : '필수 입력 항목이 없습니다.'}
+                    </p>
+                  </div>
+                  <span className="text-sm font-semibold text-text">{requiredStats.filled}/{requiredStats.total}</span>
+                </div>
+                <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
+                  <div className="h-full rounded-full bg-[linear-gradient(90deg,#6fd3ff,#8b78ff)] transition-all" style={{ width: `${requiredStats.percent}%` }} />
+                </div>
               </div>
-              <div className="rounded-lg border border-white/10 bg-white/5 p-3">
-                <h3 className="text-sm font-bold">제출 서류</h3>
-                <ul className="mt-2 flex flex-col gap-1 text-xs text-text2">
-                  {activeAnalysis.checklist.map((item) => (
-                    <li key={item.id}>{item.category === 'required' ? '[필수]' : '[선택]'} {item.label}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </Section>
-        )}
 
-        {currentStep === 2 && (
-          <Section title="필수 입력 수집" desc="초안에 필요한 내용을 입력합니다. 필수 항목이 비어 있으면 초안을 만들지 않습니다.">
-            <div className="flex flex-col gap-3">
-              {workflow.user_inputs.map((field) => (
-                <InputField
-                  key={field.id}
-                  field={field}
-                  value={inputValues[field.id] ?? ''}
-                  onChange={(value) => setInputValues((prev) => ({ ...prev, [field.id]: value }))}
+              <div className="grid gap-4">
+                {workflow.user_inputs.length ? (
+                  workflow.user_inputs.map((field) => (
+                    <WorkflowInputField
+                      key={field.id}
+                      field={field}
+                      value={inputValues[field.id] ?? ''}
+                      onChange={(value) => setInputValues((prev) => ({ ...prev, [field.id]: value }))}
+                    />
+                  ))
+                ) : (
+                  <EmptyState title="추가 입력 항목이 없습니다." desc="분석 결과만으로 초안 생성에 필요한 정보가 충분하다고 판단되었습니다." />
+                )}
+              </div>
+
+              {requiredStats.missing.length > 0 ? (
+                <div className="mt-5">
+                  <NoticeBanner tone="warning" title="남은 필수 입력">
+                    {requiredStats.missing.map((field) => field.label).join(', ')}
+                  </NoticeBanner>
+                </div>
+              ) : null}
+
+              <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <Button type="button" variant="secondary" onClick={handleSaveInputs} disabled={busy}>
+                  입력 저장
+                </Button>
+                <Button type="button" onClick={handleGenerateDraft} disabled={busy}>
+                  {busy ? '처리 중...' : '섹션별 초안 생성'}
+                </Button>
+              </div>
+            </SectionCard>
+          ) : null}
+
+          {currentStep === 3 ? (
+            <SectionCard
+              title="섹션별 초안"
+              eyebrow="Draft"
+              desc="각 섹션을 문서 preview 형태로 검토하고, 필요한 피드백을 저장하거나 반영합니다."
+              action={
+                <Button type="button" variant="secondary" onClick={handleGenerateDraft} disabled={busy}>
+                  초안 다시 생성
+                </Button>
+              }
+            >
+              {busy && Object.keys(streamStates).length > 0 ? (
+                <div className="mb-5">
+                  <NoticeBanner tone="info">초안을 생성하는 중입니다. 완료된 섹션부터 순차적으로 표시됩니다.</NoticeBanner>
+                </div>
+              ) : null}
+
+              <motion.div variants={stagger} initial={false} animate="show" className="space-y-4">
+                {workflow.draft_sections.length ? (
+                  workflow.draft_sections.map((draft) => (
+                    <DraftSectionCard
+                      key={draft.id}
+                      draft={draft}
+                      streamState={streamStates[draft.section_id]}
+                      feedback={feedbackValues[draft.section_id] ?? ''}
+                      onFeedbackChange={(value) => setFeedbackValues((prev) => ({ ...prev, [draft.section_id]: value }))}
+                      onSaveFeedback={() => handleSaveFeedback(draft.section_id)}
+                      onRevise={() => handleRevise(draft.section_id)}
+                      busy={busy}
+                    />
+                  ))
+                ) : (
+                  <EmptyState
+                    title="아직 생성된 초안 섹션이 없습니다."
+                    desc="필수 입력을 저장한 뒤 섹션별 초안을 생성하세요."
+                    action={
+                      <Button type="button" onClick={handleGenerateDraft} disabled={busy}>
+                        초안 생성
+                      </Button>
+                    }
+                  />
+                )}
+              </motion.div>
+
+              <div className="mt-6 flex justify-end">
+                <Button type="button" onClick={handleFinalize} disabled={busy || !draftReady}>
+                  확인 후 최종 문서 생성
+                </Button>
+              </div>
+            </SectionCard>
+          ) : null}
+
+          {currentStep === 4 ? (
+            <SectionCard
+              title="최종 문서와 export"
+              eyebrow="Final"
+              desc="제출 전 검토용 preview를 확인한 뒤 HTML, HWPX, 템플릿 HWPX export를 실행합니다."
+            >
+              {!workflow.final_document ? (
+                <EmptyState
+                  title="최종 문서가 아직 없습니다."
+                  desc="섹션별 초안을 검토한 뒤 최종 문서를 생성하세요. 생성 과정에서 초안 확인 상태가 함께 저장됩니다."
+                  action={
+                    <Button type="button" onClick={handleFinalize} disabled={busy || !draftReady}>
+                      최종 문서 생성
+                    </Button>
+                  }
                 />
-              ))}
-            </div>
-            {requiredMissing.length > 0 && (
-              <p className="mt-4 rounded-lg border border-yellow-400/20 bg-yellow-400/10 px-3 py-2 text-xs text-yellow-100">
-                남은 필수 입력: {requiredMissing.map((field) => field.label).join(', ')}
-              </p>
-            )}
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button onClick={handleSaveInputs} disabled={busy} className="rounded-xl border border-white/10 px-4 py-3 text-sm font-semibold text-text2 hover:text-text disabled:opacity-50">
-                입력 저장
-              </button>
-              <button onClick={handleGenerateDraft} disabled={busy} className="rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white disabled:opacity-50">
-                {busy ? '처리 중...' : '섹션별 초안 생성'}
-              </button>
-            </div>
-          </Section>
-        )}
-
-        {currentStep === 3 && (
-          <Section title="섹션별 초안" desc="Agent가 만든 초안을 확인하고 피드백을 반영합니다.">
-            <div className="flex flex-col gap-4">
-              {workflow.draft_sections.map((draft) => (
-                <DraftCard
-                  key={draft.id}
-                  draft={draft}
-                  streamState={streamStates[draft.section_id]}
-                  feedback={feedbackValues[draft.section_id] ?? ''}
-                  onFeedbackChange={(value) => setFeedbackValues((prev) => ({ ...prev, [draft.section_id]: value }))}
-                  onSaveFeedback={() => handleSaveFeedback(draft.section_id)}
-                  onRevise={() => handleRevise(draft.section_id)}
+              ) : (
+                <ExportPanel
+                  finalTitle={workflow.final_document.title}
+                  finalContent={workflow.final_document.content_markdown}
+                  templateFile={templateFile}
+                  templateMap={templateMap}
+                  onTemplateFile={setTemplateFile}
+                  onTemplateMap={setTemplateMap}
+                  onExportHtml={handleExportHtml}
+                  onExportHwpx={handleExportHwpx}
+                  onExportTemplate={handleExportTemplate}
+                  onCopyMarkdown={handleCopyMarkdown}
                   busy={busy}
                 />
-              ))}
-            </div>
-            <button
-              onClick={handleFinalize}
-              disabled={busy || workflow.draft_sections.every((draft) => !draft.content_markdown)}
-              className="mt-5 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
-            >
-              확인 후 최종 문서 생성
-            </button>
-          </Section>
-        )}
-
-        {currentStep === 4 && (
-          <Section title="최종 문서" desc="제출 전 사용자가 반드시 검토해야 하는 최종 초안입니다.">
-            {!workflow.final_document ? (
-              <button onClick={handleFinalize} disabled={busy} className="rounded-xl bg-primary px-5 py-3 text-sm font-bold text-white disabled:opacity-50">
-                최종 문서 생성
-              </button>
-            ) : (
-              <div className="flex flex-col gap-4">
-                <div className="flex flex-wrap gap-2">
-                  <button onClick={handleExportHtml} className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary">
-                    HTML export
-                  </button>
-                  <button onClick={handleExportHwpx} className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary">
-                    HWPX export
-                  </button>
-                  <button onClick={() => navigator.clipboard.writeText(workflow.final_document?.content_markdown ?? '')} className="rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold text-text2">
-                    Markdown 복사
-                  </button>
-                </div>
-                <div className="rounded-lg border border-white/10 bg-white/5 p-3">
-                  <label className="flex flex-col gap-2">
-                    <span className="text-sm font-bold">공식 HWPX 양식에 채우기</span>
-                    <span className="text-xs leading-relaxed text-text2">
-                      HWPX 템플릿을 업로드하면 표, 스타일, 이미지는 보존하고 텍스트만 치환합니다. 기본 placeholder는 {'{{content}}'}, {'{{title}}'}, {'{{applicant_name}}'} 등을 지원합니다.
-                    </span>
-                    <input
-                      type="file"
-                      accept=".hwpx,application/vnd.hancom.hwpx"
-                      onChange={(event) => setTemplateFile(event.target.files?.[0] ?? null)}
-                      className="rounded-lg border border-white/10 bg-bg px-3 py-2 text-xs text-text2"
-                    />
-                  </label>
-                  <textarea
-                    value={templateMap}
-                    onChange={(event) => setTemplateMap(event.target.value)}
-                    className="mt-3 min-h-[90px] w-full resize-y rounded-lg border border-white/10 bg-bg px-3 py-2 text-xs text-text outline-none focus:border-primary"
-                    spellCheck={false}
-                  />
-                  <button
-                    onClick={handleExportTemplate}
-                    disabled={!templateFile}
-                    className="mt-3 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-text3"
-                  >
-                    템플릿 HWPX export
-                  </button>
-                </div>
-                <pre className="max-h-[70vh] overflow-auto whitespace-pre-wrap rounded-lg bg-bg p-4 text-sm leading-relaxed text-text2">
-                  {workflow.final_document.content_markdown}
-                </pre>
-              </div>
-            )}
-          </Section>
-        )}
+              )}
+            </SectionCard>
+          ) : null}
+        </motion.div>
       </div>
     </main>
   );

@@ -11,6 +11,13 @@ const config: Config = {
       colors: {
         background: "var(--background)",
         foreground: "var(--foreground)",
+        bg: "var(--bg)",
+        card: "var(--card)",
+        card2: "var(--card2)",
+        text: "var(--text)",
+        text2: "var(--text2)",
+        text3: "var(--text3)",
+        primary: "rgb(var(--primary-rgb) / <alpha-value>)",
       },
     },
   },
