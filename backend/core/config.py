@@ -27,7 +27,7 @@ if BaseSettings:
         GEMMA_DRAFT_MODEL: str = "gemma-4-31b-it"
         HWPX_SKILL_DIR: str = ""
         HWPX_TEMPLATE_DIR: str = ""
-        HWPX_EXPORT_ENABLED: bool = False
+        HWPX_EXPORT_ENABLED: bool = True
         MAX_DRAFT_INPUT_LENGTH: int = 60_000
         WORKFLOW_TTL_SECONDS: int = 7 * 24 * 3600
 
@@ -55,7 +55,7 @@ else:
         GEMMA_DRAFT_MODEL: str = os.getenv("GEMMA_DRAFT_MODEL", "gemma-4-31b-it")
         HWPX_SKILL_DIR: str = os.getenv("HWPX_SKILL_DIR", "")
         HWPX_TEMPLATE_DIR: str = os.getenv("HWPX_TEMPLATE_DIR", "")
-        HWPX_EXPORT_ENABLED: bool = os.getenv("HWPX_EXPORT_ENABLED", "false").lower() == "true"
+        HWPX_EXPORT_ENABLED: bool = os.getenv("HWPX_EXPORT_ENABLED", "true").lower() == "true"
         MAX_DRAFT_INPUT_LENGTH: int = int(os.getenv("MAX_DRAFT_INPUT_LENGTH", "60000"))
         WORKFLOW_TTL_SECONDS: int = int(os.getenv("WORKFLOW_TTL_SECONDS", str(7 * 24 * 3600)))
 

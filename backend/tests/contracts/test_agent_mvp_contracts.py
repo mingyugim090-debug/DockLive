@@ -130,9 +130,14 @@ class AgentMvpContractTests(unittest.TestCase):
             "project_summary": "공고 분석과 제출 문서 자동화",
         })))
 
-        with self.assertRaises(Exception) as ctx:
-            clone_hwpx_template(b"PK\x03\x04", workflow)
-        self.assertIn("HWPX", str(ctx.exception))
+        old_enabled = settings.HWPX_EXPORT_ENABLED
+        try:
+            settings.HWPX_EXPORT_ENABLED = False
+            with self.assertRaises(Exception) as ctx:
+                clone_hwpx_template(b"PK\x03\x04", workflow)
+            self.assertIn("HWPX", str(ctx.exception))
+        finally:
+            settings.HWPX_EXPORT_ENABLED = old_enabled
 
     def test_withus_sample_template_is_detected(self):
         if detect_template is None:
