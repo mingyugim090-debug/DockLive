@@ -163,3 +163,23 @@ export interface ExportResponse {
   content: string;
   encoding: 'text' | 'base64';
 }
+
+export interface HwpxComposeResponse extends ExportResponse {
+  template_id: string;
+  download_id?: string | null;
+  download_url?: string | null;
+  verification: {
+    validation_passed?: boolean;
+    validation_method?: string;
+    validation_errors?: string[];
+    structure_status?: string;
+    structure_preserved?: boolean;
+    text_extraction_method?: string;
+    text_contains_generated_content?: boolean;
+    extracted_text_excerpt?: string;
+    verify_report?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
+  generated_fields: Record<string, string>;
+  confirmation_required: string[];
+}

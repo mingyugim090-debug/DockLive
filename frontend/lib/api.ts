@@ -1,4 +1,4 @@
-import type { ApiResponse, CompanyProfile, DraftStreamEvent, ExportResponse, WorkflowResponse } from './types';
+import type { ApiResponse, CompanyProfile, DraftStreamEvent, ExportResponse, HwpxComposeResponse, WorkflowResponse } from './types';
 
 function resolveApiUrl(): string {
   const configured = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
@@ -13,6 +13,10 @@ function resolveApiUrl(): string {
 }
 
 const API_URL = resolveApiUrl();
+
+export function getApiUrl(): string {
+  return API_URL;
+}
 
 async function readError(res: Response, fallback: string): Promise<Error> {
   const err = await res.json().catch(() => ({ detail: fallback }));
@@ -215,6 +219,30 @@ export async function exportWorkflowHwpxTemplate(
 
   if (!res.ok) {
     throw await readError(res, `HWPX 템플릿 export 실패: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export async function composeHwpxDocument(
+  template: File,
+  requestText: string,
+  applicantContext = '',
+  title = '',
+): Promise<HwpxComposeResponse> {
+  const formData = new FormData();
+  formData.append('template', template);
+  formData.append('request_text', requestText);
+  formData.append('applicant_context', applicantContext);
+  formData.append('title', title);
+
+  const res = await fetch(`${API_URL}/api/hwpx/compose`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!res.ok) {
+    throw await readError(res, `HWPX 자동 작성 실패: ${res.status}`);
   }
 
   return res.json();

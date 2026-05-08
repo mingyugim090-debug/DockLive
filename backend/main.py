@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import settings
-from routers import analyze, demo, workflow
+from routers import analyze, demo, hwpx, workflow
 
 logging.basicConfig(
     level=logging.INFO,
@@ -39,6 +39,7 @@ app.add_middleware(
 
 app.include_router(analyze.router, prefix="/api")
 app.include_router(demo.router, prefix="/api")
+app.include_router(hwpx.router, prefix="/api")
 app.include_router(workflow.router, prefix="/api/workflow")
 
 

@@ -191,5 +191,14 @@ class ExportResponse(BaseModel):
     encoding: Literal["text", "base64"] = "text"
 
 
+class HwpxComposeResponse(ExportResponse):
+    template_id: str
+    download_id: Optional[str] = None
+    download_url: Optional[str] = None
+    verification: dict = Field(default_factory=dict)
+    generated_fields: dict[str, str] = Field(default_factory=dict)
+    confirmation_required: list[str] = Field(default_factory=list)
+
+
 def utc_now_iso() -> str:
     return datetime.utcnow().isoformat() + "Z"

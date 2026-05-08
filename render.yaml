@@ -15,3 +15,7 @@ services:
         value: "20"
       - key: MOCK_MODE
         value: "false"
+      - key: HWPX_EXPORT_ENABLED
+        value: "true"
+      - key: HWPX_SKILL_DIR
+        value: "/app/hwpx_toolchain"

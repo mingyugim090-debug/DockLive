@@ -362,6 +362,9 @@ def _hwpx_skill_dir() -> Path:
     configured = settings.HWPX_SKILL_DIR.strip()
     if configured:
         return Path(configured)
+    bundled = Path(__file__).resolve().parents[1] / "hwpx_toolchain"
+    if bundled.exists():
+        return bundled
     codex_home = os.environ.get("CODEX_HOME")
     if codex_home:
         return Path(codex_home) / "skills" / "hwpx"

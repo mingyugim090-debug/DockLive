@@ -12,6 +12,7 @@ if str(BACKEND) not in sys.path:
 os.environ.setdefault("MOCK_MODE", "true")
 
 try:
+    from core.config import settings  # noqa: E402
     from core.errors import AnalysisError  # noqa: E402
     from models.schemas import AnalysisResult  # noqa: E402
     from services.ai_provider import provider_name, should_use_mock_ai  # noqa: E402
@@ -25,11 +26,17 @@ try:
         generate_drafts,
         update_inputs,
     )
+    from services.hwpx_compose_service import (  # noqa: E402
+        WITHUS_TEMPLATE_ID,
+        compose_hwpx,
+        detect_template,
+    )
     from services.mock_data import get_mock_result  # noqa: E402
 except ModuleNotFoundError as exc:  # pragma: no cover - local minimal Python fallback
     if exc.name != "pydantic":
         raise
     AnalysisError = None
+    settings = None
     AnalysisResult = None
     provider_name = None
     should_use_mock_ai = None
@@ -41,6 +48,9 @@ except ModuleNotFoundError as exc:  # pragma: no cover - local minimal Python fa
     finalize_document = None
     generate_drafts = None
     get_mock_result = None
+    WITHUS_TEMPLATE_ID = None
+    compose_hwpx = None
+    detect_template = None
     update_inputs = None
 
 
@@ -123,6 +133,57 @@ class AgentMvpContractTests(unittest.TestCase):
         with self.assertRaises(Exception) as ctx:
             clone_hwpx_template(b"PK\x03\x04", workflow)
         self.assertIn("HWPX", str(ctx.exception))
+
+    def test_withus_sample_template_is_detected(self):
+        if detect_template is None:
+            self.skipTest("backend dependencies are not installed in this Python environment")
+        sample = ROOT / "docs" / "examples" / "withus-hwpx" / "withus-sample-filled.hwpx"
+        self.assertEqual(detect_template(sample), WITHUS_TEMPLATE_ID)
+
+    def test_hwpx_compose_requires_enabled_toolchain(self):
+        if compose_hwpx is None:
+            self.skipTest("backend dependencies are not installed in this Python environment")
+        sample = ROOT / "docs" / "examples" / "withus-hwpx" / "withus-sample-filled.hwpx"
+        old_enabled = settings.HWPX_EXPORT_ENABLED
+        try:
+            settings.HWPX_EXPORT_ENABLED = False
+            with self.assertRaises(Exception) as ctx:
+                compose_hwpx(sample.read_bytes(), "HWPX 자동 작성 테스트 요청입니다. 샘플 양식을 채워 주세요.")
+            self.assertIn("HWPX", str(ctx.exception))
+        finally:
+            settings.HWPX_EXPORT_ENABLED = old_enabled
+
+    def test_hwpx_compose_generates_base64_with_mock_fields(self):
+        if compose_hwpx is None:
+            self.skipTest("backend dependencies are not installed in this Python environment")
+        sample = ROOT / "docs" / "examples" / "withus-hwpx" / "withus-sample-filled.hwpx"
+        skill_dir = Path.home() / ".codex" / "skills" / "hwpx"
+        if not skill_dir.exists():
+            self.skipTest("hwpx skill is not installed")
+
+        old_enabled = settings.HWPX_EXPORT_ENABLED
+        old_skill_dir = settings.HWPX_SKILL_DIR
+        old_mock = settings.MOCK_MODE
+        try:
+            settings.HWPX_EXPORT_ENABLED = True
+            settings.HWPX_SKILL_DIR = str(skill_dir)
+            settings.MOCK_MODE = True
+            response = compose_hwpx(
+                sample.read_bytes(),
+                "HWPX 자동작성 MVP를 검증하는 AI 문서 자동화 동아리 신청서를 만들어 주세요.",
+                "대표자 김라이브, 미래융합대학 인공지능응용학과",
+                "LiveDock HWPX 자동작성 MVP",
+            )
+            self.assertTrue(response["success"])
+            self.assertEqual(response["template_id"], WITHUS_TEMPLATE_ID)
+            self.assertEqual(response["encoding"], "base64")
+            self.assertGreater(len(response["content"]), 1000)
+            self.assertTrue(response["verification"]["validation_passed"])
+            self.assertTrue(response["verification"]["text_contains_generated_content"])
+        finally:
+            settings.HWPX_EXPORT_ENABLED = old_enabled
+            settings.HWPX_SKILL_DIR = old_skill_dir
+            settings.MOCK_MODE = old_mock
 
 
 if __name__ == "__main__":

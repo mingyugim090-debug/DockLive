@@ -318,6 +318,11 @@ export default function HomePage() {
                   HTML export는 즉시 편집 가능한 fallback으로, HWPX export는 한국 공공문서 제출 환경에 맞춘 최종 포맷으로 유지합니다.
                   공식 HWPX 양식이 있다면 템플릿 채우기 방식으로 이어갈 수 있습니다.
                 </p>
+                <div className="mt-5">
+                  <Button type="button" onClick={() => router.push('/hwpx')}>
+                    HWPX 자동 작성 MVP 열기
+                  </Button>
+                </div>
               </div>
               <div className="grid grid-cols-3 gap-2">
                 {['HTML', 'HWPX', 'Template'].map((item) => (
