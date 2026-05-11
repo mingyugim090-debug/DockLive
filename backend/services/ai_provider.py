@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import re
-from typing import Literal
+from typing import Iterator, Literal
 
 from core.config import settings
 from core.errors import AnalysisError
@@ -62,6 +62,16 @@ def call_json(task: AiTask, system_prompt: str, user_prompt: str, max_tokens: in
     raise AnalysisError(f"지원하지 않는 AI_PROVIDER입니다: {provider}")
 
 
+def stream_text(task: AiTask, system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> Iterator[str]:
+    """Stream text chunks for long-running draft generation when the provider supports it."""
+    provider = provider_name()
+    if should_use_mock_ai():
+        raise AnalysisError("AI API 키가 설정되지 않았습니다. MOCK_MODE를 사용하거나 provider API 키를 설정하세요.")
+    if provider != "openai":
+        raise AnalysisError("실시간 토큰 스트리밍은 현재 OpenAI provider에서만 지원됩니다.")
+    yield from _stream_openai_text(task, system_prompt, user_prompt, max_tokens)
+
+
 def _call_openai_json(task: AiTask, system_prompt: str, user_prompt: str, max_tokens: int) -> dict:
     try:
         from openai import APIConnectionError, AuthenticationError, OpenAI, RateLimitError
@@ -82,6 +92,35 @@ def _call_openai_json(task: AiTask, system_prompt: str, user_prompt: str, max_to
         return json.loads(clean_json(completion.choices[0].message.content or "{}"))
     except json.JSONDecodeError as exc:
         raise exc
+    except AuthenticationError as exc:
+        raise AnalysisError("OpenAI API 키가 유효하지 않습니다.") from exc
+    except APIConnectionError as exc:
+        raise AnalysisError("OpenAI API 연결에 실패했습니다. 네트워크 상태를 확인하세요.") from exc
+    except RateLimitError as exc:
+        raise AnalysisError("OpenAI API 요청 한도를 초과했습니다. 잠시 후 다시 시도하세요.") from exc
+
+
+def _stream_openai_text(task: AiTask, system_prompt: str, user_prompt: str, max_tokens: int) -> Iterator[str]:
+    try:
+        from openai import APIConnectionError, AuthenticationError, OpenAI, RateLimitError
+    except ImportError as exc:
+        raise AnalysisError("OpenAI SDK가 설치되어 있지 않습니다. backend requirements를 설치하세요.") from exc
+
+    try:
+        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        stream = client.chat.completions.create(
+            model=_model_for_task(task),
+            max_tokens=max_tokens,
+            stream=True,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+        for chunk in stream:
+            content = chunk.choices[0].delta.content if chunk.choices and chunk.choices[0].delta else None
+            if content:
+                yield content
     except AuthenticationError as exc:
         raise AnalysisError("OpenAI API 키가 유효하지 않습니다.") from exc
     except APIConnectionError as exc:
@@ -125,6 +164,6 @@ def _call_gemma_json(task: AiTask, system_prompt: str, user_prompt: str, max_tok
         raise exc
     except httpx.HTTPStatusError as exc:
         detail = exc.response.text[:500] if exc.response is not None else str(exc)
-        raise AnalysisError(f"Gemma API 요청이 실패했습니다: {detail}") from exc
+        raise AnalysisError(f"Gemma API 요청에 실패했습니다: {detail}") from exc
     except httpx.HTTPError as exc:
         raise AnalysisError("Gemma API 연결에 실패했습니다. 네트워크 상태를 확인하세요.") from exc

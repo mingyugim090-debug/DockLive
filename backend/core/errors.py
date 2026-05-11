@@ -20,8 +20,8 @@ class FileTooLargeError(HTTPException):
 
 
 class InvalidFileTypeError(HTTPException):
-    def __init__(self):
-        super().__init__(status_code=400, detail="현재는 PDF 파일만 업로드할 수 있습니다.")
+    def __init__(self, detail: str = "현재 지원하는 파일 형식은 PDF, HWPX, HWP입니다."):
+        super().__init__(status_code=400, detail=detail)
 
 
 class AnalysisError(HTTPException):

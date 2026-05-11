@@ -22,6 +22,7 @@ from services.drafting_service import (
     hwpx_bytes_to_base64,
     markdown_to_hwp_compatible_html,
     revise_section,
+    stream_draft_events,
     update_inputs,
 )
 
@@ -35,16 +36,20 @@ def _load_workflow_or_404(workflow_id: str) -> WorkflowSession:
     return WorkflowSession(**data)
 
 
-def _save_and_respond(workflow: WorkflowSession) -> WorkflowResponse:
+def _save_workflow(workflow: WorkflowSession) -> None:
     workflow.updated_at = utc_now_iso()
     storage.save_workflow(workflow.id, workflow.model_dump(mode="json"))
+
+
+def _save_and_respond(workflow: WorkflowSession) -> WorkflowResponse:
+    _save_workflow(workflow)
     return WorkflowResponse(success=True, data=workflow)
 
 
 def _ensure_finalized(workflow: WorkflowSession) -> WorkflowSession:
     if not workflow.final_document:
         workflow = finalize_document(workflow)
-        storage.save_workflow(workflow.id, workflow.model_dump(mode="json"))
+        _save_workflow(workflow)
     return workflow
 
 
@@ -79,19 +84,14 @@ async def stream_draft(workflow_id: str):
         try:
             workflow = _load_workflow_or_404(workflow_id)
             yield event({"type": "section_start", "workflow_id": workflow.id, "content": "초안 생성을 시작합니다."})
-            workflow = generate_drafts(workflow)
-            storage.save_workflow(workflow.id, workflow.model_dump(mode="json"))
-            for draft in workflow.draft_sections:
-                yield event(
-                    {
-                        "type": "section_done",
-                        "workflow_id": workflow.id,
-                        "section_id": draft.section_id,
-                        "content": draft.content_markdown,
-                        "draft_section": draft.model_dump(mode="json"),
-                    }
-                )
-            yield event({"type": "workflow_done", "workflow_id": workflow.id, "content": "초안 생성이 완료되었습니다."})
+            last_workflow = workflow
+            for payload in stream_draft_events(workflow):
+                maybe_workflow = payload.pop("_workflow", None)
+                if maybe_workflow is not None:
+                    last_workflow = maybe_workflow
+                    _save_workflow(last_workflow)
+                yield event(payload)
+            _save_workflow(last_workflow)
         except Exception as exc:
             yield event({"type": "error", "workflow_id": workflow_id, "content": str(exc)})
 
@@ -138,9 +138,17 @@ async def export_hwp_compatible_html(workflow_id: str):
         workflow.final_document.title,
     )
     safe_title = "".join(ch if ch.isalnum() else "_" for ch in workflow.final_document.title).strip("_")
+    filename = f"{safe_title or 'livedock_export'}.html"
+    storage.save_export_file(
+        workflow.id,
+        filename,
+        html.encode("utf-8"),
+        "text/html; charset=utf-8",
+        "html",
+    )
     return ExportResponse(
         success=True,
-        filename=f"{safe_title or 'livedock_export'}.html",
+        filename=filename,
         content_type="text/html; charset=utf-8",
         content=html,
         encoding="text",
@@ -155,6 +163,7 @@ async def export_hwpx(workflow_id: str):
         workflow.final_document.content_markdown,
         workflow.final_document.title,
     )
+    storage.save_export_file(workflow.id, filename, content, "application/vnd.hancom.hwpx", "hwpx")
     return ExportResponse(
         success=True,
         filename=filename,
@@ -189,6 +198,7 @@ async def export_hwpx_from_template(
         replacements={str(key): str(value) for key, value in replacements.items()},
         keywords={str(key): str(value) for key, value in keywords.items()},
     )
+    storage.save_export_file(workflow.id, filename, content, "application/vnd.hancom.hwpx", "hwpx_template")
     return ExportResponse(
         success=True,
         filename=filename,

@@ -4,12 +4,16 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import sys
-import tempfile
 import time
-from datetime import datetime
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Iterator
+from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
+from xml.sax.saxutils import escape as xml_escape
 
 from core.config import settings
 from core.errors import AnalysisError
@@ -23,9 +27,14 @@ from models.schemas import (
     WorkflowSession,
     utc_now_iso,
 )
-from services.ai_provider import call_json, provider_name, should_use_mock_ai
+from services.ai_provider import call_json, provider_name, should_use_mock_ai, stream_text
 
 logger = logging.getLogger(__name__)
+
+SECTION_DRAFT_SYSTEM_PROMPT = """당신은 한국 공모전, 지원사업, 장학금, 연구과제 제출 문서를 작성하는 AI Agent입니다.
+공고 분석 결과와 사용자 입력만 근거로 섹션별 초안을 작성하세요.
+마감일, 자격, 금액, 기관명, 제출 방법처럼 중요한 사실을 새로 만들지 마세요.
+검증이 필요한 주장은 초안에 단정하지 말고 확인 필요 항목으로 남겨야 합니다."""
 
 
 def create_input_fields(analysis: AnalysisResult, company_profile: CompanyProfile | None = None) -> list[UserInputField]:
@@ -51,7 +60,7 @@ def create_input_fields(analysis: AnalysisResult, company_profile: CompanyProfil
             label="아이디어 또는 프로젝트 요약",
             required=True,
             description="지원하려는 아이디어, 연구, 활동 또는 사업의 핵심 내용을 적어 주세요.",
-            placeholder="무엇을 만들고, 누구의 어떤 문제를 해결하는지 적어 주세요.",
+            placeholder="무엇을 만들고, 어떤 문제를 해결하는지 적어 주세요.",
         ),
         UserInputField(
             id="evidence",
@@ -136,7 +145,7 @@ def _confirmation_items(workflow: WorkflowSession) -> list[str]:
     items.append("제출 전 공고 원문, 사용자 입력, 증빙자료와 초안의 핵심 주장이 일치하는지 확인하세요.")
     if not workflow.analysis.source_evidence:
         items.append("핵심 주장과 수치가 공고 원문 및 사용자 입력에 근거하는지 확인하세요.")
-    return items
+    return list(dict.fromkeys(item for item in items if item))
 
 
 def _mock_draft_section(workflow: WorkflowSession, draft: DraftSection) -> DraftSection:
@@ -176,6 +185,38 @@ def _call_draft_json(system_prompt: str, user_prompt: str, max_tokens: int = 409
     return call_json("draft", system_prompt, user_prompt, max_tokens=max_tokens)
 
 
+def _draft_json_prompt(workflow: WorkflowSession) -> str:
+    user_payload = {
+        "analysis": workflow.analysis.model_dump(mode="json"),
+        "match_report": workflow.match_report.model_dump(mode="json") if workflow.match_report else None,
+        "company_profile": workflow.company_profile.model_dump(mode="json") if workflow.company_profile else None,
+        "user_inputs": [field.model_dump(mode="json") for field in workflow.user_inputs],
+        "sections": [draft.model_dump(mode="json") for draft in workflow.draft_sections],
+    }
+    return (
+        "아래 정보를 바탕으로 모든 섹션 초안을 작성하세요. "
+        "응답 형식은 {\"draft_sections\":[{\"section_id\":\"...\",\"content_markdown\":\"...\","
+        "\"needs_confirmation\":[\"...\"]}]} 입니다.\n\n"
+        + json.dumps(user_payload, ensure_ascii=False)[: settings.MAX_DRAFT_INPUT_LENGTH]
+    )
+
+
+def _single_section_prompt(workflow: WorkflowSession, draft: DraftSection) -> str:
+    payload = {
+        "analysis": workflow.analysis.model_dump(mode="json"),
+        "match_report": workflow.match_report.model_dump(mode="json") if workflow.match_report else None,
+        "company_profile": workflow.company_profile.model_dump(mode="json") if workflow.company_profile else None,
+        "user_inputs": [field.model_dump(mode="json") for field in workflow.user_inputs],
+        "target_section": draft.model_dump(mode="json"),
+    }
+    return (
+        f"'{draft.title}' 섹션의 한국어 마크다운 초안만 작성하세요. "
+        "JSON, 코드블록, 설명 문구 없이 본문만 출력하세요. "
+        "검증이 필요한 사실은 본문 끝에 '확인 필요' 목록으로 표시하세요.\n\n"
+        + json.dumps(payload, ensure_ascii=False)[: settings.MAX_DRAFT_INPUT_LENGTH]
+    )
+
+
 def generate_drafts(workflow: WorkflowSession) -> WorkflowSession:
     missing = missing_required_inputs(workflow)
     workflow.status = "collecting_inputs" if missing else "drafting"
@@ -188,36 +229,15 @@ def generate_drafts(workflow: WorkflowSession) -> WorkflowSession:
         workflow.updated_at = utc_now_iso()
         return workflow
 
-    use_mock = should_use_mock_ai()
-
-    if use_mock:
+    if should_use_mock_ai():
         workflow.draft_sections = [_mock_draft_section(workflow, draft) for draft in workflow.draft_sections]
         workflow.status = "reviewing"
         workflow.updated_at = utc_now_iso()
         return workflow
 
-    system_prompt = """당신은 한국 공모전, 지원사업, 장학금, 연구과제 제출 문서를 작성하는 AI Agent입니다.
-공고 분석 결과와 사용자 입력만 근거로 섹션별 초안을 작성하세요.
-마감일, 자격, 금액, 제출 방법 같은 핵심 사실을 새로 만들지 마세요.
-불확실하거나 검증이 필요한 주장은 needs_confirmation에 넣으세요.
-반드시 JSON 객체만 반환하세요."""
-    user_payload = {
-        "analysis": workflow.analysis.model_dump(mode="json"),
-        "match_report": workflow.match_report.model_dump(mode="json") if workflow.match_report else None,
-        "company_profile": workflow.company_profile.model_dump(mode="json") if workflow.company_profile else None,
-        "user_inputs": [field.model_dump(mode="json") for field in workflow.user_inputs],
-        "sections": [draft.model_dump(mode="json") for draft in workflow.draft_sections],
-    }
-    user_prompt = (
-        "아래 정보를 바탕으로 모든 섹션 초안을 작성하세요. "
-        "응답 형식은 {\"draft_sections\":[{\"section_id\":\"...\",\"content_markdown\":\"...\","
-        "\"needs_confirmation\":[\"...\"]}]} 입니다.\n\n"
-        + json.dumps(user_payload, ensure_ascii=False)[: settings.MAX_DRAFT_INPUT_LENGTH]
-    )
-
     try:
         t0 = time.time()
-        data = _call_draft_json(system_prompt, user_prompt)
+        data = _call_draft_json(SECTION_DRAFT_SYSTEM_PROMPT + "\n반드시 JSON 객체만 반환하세요.", _draft_json_prompt(workflow))
         logger.info("%s draft response received (%.1fs)", provider_name(), time.time() - t0)
         by_section = {item.get("section_id"): item for item in data.get("draft_sections", [])}
         for draft in workflow.draft_sections:
@@ -236,8 +256,59 @@ def generate_drafts(workflow: WorkflowSession) -> WorkflowSession:
         workflow.status = "reviewing"
         workflow.updated_at = utc_now_iso()
         return workflow
-    except Exception as e:
-        raise AnalysisError(f"초안 생성 중 오류가 발생했습니다: {e}")
+    except Exception as exc:
+        raise AnalysisError(f"초안 생성 중 오류가 발생했습니다: {exc}") from exc
+
+
+def stream_draft_events(workflow: WorkflowSession) -> Iterator[dict]:
+    """Yield SSE-ready draft events, using real OpenAI token streaming when available."""
+    missing = missing_required_inputs(workflow)
+    if missing or should_use_mock_ai() or provider_name() != "openai":
+        workflow = generate_drafts(workflow)
+        for draft in workflow.draft_sections:
+            yield {
+                "type": "section_done",
+                "workflow_id": workflow.id,
+                "section_id": draft.section_id,
+                "content": draft.content_markdown,
+                "draft_section": draft.model_dump(mode="json"),
+                "_workflow": workflow,
+            }
+        yield {"type": "workflow_done", "workflow_id": workflow.id, "content": "초안 생성이 완료되었습니다.", "_workflow": workflow}
+        return
+
+    workflow.status = "drafting"
+    for draft in workflow.draft_sections:
+        yield {"type": "section_start", "workflow_id": workflow.id, "section_id": draft.section_id, "content": draft.title, "_workflow": workflow}
+        chunks: list[str] = []
+        try:
+            for chunk in stream_text("draft", SECTION_DRAFT_SYSTEM_PROMPT, _single_section_prompt(workflow, draft)):
+                chunks.append(chunk)
+                yield {"type": "delta", "workflow_id": workflow.id, "section_id": draft.section_id, "content": chunk, "_workflow": workflow}
+        except Exception as exc:
+            draft.status = "needs_input"
+            draft.confirmation_required = [f"실시간 초안 생성 실패: {exc}"]
+            draft.needs_confirmation = draft.confirmation_required
+            yield {"type": "error", "workflow_id": workflow.id, "section_id": draft.section_id, "content": str(exc), "_workflow": workflow}
+            continue
+
+        draft.content_markdown = "".join(chunks).strip()
+        draft.status = "drafted"
+        draft.confirmation_required = _confirmation_items(workflow)
+        draft.needs_confirmation = draft.confirmation_required
+        draft.updated_at = utc_now_iso()
+        yield {
+            "type": "section_done",
+            "workflow_id": workflow.id,
+            "section_id": draft.section_id,
+            "content": draft.content_markdown,
+            "draft_section": draft.model_dump(mode="json"),
+            "_workflow": workflow,
+        }
+
+    workflow.status = "reviewing"
+    workflow.updated_at = utc_now_iso()
+    yield {"type": "workflow_done", "workflow_id": workflow.id, "content": "초안 생성이 완료되었습니다.", "_workflow": workflow}
 
 
 def revise_section(workflow: WorkflowSession, section_id: str) -> WorkflowSession:
@@ -287,7 +358,7 @@ def finalize_document(workflow: WorkflowSession) -> WorkflowSession:
     if workflow.match_report:
         lines.extend(
             [
-                "## 지원 적합성",
+                "## 지원 적합도",
                 "",
                 f"- 점수: {workflow.match_report.score}/100",
                 f"- 판정: {workflow.match_report.verdict}",
@@ -306,7 +377,7 @@ def finalize_document(workflow: WorkflowSession) -> WorkflowSession:
     workflow.final_document = FinalDocument(
         title=title,
         content_markdown="\n".join(lines).strip(),
-        created_at=datetime.utcnow().isoformat() + "Z",
+        created_at=datetime.now(timezone.utc).isoformat(),
     )
     workflow.status = "finalized"
     workflow.updated_at = utc_now_iso()
@@ -406,17 +477,23 @@ def export_markdown_to_hwpx(markdown: str, title: str) -> tuple[str, bytes]:
 
     scripts = _require_hwpx_scripts("md2hwpx.py", "fix_namespaces.py", "validate.py")
     safe_title = _safe_title(title)
-    with tempfile.TemporaryDirectory() as tmp:
-        tmpdir = Path(tmp)
+    tmpdir = _make_tmp_dir()
+    try:
         markdown_path = tmpdir / "input.md"
         output_path = tmpdir / f"{safe_title}.hwpx"
         markdown_path.write_text(markdown, encoding="utf-8")
 
         python_bin = sys.executable or "python"
-        _run_hwpx_command([python_bin, str(scripts["md2hwpx.py"]), str(markdown_path), "-o", str(output_path)])
-        _run_hwpx_command([python_bin, str(scripts["fix_namespaces.py"]), str(output_path)])
+        try:
+            _run_hwpx_command([python_bin, str(scripts["md2hwpx.py"]), str(markdown_path), "-o", str(output_path)])
+            _run_hwpx_command([python_bin, str(scripts["fix_namespaces.py"]), str(output_path)])
+        except subprocess.CalledProcessError as exc:
+            logger.warning("md2hwpx.py failed; using minimal internal HWPX fallback: %s", (exc.stderr or exc.stdout or exc)[:500])
+            _build_minimal_hwpx(markdown, title, output_path)
         _run_hwpx_command([python_bin, str(scripts["validate.py"]), str(output_path)])
         return output_path.name, output_path.read_bytes()
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def build_template_replacements(workflow: WorkflowSession, extra: dict[str, str] | None = None) -> dict[str, str]:
@@ -467,8 +544,8 @@ def clone_hwpx_template(
     assert workflow.final_document is not None
 
     safe_title = _safe_title(workflow.final_document.title)
-    with tempfile.TemporaryDirectory() as tmp:
-        tmpdir = Path(tmp)
+    tmpdir = _make_tmp_dir()
+    try:
         source_path = tmpdir / "template.hwpx"
         output_path = tmpdir / f"{safe_title}_filled.hwpx"
         map_path = tmpdir / "replacements.json"
@@ -511,7 +588,84 @@ def clone_hwpx_template(
             ]
         )
         return output_path.name, output_path.read_bytes()
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def hwpx_bytes_to_base64(content: bytes) -> str:
     return base64.b64encode(content).decode("ascii")
+
+
+def _build_minimal_hwpx(markdown: str, title: str, output_path: Path) -> None:
+    """Build a structurally valid editable HWPX package when python-hwpx templates are unavailable."""
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    plain_lines = [_markdown_line_to_text(line) for line in markdown.splitlines()]
+    paragraphs = []
+    for i, line in enumerate(plain_lines):
+        text = xml_escape(line or " ")
+        paragraphs.append(
+            f'''  <hp:p id="{1000 + i}" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
+    <hp:run charPrIDRef="0"><hp:t>{text}</hp:t></hp:run>
+  </hp:p>'''
+        )
+    if not paragraphs:
+        paragraphs.append(
+            '''  <hp:p id="1000" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
+    <hp:run charPrIDRef="0"><hp:t> </hp:t></hp:run>
+  </hp:p>'''
+        )
+
+    section_xml = f'''<?xml version="1.0" encoding="UTF-8"?>
+<hs:sec xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section"
+        xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph">
+{chr(10).join(paragraphs)}
+</hs:sec>'''
+    header_xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<hh:head xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head"
+         xmlns:hc="http://www.hancom.co.kr/hwpml/2011/core">
+  <hh:beginNum page="1" footnote="1" endnote="1" pic="1" tbl="1" equation="1"/>
+  <hh:refList/>
+</hh:head>'''
+    content_hpf = f'''<?xml version="1.0" encoding="UTF-8"?>
+<opf:package xmlns:opf="http://www.idpf.org/2007/opf/" xmlns:dc="http://purl.org/dc/elements/1.1/" unique-identifier="uid">
+  <opf:metadata>
+    <dc:title>{xml_escape(title)}</dc:title>
+    <opf:meta name="creator">LiveDock Agent</opf:meta>
+    <opf:meta name="CreatedDate">{now}</opf:meta>
+    <opf:meta name="ModifiedDate">{now}</opf:meta>
+  </opf:metadata>
+  <opf:manifest>
+    <opf:item id="header" href="header.xml" media-type="text/xml"/>
+    <opf:item id="section0" href="section0.xml" media-type="text/xml"/>
+  </opf:manifest>
+  <opf:spine>
+    <opf:itemref idref="section0"/>
+  </opf:spine>
+</opf:package>'''
+
+    with ZipFile(output_path, "w", ZIP_DEFLATED) as zf:
+        zf.writestr("mimetype", "application/hwp+zip", compress_type=ZIP_STORED)
+        zf.writestr("Contents/content.hpf", content_hpf, compress_type=ZIP_DEFLATED)
+        zf.writestr("Contents/header.xml", header_xml, compress_type=ZIP_DEFLATED)
+        zf.writestr("Contents/section0.xml", section_xml, compress_type=ZIP_DEFLATED)
+
+
+def _markdown_line_to_text(line: str) -> str:
+    value = line.strip()
+    value = re.sub(r"^#{1,6}\s+", "", value)
+    value = re.sub(r"^\s*[-*]\s+", "- ", value)
+    value = re.sub(r"\*\*(.+?)\*\*", r"\1", value)
+    value = re.sub(r"`(.+?)`", r"\1", value)
+    return value
+
+
+def _workspace_tmp_root() -> Path:
+    root = Path(__file__).resolve().parents[1] / ".tmp"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _make_tmp_dir() -> Path:
+    path = _workspace_tmp_root() / f"livedock_{uuid.uuid4().hex}"
+    path.mkdir(parents=False, exist_ok=False)
+    return path

@@ -25,7 +25,7 @@ Status labels:
 | P1-02 | Add uncertain field handling to prompts | Done |
 | P1-03 | Create 5 representative eval fixtures | Done |
 | P1-04 | Add backend schema validation tests | Done |
-| P1-05 | Add OCR/HWP/HWPX ingestion strategy | Planned |
+| P1-05 | Add OCR/HWP/HWPX ingestion strategy | Done |
 
 ## Phase 2 - Workflow and Drafting
 
@@ -34,7 +34,7 @@ Status labels:
 | P2-01 | Generate user input fields from analysis sections | Done |
 | P2-02 | Add confirmation_required to drafts | Done |
 | P2-03 | Add section-level draft stream endpoint | Done |
-| P2-04 | Improve real token streaming from OpenAI | Planned |
+| P2-04 | Improve real token streaming from OpenAI | Done |
 | P2-05 | Add frontend EventSource UI for live section updates | Done |
 
 ## Phase 3 - Export
@@ -44,17 +44,17 @@ Status labels:
 | P3-01 | Keep HTML export fallback | Done |
 | P3-02 | Install hwpx skill locally | Done |
 | P3-03 | Add optional HWPX export endpoint | Done |
-| P3-04 | Validate HWPX export with installed toolchain | In progress |
+| P3-04 | Validate HWPX export with installed toolchain | Done |
 | P3-05 | Add form cloning path for uploaded HWPX templates | Done |
-| P3-06 | Add HWP to HWPX conversion path | Planned |
+| P3-06 | Add HWP to HWPX conversion path | Done |
 
 ## Phase 4 - Supabase
 
 | ID | Task | Status |
 | --- | --- | --- |
-| P4-01 | Define Supabase tables for workflows and documents | Planned |
-| P4-02 | Persist analysis/workflow sessions in Supabase | Planned |
-| P4-03 | Store uploaded PDFs and generated exports | Planned |
+| P4-01 | Define Supabase tables for workflows and documents | Done |
+| P4-02 | Persist analysis/workflow sessions in Supabase | Done |
+| P4-03 | Store uploaded PDFs and generated exports | Done |
 | P4-04 | Add auth only after Agent MVP workflow is stable | Planned |
 
 ## Phase 5 - Community v2

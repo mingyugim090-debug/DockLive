@@ -52,7 +52,7 @@ async def fetch_announcement_url(url: str) -> tuple[str, str]:
             response = await client.get(url)
             response.raise_for_status()
     except httpx.HTTPError as e:
-        raise AnalysisError(f"URL 내용을 가져오지 못했습니다: {e}")
+        raise AnalysisError(f"URL 내용을 가져오지 못했습니다: {e}") from e
 
     content_type = response.headers.get("content-type", "")
     if "pdf" in content_type:

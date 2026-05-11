@@ -102,3 +102,24 @@ When the HWPX toolchain is enabled:
 3. Run `fix_namespaces.py`.
 4. Run `validate.py`.
 5. Extract text and check title/section presence.
+
+## Fixture E2E Eval
+
+Run the deterministic end-to-end fixture eval from the repository root:
+
+```bash
+py backend\tests\evals\run_fixture_e2e.py --mode deterministic
+```
+
+This validates that each real-notice-style fixture can move through analysis
+normalization, workflow creation, required input collection, section draft
+generation, confirmation, finalization, HTML export, and persistence hooks.
+
+To evaluate actual model extraction quality, configure the backend provider and
+run:
+
+```bash
+py backend\tests\evals\run_fixture_e2e.py --mode real-ai --min-score 80
+```
+
+The report is written to `outputs/fixture-e2e-report.json`.

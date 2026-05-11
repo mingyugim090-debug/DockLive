@@ -8,7 +8,9 @@ from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import FileResponse
 
 from core.errors import AnalysisError
-from models.schemas import HwpxComposeResponse
+from models.schemas import HwpxComposeResponse, HwpxConvertResponse
+from services import storage
+from services.document_ingestion import convert_hwp_to_hwpx
 from services.hwpx_compose_service import compose_hwpx
 
 router = APIRouter()
@@ -33,10 +35,40 @@ async def compose_hwpx_document(
         applicant_context=applicant_context,
         title=title,
     )
+    storage.save_export_file(
+        "standalone",
+        result["filename"],
+        base64.b64decode(result["content"]),
+        HWPX_MEDIA_TYPE,
+        "hwpx_compose",
+    )
     download_id = _persist_hwpx_export(result)
     result["download_id"] = download_id
     result["download_url"] = f"/api/hwpx/download/{download_id}?filename={quote(result['filename'], safe='')}"
     return HwpxComposeResponse(**result)
+
+
+@router.post("/hwpx/convert-hwp", response_model=HwpxConvertResponse)
+async def convert_hwp_document(file: UploadFile = File(...)):
+    if not file.filename or not file.filename.lower().endswith(".hwp"):
+        raise AnalysisError("HWP 파일만 변환할 수 있습니다.")
+
+    content, warnings = convert_hwp_to_hwpx(await file.read(), file.filename)
+    filename = f"{Path(file.filename).stem}.hwpx"
+    result = {
+        "success": True,
+        "filename": filename,
+        "content_type": HWPX_MEDIA_TYPE,
+        "content": base64.b64encode(content).decode("ascii"),
+        "encoding": "base64",
+        "source_filename": file.filename,
+        "conversion_method": "convert_hwp.py -> fix_namespaces.py -> validate.py",
+        "warnings": warnings,
+    }
+    download_id = _persist_hwpx_export(result)
+    storage.save_export_file("standalone", filename, content, HWPX_MEDIA_TYPE, "hwp_to_hwpx")
+    result["warnings"] = warnings + [f"download_id={download_id}"]
+    return HwpxConvertResponse(**result)
 
 
 @router.get("/hwpx/download/{download_id}")

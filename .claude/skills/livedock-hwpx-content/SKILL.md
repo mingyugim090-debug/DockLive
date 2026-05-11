@@ -1,32 +1,11 @@
 ---
 name: livedock-hwpx-content
-description: Use after LiveDock HWPX intake to generate structured JSON for form fields, table cells, replacements, keywords, section drafts, and confirmation_required items using the configured AI provider.
+description: Use after LiveDock HWPX intake to generate structured JSON for form fields, replacements, keywords, section content, and confirmation_required items.
 ---
 
 # LiveDock HWPX Content
 
-Use this after `livedock-hwpx-intake`.
-
-## Role
-
-Generate content and mapping JSON only. Do not create files here.
-
-Gemma/OpenAI should produce:
-
-- `replacements`: exact source XML/text fragments mapped to replacement XML/text.
-- `keywords`: safe fallback text replacements inside `<hp:t>` nodes.
-- `section_content`: draft content by logical section.
-- `confirmation_required`: claims or missing facts the user must verify.
-
-## Prompt Rules
-
-Tell the model:
-
-- Use the uploaded template structure and user input.
-- Keep the original form's tone and purpose.
-- Do not invent deadlines, eligibility, amounts, organization names, or submission methods.
-- Mark uncertain facts in `confirmation_required`.
-- Return JSON only.
+HWPX 파일을 직접 생성하지 않습니다. 이 단계는 양식에 채울 내용과 매핑 JSON만 만듭니다.
 
 ## Output Contract
 
@@ -36,25 +15,36 @@ Tell the model:
     "source text or exact XML fragment": "replacement text or XML fragment"
   },
   "keywords": {
-    "2026 년     월     일": "2026년 5월 5일"
+    "existing placeholder text": "replacement text"
   },
   "section_content": {
-    "활동계획서": "..."
+    "지원 동기": "reviewed section draft"
   },
   "confirmation_required": []
 }
 ```
 
-## Blank Cell Rule
+## When Section Drafts Already Exist
 
-When a form has empty cells, prefer backend-assisted cell mapping:
+If `livedock-section-draft` already produced reviewed sections, pass them directly as `section_content`. Do not rewrite them from scratch. The model should only map content into the HWPX form.
 
-1. Analyze table/cell positions.
-2. Replace only the empty cell's existing run with `<hp:t>value</hp:t>`.
-3. Preserve table, paragraph, run, and style counts whenever possible.
+## Rules
 
-The soccer-club test follows this pattern through `backend/tests/manual/manual_hwpx_soccer_application.py`.
+- Preserve the original form's table, paragraph, run, image, and style structure.
+- Prefer backend-assisted cell mapping for blank table cells.
+- Do not invent personal data, dates, amounts, eligibility, organization names, or signatures.
+- Put missing or uncertain facts into `confirmation_required`.
+- Return JSON only.
 
-## User Confirmation Gate
+## Blank Cell Mapping
 
-If `confirmation_required` is not empty, pause export until the user confirms or supplies missing information.
+For empty cells:
+
+1. identify the table cell position,
+2. replace only that cell's text run,
+3. keep surrounding XML structure intact,
+4. validate with `livedock-hwpx-validate`.
+
+## Confirmation Gate
+
+If `confirmation_required` is not empty, pause export until the user confirms or supplies corrected information.

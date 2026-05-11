@@ -12,7 +12,7 @@ def get_mock_result() -> dict:
         "organization": "서울청년경제진흥원",
         "summary": (
             "예비 창업자와 초기 창업팀을 대상으로 창업 아이디어와 실행 계획을 평가하는 공모전입니다. "
-            "선정팀에는 상금, 창업 멘토링, 공유오피스 이용권이 제공됩니다."
+            "선정 팀에는 상금, 창업 멘토링, 공유오피스 이용권이 제공됩니다."
         ),
         "timeline": [
             {"label": "접수 시작", "date": (today + timedelta(days=1)).isoformat(), "is_deadline": False},
@@ -34,7 +34,7 @@ def get_mock_result() -> dict:
                 "file_format": "HWP, PDF",
             },
             {
-                "label": "팀원 재학 또는 재직 증명서",
+                "label": "대표자 재학 또는 재직 증명서",
                 "category": "required",
                 "description": "팀 참가 시 구성원 전원 제출이 필요합니다.",
                 "file_format": "PDF",

@@ -60,6 +60,7 @@ outputs/
 tools/hwp-mcp/pytest-cache-files-*/
 .livedock_storage/
 backend/.livedock_storage/
+backend/.tmp/
 
 # ==========================
 # Misc

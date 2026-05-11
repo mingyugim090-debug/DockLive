@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 DocType = Literal["competition", "research", "scholarship", "startup"]
 ItemCategory = Literal["required", "optional"]
 DayStatus = Literal["safe", "warning", "danger", "passed"]
-SourceType = Literal["pdf", "url", "text", "demo"]
+SourceType = Literal["pdf", "url", "text", "demo", "hwpx", "hwp"]
 InputFieldType = Literal["text", "textarea", "number", "date", "file_note"]
 DraftStatus = Literal["empty", "needs_input", "drafted", "revised", "confirmed"]
 WorkflowStatus = Literal["analyzed", "collecting_inputs", "drafting", "reviewing", "confirmed", "finalized"]
@@ -200,5 +200,11 @@ class HwpxComposeResponse(ExportResponse):
     confirmation_required: list[str] = Field(default_factory=list)
 
 
+class HwpxConvertResponse(ExportResponse):
+    source_filename: str
+    conversion_method: str
+    warnings: list[str] = Field(default_factory=list)
+
+
 def utc_now_iso() -> str:
-    return datetime.utcnow().isoformat() + "Z"
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")

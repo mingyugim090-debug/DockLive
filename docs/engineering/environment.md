@@ -43,6 +43,10 @@ Create a project and prepare:
 - service role key
 - storage bucket: `livedock-documents`
 
+Run `docs/engineering/supabase-schema.sql` in the Supabase SQL editor before
+enabling production persistence. The backend writes with the service role key,
+so row-level security policies can remain locked down until Auth is added.
+
 Production persistence should use Supabase. Redis/in-memory is only a temporary fallback.
 
 ## HWPX Skill

@@ -1,7 +1,7 @@
 export type DocType = 'competition' | 'research' | 'scholarship' | 'startup';
 export type ItemCategory = 'required' | 'optional';
 export type DayStatus = 'safe' | 'warning' | 'danger' | 'passed';
-export type SourceType = 'pdf' | 'url' | 'text' | 'demo';
+export type SourceType = 'pdf' | 'url' | 'text' | 'demo' | 'hwpx' | 'hwp';
 export type InputFieldType = 'text' | 'textarea' | 'number' | 'date' | 'file_note';
 export type DraftStatus = 'empty' | 'needs_input' | 'drafted' | 'revised' | 'confirmed';
 export type DraftStreamEventType = 'section_start' | 'delta' | 'section_done' | 'workflow_done' | 'error';
@@ -182,4 +182,10 @@ export interface HwpxComposeResponse extends ExportResponse {
   };
   generated_fields: Record<string, string>;
   confirmation_required: string[];
+}
+
+export interface HwpxConvertResponse extends ExportResponse {
+  source_filename: string;
+  conversion_method: string;
+  warnings: string[];
 }

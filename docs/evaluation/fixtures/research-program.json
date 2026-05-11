@@ -13,5 +13,5 @@
     "연구기간을 원문 없이 추론한다.",
     "예산 지원 규모를 원문 없이 추정한다."
   ],
-  "uncertainty_rule": "연구기간과 지원 예산은 원문에 없으므로 uncertain_fields에 둘 수 있다."
+  "uncertainty_rule": "연구기간과 지원 예산은 원문에 없으므로 uncertain_fields에 남긴다."
 }

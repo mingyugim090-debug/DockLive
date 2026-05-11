@@ -1,21 +1,22 @@
 ---
 name: livedock-hwpx-validate
-description: Use after any LiveDock HWPX generation or edit. Runs namespace fixing, structural validation, source/result verification, and content checks before the file can be returned to a user.
+description: Use after any LiveDock HWPX generation, conversion, clone, or edit. Runs namespace fixing, structural validation, source/result verification, and content checks before returning a file.
 ---
 
 # LiveDock HWPX Validate
 
-Run after every HWPX generation/edit. No exceptions.
+Every generated or edited HWPX must pass this quality gate.
 
 ## Required Sequence
 
+For generated HWPX:
+
 ```powershell
-$env:PYTHONIOENCODING="utf-8"
 python "$env:HWPX_SKILL_DIR\scripts\fix_namespaces.py" output.hwpx
 python "$env:HWPX_SKILL_DIR\scripts\validate.py" output.hwpx
 ```
 
-For cloned or edited templates:
+For cloned templates:
 
 ```powershell
 python "$env:HWPX_SKILL_DIR\scripts\verify_hwpx.py" `
@@ -24,13 +25,22 @@ python "$env:HWPX_SKILL_DIR\scripts\verify_hwpx.py" `
   --json verify_report.json
 ```
 
+For HWP conversion:
+
+```powershell
+python "$env:HWPX_SKILL_DIR\scripts\convert_hwp.py" input.hwp -o output.hwpx
+python "$env:HWPX_SKILL_DIR\scripts\fix_namespaces.py" output.hwpx
+python "$env:HWPX_SKILL_DIR\scripts\validate.py" output.hwpx
+```
+
 ## PASS Criteria
 
 - `validate.py` exits successfully.
-- XML errors are zero.
-- For cloned templates, table/image/run counts must not decrease.
-- `section0.xml` size must not collapse below safe thresholds.
-- Expected inserted text is present in `Contents/section0.xml`.
+- Required ZIP entries exist.
+- XML is well-formed.
+- `mimetype` is first and uncompressed.
+- For cloned templates, table/image counts do not decrease.
+- Expected inserted text is present.
 
 ## Fallback Text Check
 
@@ -43,8 +53,8 @@ with zipfile.ZipFile("output.hwpx") as z:
     assert "expected text" in section
 ```
 
-## Rules
+## Failure Policy
 
-- Do not return files to users before validation passes.
-- Save `verify_report.json` for debugging and audit.
+- Do not return HWPX files before validation passes.
 - If validation fails twice, stop and report the failing stage.
+- Offer HTML export as an editable fallback when HWPX cannot be validated.

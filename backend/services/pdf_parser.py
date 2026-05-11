@@ -1,12 +1,15 @@
-import fitz  # PyMuPDF
-
 from core.errors import InvalidFileTypeError, PDFParseError
 
 
 def extract_text_from_pdf(pdf_bytes: bytes, filename: str = "") -> str:
     """Extract text from a PDF byte stream."""
     if filename and not filename.lower().endswith(".pdf"):
-        raise InvalidFileTypeError()
+        raise InvalidFileTypeError("PDF 파일만 이 추출기에 전달할 수 있습니다.")
+
+    try:
+        import fitz  # PyMuPDF
+    except ImportError as exc:
+        raise PDFParseError("PyMuPDF가 설치되어 있지 않아 PDF를 처리할 수 없습니다. backend requirements를 설치하세요.") from exc
 
     try:
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
@@ -27,4 +30,4 @@ def extract_text_from_pdf(pdf_bytes: bytes, filename: str = "") -> str:
     except (PDFParseError, InvalidFileTypeError):
         raise
     except Exception as e:
-        raise PDFParseError(f"PDF 처리 중 오류가 발생했습니다: {str(e)}")
+        raise PDFParseError(f"PDF 처리 중 오류가 발생했습니다: {str(e)}") from e

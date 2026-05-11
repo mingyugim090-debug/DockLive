@@ -141,7 +141,7 @@ def analyze_announcement(text: str, source_name: str = "uploaded document") -> d
         data = call_json("analysis", SYSTEM_PROMPT, retry_prompt)
         return _validate_result(data)
     except json.JSONDecodeError as exc:
-        raise AnalysisError(f"AI 응답을 JSON으로 해석하지 못했습니다. 공고문을 다시 확인하세요. ({exc})") from exc
+        raise AnalysisError(f"AI 응답을 JSON으로 해석하지 못했습니다. 공고문을 다시 확인해 주세요. ({exc})") from exc
     except AnalysisError:
         raise
     except Exception as exc:
@@ -171,7 +171,7 @@ def _mock_match_report(company_profile: CompanyProfile) -> dict:
     score = 68 if has_profile else 45
     return {
         "score": score,
-        "verdict": "기본 요건은 검토 가능하지만 세부 자격은 공고 원문과 사용자 정보를 추가 확인해야 합니다.",
+        "verdict": "기본 요건은 검토 가능하지만, 세부 자격은 공고 원문과 사용자 정보를 추가 확인해야 합니다.",
         "signals": [
             {
                 "label": "지원 자격",

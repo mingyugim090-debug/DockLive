@@ -1,6 +1,7 @@
 import logging
 import uuid
 from datetime import date, datetime, timezone
+from typing import Any
 
 from models.schemas import AnalysisResult, ChecklistItem, DocumentSection, SourceEvidence, TimelineItem
 
@@ -33,14 +34,14 @@ _FALLBACK_SECTIONS: dict[str, list[dict[str, str | int]]] = {
         {"title": "문제 정의", "hint": "해결하려는 문제와 배경을 구체적으로 작성하세요.", "order": 1},
         {"title": "아이디어 개요", "hint": "제안하는 아이디어와 차별점을 요약하세요.", "order": 2},
         {"title": "실행 방법", "hint": "구현 방식, 일정, 필요한 자원을 설명하세요.", "order": 3},
-        {"title": "기대 효과", "hint": "정량적/정성적 효과를 작성하세요.", "order": 4},
+        {"title": "기대 효과", "hint": "정량적·정성적 효과를 작성하세요.", "order": 4},
         {"title": "팀 소개", "hint": "팀원의 역할과 관련 경험을 소개하세요.", "order": 5},
     ],
     "research": [
         {"title": "연구 배경", "hint": "연구 필요성과 기존 연구 대비 차별점을 작성하세요.", "order": 1},
         {"title": "연구 목적", "hint": "측정 가능한 연구 목표를 명확히 작성하세요.", "order": 2},
         {"title": "연구 방법", "hint": "수행 방법, 실험 설계, 데이터 수집 계획을 작성하세요.", "order": 3},
-        {"title": "기대 성과", "hint": "학술적/사회적 활용 방안을 작성하세요.", "order": 4},
+        {"title": "기대 성과", "hint": "학술적·사회적 활용 방안을 작성하세요.", "order": 4},
     ],
     "scholarship": [
         {"title": "지원 동기", "hint": "장학금이 필요한 이유와 계기를 작성하세요.", "order": 1},
@@ -76,7 +77,7 @@ def _get_d_day_status(d_day: int) -> str:
     return "safe"
 
 
-def _normalize_date(date_str: str) -> str:
+def _normalize_date(date_str: Any) -> str:
     if not date_str:
         return ""
     value = str(date_str).strip()
@@ -98,7 +99,7 @@ def _normalize_date(date_str: str) -> str:
     return ""
 
 
-def _as_list(value) -> list[str]:
+def _as_list(value: Any) -> list[str]:
     if isinstance(value, list):
         return [str(item).strip() for item in value if str(item).strip()]
     if isinstance(value, str) and value.strip():
@@ -106,7 +107,7 @@ def _as_list(value) -> list[str]:
     return []
 
 
-def _source_evidence(value) -> list[SourceEvidence]:
+def _source_evidence(value: Any) -> list[SourceEvidence]:
     if not isinstance(value, list):
         return []
     evidence: list[SourceEvidence] = []
@@ -134,6 +135,8 @@ def build_analysis_result(raw: dict, source_type: str = "pdf", source_name: str 
     timeline: list[TimelineItem] = []
     seen_dates: set[str] = set()
     for i, item in enumerate(raw.get("timeline", [])):
+        if not isinstance(item, dict):
+            continue
         date_str = _normalize_date(item.get("date", ""))
         if not date_str:
             continue
@@ -157,6 +160,8 @@ def build_analysis_result(raw: dict, source_type: str = "pdf", source_name: str 
 
     checklist: list[ChecklistItem] = []
     for i, item in enumerate(raw.get("checklist", [])):
+        if not isinstance(item, dict):
+            continue
         label = str(item.get("label", "")).strip()
         if not label:
             continue
@@ -175,6 +180,8 @@ def build_analysis_result(raw: dict, source_type: str = "pdf", source_name: str 
 
     sections: list[DocumentSection] = []
     for i, item in enumerate(raw.get("document_sections", [])):
+        if not isinstance(item, dict):
+            continue
         title = str(item.get("title", "")).strip()
         if not title:
             continue

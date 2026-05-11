@@ -3,7 +3,7 @@ import logging
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from core.config import settings
-from core.errors import FileTooLargeError, InvalidFileTypeError
+from core.errors import FileTooLargeError
 from models.schemas import (
     AnalysisResponse,
     AnalysisResult,
@@ -15,10 +15,10 @@ from models.schemas import (
 from services import storage
 from services.analyzer import build_analysis_result
 from services.ai_provider import provider_name, should_use_mock_ai
+from services.document_ingestion import ingest_uploaded_document
 from services.drafting_service import create_workflow_session
 from services.mock_data import get_mock_result
 from services.openai_service import analyze_announcement, evaluate_match
-from services.pdf_parser import extract_text_from_pdf
 from services.url_ingestion import fetch_announcement_url
 
 logger = logging.getLogger(__name__)
@@ -58,9 +58,12 @@ def _analyze_text(
         match_report = MatchReport(**evaluate_match(result.model_dump(mode="json"), company_profile))
 
     logger.info(
-        f"Analysis complete: id={result.id} type={result.doc_type} "
-        f"timeline={len(result.timeline)} checklist={len(result.checklist)} "
-        f"sections={len(result.document_template)}"
+        "Analysis complete: id=%s type=%s timeline=%s checklist=%s sections=%s",
+        result.id,
+        result.doc_type,
+        len(result.timeline),
+        len(result.checklist),
+        len(result.document_template),
     )
     persist_analysis_and_workflow(result, company_profile, match_report)
     return result, match_report
@@ -76,17 +79,20 @@ async def analyze_document(
     company_strengths: str = Form(""),
     company_needs: str = Form(""),
 ):
-    """Analyze an uploaded PDF announcement and create a workflow session."""
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise InvalidFileTypeError()
-
+    """Analyze an uploaded PDF/HWPX/HWP announcement and create a workflow session."""
     contents = await file.read()
     max_bytes = settings.MAX_PDF_SIZE_MB * 1024 * 1024
     if len(contents) > max_bytes:
         raise FileTooLargeError(settings.MAX_PDF_SIZE_MB)
 
-    text = extract_text_from_pdf(contents, file.filename)
-    logger.info(f"PDF text extracted: {file.filename} ({len(text)} chars)")
+    ingested = ingest_uploaded_document(contents, file.filename or "uploaded_document")
+    logger.info(
+        "Document text extracted: %s type=%s chars=%s warnings=%s",
+        ingested.source_name,
+        ingested.source_type,
+        len(ingested.text),
+        len(ingested.warnings),
+    )
 
     profile = _profile_from_form(
         company_name,
@@ -96,7 +102,16 @@ async def analyze_document(
         company_strengths,
         company_needs,
     )
-    result, match_report = _analyze_text(text, "pdf", file.filename, profile)
+    result, match_report = _analyze_text(ingested.text, ingested.source_type, ingested.source_name, profile)
+    storage.save_source_file(
+        result.id,
+        file.filename or ingested.source_name,
+        contents,
+        file.content_type or "application/octet-stream",
+    )
+    if ingested.warnings:
+        result.uncertain_fields = list(dict.fromkeys(result.uncertain_fields + ingested.warnings))
+        persist_analysis_and_workflow(result, profile, match_report)
     return AnalysisResponse(success=True, data=result, match_report=match_report)
 
 
@@ -124,7 +139,7 @@ async def get_result(result_id: str):
     """Load a stored analysis result by id."""
     data = storage.load_result(result_id)
     if data is None:
-        logger.warning(f"Analysis result not found: {result_id}")
+        logger.warning("Analysis result not found: %s", result_id)
         raise HTTPException(
             status_code=404,
             detail="분석 결과를 찾을 수 없습니다. 링크가 만료되었거나 서버가 다시 시작되었을 수 있습니다.",
@@ -133,8 +148,8 @@ async def get_result(result_id: str):
         result = AnalysisResult(**data)
         return AnalysisResponse(success=True, data=result)
     except Exception as e:
-        logger.error(f"Failed to restore analysis result {result_id}: {e}")
-        raise HTTPException(status_code=500, detail="분석 결과 데이터를 복원하지 못했습니다.")
+        logger.error("Failed to restore analysis result %s: %s", result_id, e)
+        raise HTTPException(status_code=500, detail="분석 결과 데이터를 복원하지 못했습니다.") from e
 
 
 def _profile_from_form(

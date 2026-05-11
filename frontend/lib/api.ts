@@ -1,4 +1,12 @@
-import type { ApiResponse, CompanyProfile, DraftStreamEvent, ExportResponse, HwpxComposeResponse, WorkflowResponse } from './types';
+import type {
+  ApiResponse,
+  CompanyProfile,
+  DraftStreamEvent,
+  ExportResponse,
+  HwpxComposeResponse,
+  HwpxConvertResponse,
+  WorkflowResponse,
+} from './types';
 
 function resolveApiUrl(): string {
   const configured = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
@@ -243,6 +251,22 @@ export async function composeHwpxDocument(
 
   if (!res.ok) {
     throw await readError(res, `HWPX 자동 작성 실패: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export async function convertHwpToHwpx(file: File): Promise<HwpxConvertResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await fetch(`${API_URL}/api/hwpx/convert-hwp`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!res.ok) {
+    throw await readError(res, `HWP 변환 실패: ${res.status}`);
   }
 
   return res.json();

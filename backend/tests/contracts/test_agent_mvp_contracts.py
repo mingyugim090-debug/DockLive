@@ -23,9 +23,12 @@ try:
         confirm_workflow,
         create_workflow_session,
         finalize_document,
+        export_markdown_to_hwpx,
         generate_drafts,
+        stream_draft_events,
         update_inputs,
     )
+    from services.document_ingestion import ingest_uploaded_document  # noqa: E402
     from services.hwpx_compose_service import (  # noqa: E402
         WITHUS_TEMPLATE_ID,
         compose_hwpx,
@@ -46,7 +49,10 @@ except ModuleNotFoundError as exc:  # pragma: no cover - local minimal Python fa
     confirm_workflow = None
     create_workflow_session = None
     finalize_document = None
+    export_markdown_to_hwpx = None
     generate_drafts = None
+    stream_draft_events = None
+    ingest_uploaded_document = None
     get_mock_result = None
     WITHUS_TEMPLATE_ID = None
     compose_hwpx = None
@@ -104,6 +110,42 @@ class AgentMvpContractTests(unittest.TestCase):
         self.assertEqual(workflow.status, "finalized")
         self.assertIsNotNone(workflow.final_document)
         self.assertIn("제출 전 확인 필요", workflow.final_document.content_markdown)
+
+    def test_mock_stream_draft_events_emit_section_done(self):
+        if AnalysisResult is None or stream_draft_events is None:
+            self.skipTest("backend dependencies are not installed in this Python environment")
+        result = build_analysis_result(get_mock_result(), source_type="demo", source_name="mock")
+        workflow = create_workflow_session(result)
+        updates = {field.id: f"{field.label} 테스트 입력" for field in workflow.user_inputs if field.required}
+        workflow = update_inputs(workflow, updates)
+
+        events = list(stream_draft_events(workflow))
+        event_types = [event["type"] for event in events]
+
+        self.assertIn("section_done", event_types)
+        self.assertEqual(event_types[-1], "workflow_done")
+        self.assertTrue(any(event.get("draft_section") for event in events))
+
+    def test_hwpx_upload_ingestion_extracts_text_with_fallback(self):
+        if ingest_uploaded_document is None:
+            self.skipTest("backend dependencies are not installed in this Python environment")
+        sample = ROOT / "docs" / "examples" / "withus-hwpx" / "withus-sample-filled.hwpx"
+
+        ingested = ingest_uploaded_document(sample.read_bytes(), sample.name)
+
+        self.assertEqual(ingested.source_type, "hwpx")
+        self.assertGreater(len(ingested.text), 20)
+        self.assertEqual(ingested.source_name, sample.name)
+
+    def test_markdown_hwpx_export_returns_zip_package(self):
+        if export_markdown_to_hwpx is None:
+            self.skipTest("backend dependencies are not installed in this Python environment")
+
+        filename, content = export_markdown_to_hwpx("# 테스트 문서\n\n본문입니다.", "테스트 문서")
+
+        self.assertTrue(filename.endswith(".hwpx"))
+        self.assertGreater(len(content), 500)
+        self.assertEqual(content[:2], b"PK")
 
     def test_template_replacements_include_final_document_and_sections(self):
         if AnalysisResult is None:

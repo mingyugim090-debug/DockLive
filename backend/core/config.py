@@ -21,6 +21,7 @@ if BaseSettings:
         SUPABASE_SERVICE_ROLE_KEY: str = ""
         SUPABASE_ANON_KEY: str = ""
         SUPABASE_STORAGE_BUCKET: str = "livedock-documents"
+        SUPABASE_TIMEOUT_SECONDS: int = 10
         OPENAI_ANALYSIS_MODEL: str = "gpt-4o-mini"
         OPENAI_DRAFT_MODEL: str = "gpt-4o-mini"
         GEMMA_ANALYSIS_MODEL: str = "gemma-4-26b-a4b-it"
@@ -49,6 +50,7 @@ else:
         SUPABASE_SERVICE_ROLE_KEY: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
         SUPABASE_ANON_KEY: str = os.getenv("SUPABASE_ANON_KEY", "")
         SUPABASE_STORAGE_BUCKET: str = os.getenv("SUPABASE_STORAGE_BUCKET", "livedock-documents")
+        SUPABASE_TIMEOUT_SECONDS: int = int(os.getenv("SUPABASE_TIMEOUT_SECONDS", "10"))
         OPENAI_ANALYSIS_MODEL: str = os.getenv("OPENAI_ANALYSIS_MODEL", "gpt-4o-mini")
         OPENAI_DRAFT_MODEL: str = os.getenv("OPENAI_DRAFT_MODEL", "gpt-4o-mini")
         GEMMA_ANALYSIS_MODEL: str = os.getenv("GEMMA_ANALYSIS_MODEL", "gemma-4-26b-a4b-it")
