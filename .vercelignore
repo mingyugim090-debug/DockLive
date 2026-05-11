@@ -1,0 +1,7 @@
+backend/.tmp/
+backend/.livedock_storage/
+backend/venv/
+frontend/.next/
+frontend/node_modules/
+outputs/
+tools/hwp-mcp/pytest-cache-files-*
