@@ -1,3 +1,4 @@
+import base64
 import json
 import logging
 from pathlib import Path
@@ -381,10 +382,6 @@ def save_export_file(
     export_id = str(uuid4())
     safe_filename = _safe_storage_name(filename)
     storage_path = f"exports/{workflow_id}/{export_id}_{safe_filename}"
-    uploaded_path = _supabase_upload(storage_path, content, content_type)
-    if not uploaded_path:
-        return None
-
     row = {
         "id": export_id,
         "workflow_id": workflow_id,
@@ -393,12 +390,29 @@ def save_export_file(
         "export_type": export_type,
         "size_bytes": len(content),
         "storage_bucket": settings.SUPABASE_STORAGE_BUCKET,
-        "storage_path": uploaded_path,
+        "storage_path": storage_path,
         "created_at": _utc_now(),
     }
-    if _supabase_insert(SUPABASE_EXPORT_TABLE, row):
+
+    uploaded_path = _supabase_upload(storage_path, content, content_type)
+    if uploaded_path and _supabase_insert(SUPABASE_EXPORT_TABLE, {**row, "storage_path": uploaded_path}):
         return row
-    return None
+
+    fallback_key = f"export:{workflow_id}:{export_id}"
+    fallback_row = {**row, "storage_bucket": "file_cache", "storage_path": fallback_key}
+    _save_file_cache(
+        fallback_key,
+        {
+            **fallback_row,
+            "content_base64": base64.b64encode(content).decode("ascii"),
+        },
+    )
+    list_key = f"exports:{workflow_id}"
+    existing = _load_file_cache(list_key) or {}
+    items = [item for item in existing.get("items", []) if isinstance(item, dict) and item.get("id") != export_id]
+    items.insert(0, fallback_row)
+    _save_file_cache(list_key, {"items": items})
+    return fallback_row
 
 
 def list_export_files(workflow_id: str) -> list[dict[str, Any]]:
@@ -411,7 +425,13 @@ def list_export_files(workflow_id: str) -> list[dict[str, Any]]:
         f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/{SUPABASE_EXPORT_TABLE}"
         f"?workflow_id=eq.{encoded_workflow_id}&select={columns}&order=created_at.desc"
     )
-    return _supabase_select(url)
+    rows = _supabase_select(url)
+    if rows:
+        return rows
+
+    fallback = _load_file_cache(f"exports:{workflow_id}") or {}
+    items = fallback.get("items", [])
+    return items if isinstance(items, list) else []
 
 
 def load_export_file(workflow_id: str, export_id: str) -> Optional[dict[str, Any]]:
@@ -426,10 +446,21 @@ def load_export_file(workflow_id: str, export_id: str) -> Optional[dict[str, Any
         f"?id=eq.{encoded_export_id}&workflow_id=eq.{encoded_workflow_id}&select={columns}&limit=1"
     )
     rows = _supabase_select(url)
-    if not rows:
+    if rows:
+        row = rows[0]
+        content = _supabase_download(row.get("storage_bucket") or settings.SUPABASE_STORAGE_BUCKET, row.get("storage_path", ""))
+        if content is not None:
+            return {**row, "content": content}
+
+    fallback = _load_file_cache(f"export:{workflow_id}:{export_id}")
+    if not fallback:
         return None
-    row = rows[0]
-    content = _supabase_download(row.get("storage_bucket") or settings.SUPABASE_STORAGE_BUCKET, row.get("storage_path", ""))
-    if content is None:
+    encoded_content = fallback.get("content_base64")
+    if not isinstance(encoded_content, str):
         return None
-    return {**row, "content": content}
+    try:
+        content = base64.b64decode(encoded_content.encode("ascii"))
+    except Exception as e:
+        logger.warning("Fallback export decode failed for workflow=%s export=%s: %s", workflow_id, export_id, e)
+        return None
+    return {**fallback, "content": content}

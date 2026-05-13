@@ -34,6 +34,7 @@ try:
         detect_template,
     )
     from services.mock_data import get_mock_result  # noqa: E402
+    from services.storage import list_export_files, load_export_file, save_export_file  # noqa: E402
 except ModuleNotFoundError as exc:  # pragma: no cover - local minimal Python fallback
     if exc.name != "pydantic":
         raise
@@ -55,6 +56,9 @@ except ModuleNotFoundError as exc:  # pragma: no cover - local minimal Python fa
     update_inputs = None
     ingest_uploaded_document = None
     get_mock_result = None
+    list_export_files = None
+    load_export_file = None
+    save_export_file = None
     WITHUS_TEMPLATE_ID = None
     compose_hwpx = None
     detect_template = None
@@ -107,6 +111,25 @@ class AgentMvpContractTests(unittest.TestCase):
         response = ExportListResponse(success=True, data=[metadata])
         self.assertEqual(response.data[0].workflow_id, "workflow-1")
         self.assertEqual(response.data[0].export_type, "html")
+
+    def test_export_file_fallback_can_list_and_reload(self):
+        if save_export_file is None:
+            self.skipTest("backend dependencies are not installed in this Python environment")
+        workflow_id = "contract-export-workflow"
+        row = save_export_file(
+            workflow_id,
+            "contract.html",
+            "<h1>계약 테스트</h1>".encode("utf-8"),
+            "text/html; charset=utf-8",
+            "contract_html",
+        )
+
+        self.assertIsNotNone(row)
+        exports = list_export_files(workflow_id)
+        self.assertTrue(any(item["id"] == row["id"] for item in exports))
+        loaded = load_export_file(workflow_id, row["id"])
+        self.assertIsNotNone(loaded)
+        self.assertIn("계약 테스트".encode("utf-8"), loaded["content"])
 
     def test_mock_workflow_reaches_final_document(self):
         if AnalysisResult is None:
