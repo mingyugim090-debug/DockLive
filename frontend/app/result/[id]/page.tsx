@@ -111,19 +111,19 @@ function MetricCard({ label, value, desc, tone = 'neutral' }: { label: string; v
   return (
     <div
       className={cn(
-        'rounded-lg border p-4',
+        'rounded-xl border p-4',
         tone === 'info'
           ? 'border-sky-400/20 bg-sky-400/[0.05]'
           : tone === 'warning'
             ? 'border-amber-400/20 bg-amber-400/[0.06]'
             : tone === 'success'
               ? 'border-emerald-400/20 bg-emerald-400/[0.05]'
-              : 'border-white/10 bg-white/[0.035]',
+              : 'border-white/[0.08] bg-white/[0.03]',
       )}
     >
-      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text3">{label}</p>
-      <div className="mt-2 text-lg font-semibold text-text">{value}</div>
-      {desc ? <p className="mt-1 text-xs leading-5 text-text3">{desc}</p> : null}
+      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-text3">{label}</p>
+      <div className="mt-2 text-base font-bold text-text">{value}</div>
+      {desc ? <p className="mt-0.5 text-xs leading-5 text-text3">{desc}</p> : null}
     </div>
   );
 }
@@ -532,9 +532,14 @@ export default function ResultPage() {
   if (error && !activeAnalysis) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-bg px-6 text-center">
-        <div className="glass-panel max-w-md rounded-lg border border-white/10 p-8">
-          <p className="text-lg font-semibold text-text">결과를 찾을 수 없습니다</p>
-          <p className="mt-3 text-sm leading-6 text-text2">{error}</p>
+        <div className="max-w-md rounded-xl border border-white/[0.08] bg-[rgba(13,19,36,0.8)] p-8 shadow-panel backdrop-blur-sm">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-rose-400/20 bg-rose-400/10">
+            <svg className="h-6 w-6 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+            </svg>
+          </div>
+          <p className="text-base font-bold text-text">결과를 찾을 수 없습니다</p>
+          <p className="mt-2 text-sm leading-6 text-text3">{error}</p>
           <Button type="button" className="mt-6" onClick={() => router.push('/')}>
             다시 분석하기
           </Button>
@@ -554,27 +559,48 @@ export default function ResultPage() {
         status={<WorkflowStatusBadge status={workflow.status} />}
         right={
           <>
-            <span className="hidden md:inline-flex">
-              <Button type="button" variant="ghost" onClick={handleCopyShare}>
-                공유
-              </Button>
-            </span>
-            <Button type="button" onClick={() => setStep(4)}>
-              최종 export
+            <Button type="button" variant="ghost" onClick={handleCopyShare} className="hidden sm:inline-flex">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314m-9.566 7.5 9.566 5.314m0 0a2.25 2.25 0 1 0 3.935 2.186 2.25 2.25 0 0 0-3.935-2.186Zm0-12.814a2.25 2.25 0 1 0 3.933-2.185 2.25 2.25 0 0 0-3.933 2.185Z" />
+              </svg>
+              공유
+            </Button>
+            <Button type="button" onClick={() => setStep(4)} className="text-sm">
+              최종 Export
             </Button>
           </>
         }
       />
 
-      <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[270px_minmax(0,1fr)]">
-        <aside className="space-y-4 lg:sticky lg:top-24 lg:h-fit">
+      <div className="mx-auto grid max-w-7xl gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[260px_minmax(0,1fr)]">
+        {/* Sidebar */}
+        <aside className="space-y-4 lg:sticky lg:top-[72px] lg:h-fit">
           <WorkflowStepper currentStep={currentStep} onChange={setStep} />
-          <div className="glass-panel hidden rounded-lg border border-white/10 p-4 lg:block">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text3">Session</p>
-            <div className="mt-4 space-y-3">
-              <MetricCard label="필수 입력" value={`${requiredStats.filled}/${requiredStats.total}`} desc={`${requiredStats.percent}% 완료`} tone="warning" />
-              <MetricCard label="초안 섹션" value={workflow.draft_sections.length} desc={draftReady ? '초안 내용 있음' : '생성 대기'} tone="info" />
-            </div>
+
+          {/* Session stats (desktop) */}
+          <div className="hidden space-y-3 rounded-xl border border-white/[0.08] bg-[rgba(13,19,36,0.6)] p-4 lg:block">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-text3">세션 상태</p>
+            <MetricCard
+              label="필수 입력"
+              value={`${requiredStats.filled} / ${requiredStats.total}`}
+              desc={`${requiredStats.percent}% 완료`}
+              tone="warning"
+            />
+            <MetricCard
+              label="초안 섹션"
+              value={workflow.draft_sections.length}
+              desc={draftReady ? '초안 내용 있음' : '생성 대기 중'}
+              tone="info"
+            />
+
+            {/* Deadline quick view */}
+            {mainDeadline ? (
+              <div className="rounded-xl border border-amber-400/20 bg-amber-400/[0.06] p-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300">마감</p>
+                <p className="mt-1.5 text-sm font-bold text-text">{mainDeadline.label}</p>
+                <p className="mt-0.5 text-[11px] text-text3">{formatDate(mainDeadline.date)}</p>
+              </div>
+            ) : null}
           </div>
         </aside>
 

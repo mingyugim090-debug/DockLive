@@ -67,7 +67,7 @@ const WORKFLOW_FEATURES = [
     badge: 'Review',
   },
   {
-    title: 'HWPX/HTML export',
+    title: 'HWPX / HTML export',
     desc: '최종 문서를 editable HTML로 확보하고, HWPX 또는 공식 양식 채우기 흐름으로 이어갑니다.',
     badge: 'Export',
   },
@@ -162,10 +162,10 @@ export default function HomePage() {
 
   return (
     <>
-      {/* Fixed header */}
+      {/* Fixed landing header */}
       <LandingHeader onScrollToWorkspace={scrollToWorkspace} />
 
-      {/* ── Landing page (light theme) ── */}
+      {/* ── Landing (light theme) ── */}
       <div className="bg-white">
         <HeroSection onStart={scrollToWorkspace} onDemo={handleDemo} isLoading={isAnalyzing} />
         <ProblemSection />
@@ -179,62 +179,97 @@ export default function HomePage() {
       {/* ── Workspace (dark theme) ── */}
       <div className="bg-bg text-text">
         {backendReady === false ? (
-          <div className="mx-auto max-w-7xl px-4 pt-4 sm:px-6">
+          <div className="mx-auto max-w-7xl px-4 pt-6 sm:px-6">
             <NoticeBanner tone="warning">
               백엔드 연결을 확인하는 중입니다. 배포 환경에서는 첫 요청이 잠시 느릴 수 있습니다.
             </NoticeBanner>
           </div>
         ) : null}
 
-        {/* Workspace heading */}
-        <div className="mx-auto max-w-7xl px-4 pt-16 sm:px-6">
-          <div className="mb-8 text-center">
-            <div className="mb-4 flex flex-wrap justify-center gap-2">
-              <StatusBadge label="Agent MVP" tone="info" />
-              <StatusBadge label="PDF · URL · Text" tone="neutral" />
-              <StatusBadge label="HWPX ready" tone="success" />
+        {/* Workspace header */}
+        <div
+          id="workspace"
+          className="scroll-mt-0 border-b border-white/[0.07] bg-gradient-to-b from-[rgba(124,140,255,0.06)] to-transparent"
+        >
+          <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6">
+            <div className="flex flex-col items-center text-center">
+              {/* Status badges */}
+              <div className="mb-5 flex flex-wrap justify-center gap-2">
+                <StatusBadge label="Agent MVP" tone="info" />
+                <StatusBadge label="PDF · URL · Text" tone="neutral" />
+                <StatusBadge label="HWPX ready" tone="success" />
+              </div>
+
+              {/* Headline */}
+              <h2 className="text-2xl font-bold tracking-tight text-text sm:text-3xl">
+                공고 분석 작업공간
+              </h2>
+              <p className="mt-3 max-w-lg text-sm leading-6 text-text3">
+                공고문을 업로드하거나 URL·텍스트로 입력하면 AI Agent가 분석을 시작합니다.
+              </p>
+
+              {/* Quick actions */}
+              <div className="mt-6 flex flex-wrap justify-center gap-3">
+                <button
+                  onClick={handleDemo}
+                  disabled={isAnalyzing}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.05] px-4 py-2 text-sm font-semibold text-text2 transition hover:border-white/18 hover:bg-white/[0.08] disabled:opacity-50"
+                >
+                  <svg className="h-4 w-4 text-text3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+                  </svg>
+                  {isAnalyzing ? '불러오는 중...' : '샘플 실행'}
+                </button>
+                <button
+                  onClick={() => router.push('/hwpx')}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.05] px-4 py-2 text-sm font-semibold text-text2 transition hover:border-white/18 hover:bg-white/[0.08]"
+                >
+                  <svg className="h-4 w-4 text-text3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                  </svg>
+                  HWPX 자동작성
+                </button>
+              </div>
             </div>
-            <h2 className="text-3xl font-semibold tracking-normal text-text">공고 분석 작업공간</h2>
-            <p className="mt-3 text-text2">공고문을 업로드하고 AI Agent의 분석을 바로 시작하세요.</p>
           </div>
         </div>
 
-        {/* Upload workspace */}
+        {/* Input workspace */}
         <motion.section
-          id="workspace"
           variants={stagger}
           initial={false}
           whileInView="show"
-          viewport={{ once: true, margin: '-120px' }}
-          className="mx-auto grid max-w-7xl scroll-mt-20 gap-6 px-4 pb-12 pt-4 sm:px-6 lg:grid-cols-[1.12fr_0.88fr]"
+          viewport={{ once: true, margin: '-80px' }}
+          className="mx-auto grid max-w-7xl gap-5 px-4 py-8 sm:px-6 lg:grid-cols-[1.15fr_0.85fr]"
         >
+          {/* Left: Upload / input panel */}
           <SectionCard
-            title="공고 입력 작업공간"
+            title="공고 입력"
             eyebrow="Start"
-            desc="공고를 넣으면 분석 결과와 문서 작성 워크플로가 생성됩니다. 입력 방식만 고르면 API 흐름은 동일하게 유지됩니다."
+            desc="공고를 넣으면 분석 결과와 문서 작성 워크플로가 생성됩니다."
             action={
-              <StatusBadge label={canAnalyze ? 'Ready' : 'Input needed'} tone={canAnalyze ? 'success' : 'warning'} />
+              <StatusBadge label={canAnalyze ? 'Ready' : '입력 필요'} tone={canAnalyze ? 'success' : 'warning'} />
             }
           >
-            <div className="space-y-5">
+            <div className="space-y-4">
               <InputModeTabs mode={mode} onChange={setMode} />
 
               {mode === 'file' ? (
                 <UploadDropzone file={file} onFile={setFile} />
               ) : mode === 'url' ? (
-                <div className="rounded-lg border border-white/10 bg-white/[0.035] p-4">
+                <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-4">
                   <TextInput
                     label="공고 URL"
                     value={url}
                     onChange={setUrl}
                     placeholder="https://www.example.go.kr/notice/..."
                   />
-                  <p className="mt-3 text-xs leading-5 text-text3">
+                  <p className="mt-2.5 text-xs leading-5 text-text3">
                     원문 접근이 가능한 공개 URL을 입력해 주세요. PDF 링크와 공고 상세 페이지 모두 사용할 수 있습니다.
                   </p>
                 </div>
               ) : (
-                <div className="rounded-lg border border-white/10 bg-white/[0.035] p-4">
+                <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-4">
                   <div className="grid gap-4">
                     <TextInput
                       label="공고 제목 또는 출처"
@@ -247,59 +282,64 @@ export default function HomePage() {
                       value={announcementText}
                       onChange={setAnnouncementText}
                       placeholder="공고문 내용을 붙여 넣어 주세요. 일정, 지원 자격, 제출 서류가 포함될수록 분석 품질이 좋아집니다."
-                      minHeight="min-h-[260px]"
+                      minHeight="min-h-[240px]"
                     />
                   </div>
                 </div>
               )}
 
-              <div className="flex flex-col gap-3 rounded-lg border border-white/10 bg-bg/45 p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-text">분석 준비 상태</p>
-                  <p className="mt-1 text-xs leading-5 text-text3">{readinessText}</p>
+              {/* Readiness + CTA bar */}
+              <div className="flex flex-col gap-3 rounded-xl border border-white/[0.08] bg-white/[0.025] p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-text">
+                    {canAnalyze ? '분석 준비 완료' : '분석 준비 중'}
+                  </p>
+                  <p className="mt-0.5 truncate text-xs text-text3">{readinessText}</p>
                 </div>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <Button type="button" variant="secondary" onClick={handleDemo} disabled={isAnalyzing}>
-                    샘플 실행
-                  </Button>
-                  <Button type="button" onClick={runAnalysis} disabled={!canAnalyze || isAnalyzing}>
-                    {isAnalyzing ? '분석 중...' : 'Agent 분석 시작'}
-                  </Button>
-                </div>
+                <Button
+                  type="button"
+                  onClick={runAnalysis}
+                  loading={isAnalyzing}
+                  disabled={!canAnalyze || isAnalyzing}
+                  className="shrink-0"
+                >
+                  {isAnalyzing ? '분석 중' : 'AI 분석 시작'}
+                </Button>
               </div>
 
               {errorMsg ? <ErrorBanner>{errorMsg}</ErrorBanner> : null}
             </div>
           </SectionCard>
 
+          {/* Right: company context */}
           <ProfileContextCard company={company} onChange={setCompany} />
         </motion.section>
 
         {/* Workflow explanation */}
         <motion.section
-          id="workflow"
           variants={stagger}
           initial={false}
           whileInView="show"
-          viewport={{ once: true, margin: '-120px' }}
-          className="mx-auto max-w-7xl px-4 py-12 sm:px-6"
+          viewport={{ once: true, margin: '-80px' }}
+          className="mx-auto max-w-7xl px-4 py-10 sm:px-6"
         >
           <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Workflow</p>
-              <h2 className="mt-3 text-2xl font-semibold tracking-normal text-text">문서 제출까지 끊기지 않는 Agent 흐름</h2>
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary">Workflow</p>
+              <h2 className="mt-2 text-xl font-bold tracking-tight text-text">문서 제출까지 끊기지 않는 Agent 흐름</h2>
             </div>
-            <p className="max-w-xl text-sm leading-6 text-text2">
-              분석, 입력, 초안, 최종 export를 한 화면의 작업 단계로 분리해 사용자가 확인해야 할 내용을 놓치지 않도록 정리했습니다.
+            <p className="max-w-lg text-sm leading-6 text-text3">
+              분석, 입력, 초안, 최종 export를 하나의 작업 단계로 분리해 사용자가 확인해야 할 내용을 놓치지 않도록 정리했습니다.
             </p>
           </div>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             {WORKFLOW_FEATURES.map((feature, index) => (
               <motion.div key={feature.title} variants={fadeUp}>
                 <InfoCard title={feature.title} tone={index === 4 ? 'success' : index === 3 ? 'warning' : 'info'}>
                   <div className="mt-3">
                     <StatusBadge label={feature.badge} tone={index === 4 ? 'success' : index === 3 ? 'warning' : 'info'} />
-                    <p className="mt-4 text-sm leading-6 text-text2">{feature.desc}</p>
+                    <p className="mt-3 text-sm leading-6 text-text3">{feature.desc}</p>
                   </div>
                 </InfoCard>
               </motion.div>
@@ -307,28 +347,28 @@ export default function HomePage() {
           </div>
         </motion.section>
 
-        {/* Export options */}
-        <section id="export" className="mx-auto max-w-7xl px-4 pb-16 sm:px-6">
-          <div className="mesh-bg rounded-lg border border-white/10 p-6 md:p-8">
-            <div className="grid gap-6 md:grid-cols-[1fr_0.7fr] md:items-center">
+        {/* Export options banner */}
+        <section className="mx-auto max-w-7xl px-4 pb-16 sm:px-6">
+          <div className="mesh-bg rounded-xl border border-white/[0.08] p-6 md:p-8">
+            <div className="grid gap-6 md:grid-cols-[1fr_auto] md:items-center">
               <div>
-                <StatusBadge label="Export" tone="success" />
-                <h2 className="mt-4 text-2xl font-semibold tracking-normal text-text">최종 문서는 검토 가능한 형태로 남깁니다</h2>
-                <p className="mt-3 max-w-2xl text-sm leading-7 text-text2">
+                <StatusBadge label="Export" tone="success" className="mb-4" />
+                <h2 className="text-xl font-bold tracking-tight text-text">
+                  최종 문서는 검토 가능한 형태로 남깁니다
+                </h2>
+                <p className="mt-2.5 max-w-2xl text-sm leading-7 text-text3">
                   HTML export는 즉시 편집 가능한 fallback으로, HWPX export는 한국 공공문서 제출 환경에 맞춘 최종 포맷으로 유지합니다.
                   공식 HWPX 양식이 있다면 템플릿 채우기 방식으로 이어갈 수 있습니다.
                 </p>
-                <div className="mt-5">
-                  <Button type="button" onClick={() => router.push('/hwpx')}>
-                    HWPX 자동 작성 MVP 열기
-                  </Button>
-                </div>
               </div>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="flex flex-wrap gap-2">
                 {['HTML', 'HWPX', 'Template'].map((item) => (
-                  <div key={item} className="rounded-lg border border-white/10 bg-bg/45 px-3 py-4 text-center">
-                    <p className="text-sm font-semibold text-text">{item}</p>
-                    <p className="mt-1 text-[11px] text-text3">export</p>
+                  <div
+                    key={item}
+                    className="flex flex-col items-center rounded-xl border border-white/10 bg-white/[0.04] px-5 py-4 text-center"
+                  >
+                    <p className="text-sm font-bold text-text">{item}</p>
+                    <p className="mt-0.5 text-[11px] text-text3">export</p>
                   </div>
                 ))}
               </div>
