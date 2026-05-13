@@ -42,6 +42,14 @@ export interface SourceEvidence {
   quote: string;
   page?: number | null;
   note?: string | null;
+  confidence: number;
+}
+
+export interface MissingQuestion {
+  id: string;
+  question: string;
+  reason: string;
+  required_for: string;
 }
 
 export interface AnalysisResult {
@@ -63,6 +71,7 @@ export interface AnalysisResult {
   cautions: string[];
   uncertain_fields: string[];
   source_evidence: SourceEvidence[];
+  missing_questions: MissingQuestion[];
 }
 
 export interface CompanyProfile {
@@ -106,6 +115,10 @@ export interface DraftSection {
   section_id: string;
   title: string;
   content_markdown: string;
+  purpose: string;
+  related_criteria: string[];
+  source_evidence_ids: string[];
+  revision_notes: string[];
   status: DraftStatus;
   needs_confirmation: string[];
   confirmation_required: string[];
@@ -177,6 +190,19 @@ export interface ExportMetadata {
 export interface ExportListResponse {
   success: boolean;
   data: ExportMetadata[];
+}
+
+export interface HwpxPlaceholderMapResponse {
+  success: boolean;
+  export_job_id: string;
+  workflow_id: string;
+  template_id: string;
+  format: 'HWPX';
+  status: 'completed' | 'completed_with_warnings';
+  placeholder_map: Record<string, string>;
+  warnings: string[];
+  generated_at: string;
+  download_id?: string | null;
 }
 
 export interface HwpxComposeResponse extends ExportResponse {

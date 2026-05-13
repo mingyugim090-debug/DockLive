@@ -96,8 +96,22 @@ def get_mock_result() -> dict:
         ],
         "uncertain_fields": [],
         "source_evidence": [
-            {"field": "title", "quote": "2026 청년 창업 아이디어 공모전", "note": "mock fixture"},
-            {"field": "submission_deadline", "quote": f"서류 접수 마감: {deadline.isoformat()}", "note": "mock fixture"},
-            {"field": "submission_method", "quote": "온라인 접수 시스템을 통한 PDF 파일 제출", "note": "mock fixture"},
+            {"field": "title", "quote": "2026 청년 창업 아이디어 공모전", "note": "mock fixture", "confidence": 0.95},
+            {"field": "submission_deadline", "quote": f"서류 접수 마감: {deadline.isoformat()}", "note": "mock fixture", "confidence": 0.9},
+            {"field": "submission_method", "quote": "온라인 접수 시스템을 통한 PDF 파일 제출", "note": "mock fixture", "confidence": 0.9},
+        ],
+        "missing_questions": [
+            {
+                "id": "q-applicant-strength",
+                "question": "팀의 핵심 강점과 증빙 가능한 성과는 무엇인가요?",
+                "reason": "평가 기준의 팀 역량과 실행 가능성 항목에 맞춰 초안을 작성해야 합니다.",
+                "required_for": "team_capacity",
+            },
+            {
+                "id": "q-project-plan",
+                "question": "6개월 안에 검증하거나 출시할 수 있는 구체적인 실행 계획이 있나요?",
+                "reason": "사업계획서 실행 계획 섹션에 사용자 제공 사실이 필요합니다.",
+                "required_for": "section-4",
+            },
         ],
     }

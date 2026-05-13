@@ -6,6 +6,7 @@ import type {
   ExportResponse,
   HwpxComposeResponse,
   HwpxConvertResponse,
+  HwpxPlaceholderMapResponse,
   WorkflowResponse,
 } from './types';
 
@@ -205,6 +206,22 @@ export async function exportWorkflowHwpx(id: string): Promise<ExportResponse> {
 
   if (!res.ok) {
     throw await readError(res, `HWPX export 실패: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export async function createWorkflowHwpxPlaceholderMap(
+  id: string,
+  templateId = 'basic_application_v1',
+): Promise<HwpxPlaceholderMapResponse> {
+  const params = new URLSearchParams({ template_id: templateId });
+  const res = await fetch(`${API_URL}/api/workflow/${id}/export/hwpx/placeholder-map?${params.toString()}`, {
+    method: 'POST',
+  });
+
+  if (!res.ok) {
+    throw await readError(res, `HWPX placeholder map 생성 실패: ${res.status}`);
   }
 
   return res.json();

@@ -3,7 +3,7 @@ import uuid
 from datetime import date, datetime, timezone
 from typing import Any
 
-from models.schemas import AnalysisResult, ChecklistItem, DocumentSection, SourceEvidence, TimelineItem
+from models.schemas import AnalysisResult, ChecklistItem, DocumentSection, MissingQuestion, SourceEvidence, TimelineItem
 
 logger = logging.getLogger(__name__)
 
@@ -115,15 +115,21 @@ def _source_evidence(value: Any) -> list[SourceEvidence]:
         if not isinstance(item, dict):
             continue
         field = str(item.get("field", "")).strip()
-        quote = str(item.get("quote", "")).strip()
+        quote = str(item.get("quote") or item.get("sourceText") or item.get("source_text") or "").strip()
         if not field or not quote:
             continue
+        raw_confidence = item.get("confidence", 0.7)
+        try:
+            confidence = max(0.0, min(1.0, float(raw_confidence)))
+        except (TypeError, ValueError):
+            confidence = 0.7
         evidence.append(
             SourceEvidence(
                 field=field,
                 quote=quote[:500],
-                page=item.get("page") if isinstance(item.get("page"), int) else None,
+                page=item.get("page") if isinstance(item.get("page"), int) else item.get("sourcePage") if isinstance(item.get("sourcePage"), int) else None,
                 note=str(item.get("note")).strip() if item.get("note") else None,
+                confidence=confidence,
             )
         )
     return evidence
@@ -141,9 +147,84 @@ def _ensure_deadline_evidence(evidence: list[SourceEvidence], timeline: list[Tim
             field="submission_deadline",
             quote=f"{deadline.label}: {deadline.date}",
             note="timeline에서 추출된 마감일",
+            confidence=0.65,
         )
     )
     return evidence
+
+
+def _missing_questions(value: Any) -> list[MissingQuestion]:
+    if not isinstance(value, list):
+        return []
+    questions: list[MissingQuestion] = []
+    seen: set[str] = set()
+    for index, item in enumerate(value[:8]):
+        if not isinstance(item, dict):
+            continue
+        question = str(item.get("question", "")).strip()
+        if not question or question in seen:
+            continue
+        seen.add(question)
+        question_id = str(item.get("id", "")).strip() or f"missing-q-{index + 1}"
+        questions.append(
+            MissingQuestion(
+                id=question_id,
+                question=question,
+                reason=str(item.get("reason", "")).strip() or "초안 작성을 위해 추가 확인이 필요합니다.",
+                required_for=str(item.get("required_for") or item.get("requiredFor") or "").strip() or "section_draft",
+            )
+        )
+    return questions
+
+
+def _derive_missing_questions(
+    raw_questions: list[MissingQuestion],
+    uncertain_fields: list[str],
+    sections: list[DocumentSection],
+    checklist: list[ChecklistItem],
+    submission_method: str | None,
+) -> list[MissingQuestion]:
+    questions = list(raw_questions)
+    seen = {item.question for item in questions}
+
+    def add(question: str, reason: str, required_for: str) -> None:
+        if question in seen or len(questions) >= 8:
+            return
+        seen.add(question)
+        questions.append(
+            MissingQuestion(
+                id=f"missing-q-{len(questions) + 1}",
+                question=question,
+                reason=reason,
+                required_for=required_for,
+            )
+        )
+
+    for field in uncertain_fields[:3]:
+        add(f"{field} 항목을 확인해 주실 수 있나요?", "공고 원문에서 불명확한 핵심 조건입니다.", "analysis_confirmation")
+
+    if not submission_method:
+        add("제출 방식이나 접수 경로를 알고 있나요?", "제출 방법이 명확하지 않으면 최종 안내 문구를 확정할 수 없습니다.", "submission_method")
+
+    if checklist:
+        required_docs = [item.label for item in checklist if item.category == "required"][:3]
+        if required_docs:
+            add(
+                f"{', '.join(required_docs)}에 넣을 본인/팀 정보를 준비했나요?",
+                "필수 제출서류 초안을 실제 제출자 정보에 맞춰 작성해야 합니다.",
+                "required_documents",
+            )
+
+    if sections:
+        first_section = sections[0].title
+        add(
+            f"{first_section} 섹션에 반드시 넣어야 할 경험, 성과, 수치가 있나요?",
+            "섹션별 초안은 사용자 제공 사실만 근거로 작성해야 합니다.",
+            sections[0].id,
+        )
+
+    add("지원자 또는 팀의 핵심 강점과 증빙 가능한 성과는 무엇인가요?", "평가 기준에 맞는 제출용 문장을 만들기 위해 필요합니다.", "draft_quality")
+    return questions
 
 
 def build_analysis_result(raw: dict, source_type: str = "pdf", source_name: str | None = None) -> AnalysisResult:
@@ -244,6 +325,15 @@ def build_analysis_result(raw: dict, source_type: str = "pdf", source_name: str 
         logger.warning("Timeline is empty; no reliable dates were extracted")
 
     source_evidence = _ensure_deadline_evidence(_source_evidence(raw.get("source_evidence")), timeline)
+    uncertain_fields = _as_list(raw.get("uncertain_fields"))
+    submission_method = raw.get("submission_method") or None
+    missing_questions = _derive_missing_questions(
+        _missing_questions(raw.get("missing_questions")),
+        uncertain_fields,
+        sections,
+        checklist,
+        submission_method,
+    )
 
     return AnalysisResult(
         id=result_id,
@@ -258,10 +348,11 @@ def build_analysis_result(raw: dict, source_type: str = "pdf", source_name: str 
         document_template=sections,
         analyzed_at=datetime.now(timezone.utc).isoformat(),
         eligibility=_as_list(raw.get("eligibility")),
-        submission_method=raw.get("submission_method") or None,
+        submission_method=submission_method,
         evaluation_criteria=_as_list(raw.get("evaluation_criteria")),
         benefits=_as_list(raw.get("benefits")),
         cautions=_as_list(raw.get("cautions")),
-        uncertain_fields=_as_list(raw.get("uncertain_fields")),
+        uncertain_fields=uncertain_fields,
         source_evidence=source_evidence,
+        missing_questions=missing_questions,
     )

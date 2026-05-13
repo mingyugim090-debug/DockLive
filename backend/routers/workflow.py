@@ -10,6 +10,7 @@ from models.schemas import (
     ExportListResponse,
     ExportMetadata,
     ExportResponse,
+    HwpxPlaceholderMapResponse,
     UserInputsRequest,
     WorkflowResponse,
     WorkflowSession,
@@ -19,6 +20,7 @@ from services import storage
 from services.drafting_service import (
     clone_hwpx_template,
     confirm_workflow,
+    create_hwpx_placeholder_map,
     export_markdown_to_hwpx,
     finalize_document,
     generate_drafts,
@@ -207,6 +209,39 @@ async def export_hwpx(workflow_id: str):
         content_type="application/vnd.hancom.hwpx",
         content=hwpx_bytes_to_base64(content),
         encoding="base64",
+    )
+
+
+@router.post("/{workflow_id}/export/hwpx/placeholder-map", response_model=HwpxPlaceholderMapResponse)
+async def export_hwpx_placeholder_map(workflow_id: str, template_id: str = "basic_application_v1"):
+    workflow = _ensure_finalized(_load_workflow_or_404(workflow_id))
+    placeholder_map, warnings = create_hwpx_placeholder_map(workflow, template_id)
+    content = json.dumps(
+        {
+            "templateId": template_id,
+            "placeholderMap": placeholder_map,
+            "warnings": warnings,
+        },
+        ensure_ascii=False,
+        indent=2,
+    ).encode("utf-8")
+    row = storage.save_export_file(
+        workflow.id,
+        f"{template_id}_placeholder_map.json",
+        content,
+        "application/json; charset=utf-8",
+        "hwpx_placeholder_map",
+    )
+    return HwpxPlaceholderMapResponse(
+        success=True,
+        export_job_id=(row or {}).get("id", f"placeholder-{workflow.id}"),
+        workflow_id=workflow.id,
+        template_id=template_id,
+        status="completed_with_warnings" if warnings else "completed",
+        placeholder_map=placeholder_map,
+        warnings=warnings,
+        generated_at=utc_now_iso(),
+        download_id=(row or {}).get("id"),
     )
 
 

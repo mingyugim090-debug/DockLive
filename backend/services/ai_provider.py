@@ -4,7 +4,7 @@ import os
 import re
 import urllib.error
 import urllib.request
-from typing import Iterator, Literal
+from typing import Any, Iterator, Literal
 
 from core.config import settings
 from core.errors import AnalysisError
@@ -53,14 +53,21 @@ def clean_json(text: str) -> str:
     return text
 
 
-def call_json(task: AiTask, system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> dict:
+def call_json(
+    task: AiTask,
+    system_prompt: str,
+    user_prompt: str,
+    max_tokens: int = 4096,
+    json_schema: dict[str, Any] | None = None,
+    schema_name: str | None = None,
+) -> dict:
     provider = provider_name()
     if should_use_mock_ai():
         raise AnalysisError("AI API 키가 설정되지 않았습니다. MOCK_MODE를 사용하거나 provider API 키를 설정하세요.")
     if provider == "gemma":
         return _call_gemma_json(task, system_prompt, user_prompt, max_tokens)
     if provider == "openai":
-        return _call_openai_json(task, system_prompt, user_prompt, max_tokens)
+        return _call_openai_json(task, system_prompt, user_prompt, max_tokens, json_schema, schema_name)
     raise AnalysisError(f"지원하지 않는 AI_PROVIDER입니다: {provider}")
 
 
@@ -74,25 +81,55 @@ def stream_text(task: AiTask, system_prompt: str, user_prompt: str, max_tokens: 
     yield from _stream_openai_text(task, system_prompt, user_prompt, max_tokens)
 
 
-def _call_openai_json(task: AiTask, system_prompt: str, user_prompt: str, max_tokens: int) -> dict:
+def _structured_response_format(json_schema: dict[str, Any] | None, schema_name: str | None) -> dict[str, Any]:
+    if not json_schema:
+        return {"type": "json_object"}
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": schema_name or f"livedock_{task_safe_name(json_schema)}",
+            "strict": True,
+            "schema": json_schema,
+        },
+    }
+
+
+def task_safe_name(json_schema: dict[str, Any]) -> str:
+    title = str(json_schema.get("title") or "schema").lower()
+    safe = re.sub(r"[^a-z0-9_-]+", "_", title).strip("_")
+    return safe[:48] or "schema"
+
+
+def _call_openai_json(
+    task: AiTask,
+    system_prompt: str,
+    user_prompt: str,
+    max_tokens: int,
+    json_schema: dict[str, Any] | None = None,
+    schema_name: str | None = None,
+) -> dict:
     try:
         from openai import APIConnectionError, AuthenticationError, OpenAI, RateLimitError
     except ImportError:
         logger.info("OpenAI SDK is not installed; using urllib fallback for JSON request.")
-        return _call_openai_json_http(task, system_prompt, user_prompt, max_tokens)
+        return _call_openai_json_http(task, system_prompt, user_prompt, max_tokens, json_schema, schema_name)
 
     try:
         client = OpenAI(api_key=settings.OPENAI_API_KEY)
         completion = client.chat.completions.create(
             model=_model_for_task(task),
             max_tokens=max_tokens,
-            response_format={"type": "json_object"},
+            response_format=_structured_response_format(json_schema, schema_name),
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
         )
-        return json.loads(clean_json(completion.choices[0].message.content or "{}"))
+        message = completion.choices[0].message
+        refusal = getattr(message, "refusal", None)
+        if refusal:
+            raise AnalysisError(f"AI가 요청을 거부했습니다: {refusal}")
+        return json.loads(clean_json(message.content or "{}"))
     except json.JSONDecodeError as exc:
         raise exc
     except AuthenticationError as exc:
@@ -103,11 +140,18 @@ def _call_openai_json(task: AiTask, system_prompt: str, user_prompt: str, max_to
         raise AnalysisError("OpenAI API 요청 한도를 초과했습니다. 잠시 후 다시 시도하세요.") from exc
 
 
-def _call_openai_json_http(task: AiTask, system_prompt: str, user_prompt: str, max_tokens: int) -> dict:
+def _call_openai_json_http(
+    task: AiTask,
+    system_prompt: str,
+    user_prompt: str,
+    max_tokens: int,
+    json_schema: dict[str, Any] | None = None,
+    schema_name: str | None = None,
+) -> dict:
     payload = {
         "model": _model_for_task(task),
         "max_tokens": max_tokens,
-        "response_format": {"type": "json_object"},
+        "response_format": _structured_response_format(json_schema, schema_name),
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -125,7 +169,10 @@ def _call_openai_json_http(task: AiTask, system_prompt: str, user_prompt: str, m
     try:
         with urllib.request.urlopen(request, timeout=90) as response:
             data = json.loads(response.read().decode("utf-8"))
-        content = data.get("choices", [{}])[0].get("message", {}).get("content", "{}")
+        message = data.get("choices", [{}])[0].get("message", {})
+        if message.get("refusal"):
+            raise AnalysisError(f"AI가 요청을 거부했습니다: {message['refusal']}")
+        content = message.get("content", "{}")
         return json.loads(clean_json(content))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")[:500]

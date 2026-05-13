@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   confirmWorkflow,
   createDraftStream,
+  createWorkflowHwpxPlaceholderMap,
   downloadWorkflowExport,
   exportWorkflowHtml,
   exportWorkflowHwpx,
@@ -139,6 +140,8 @@ export default function ResultPage() {
   const [streamStates, setStreamStates] = useState<Record<string, string>>({});
   const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [templateMap, setTemplateMap] = useState('{}');
+  const [placeholderMapPreview, setPlaceholderMapPreview] = useState('');
+  const [placeholderWarnings, setPlaceholderWarnings] = useState<string[]>([]);
   const [exportHistory, setExportHistory] = useState<ExportMetadata[]>([]);
   const [loading, setLoading] = useState(!analysisResult);
   const [busy, setBusy] = useState(false);
@@ -452,6 +455,25 @@ export default function ResultPage() {
     }
   };
 
+  const handleCreatePlaceholderMap = async () => {
+    if (!workflow) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await createWorkflowHwpxPlaceholderMap(workflow.id);
+      const json = JSON.stringify(response.placeholder_map, null, 2);
+      setTemplateMap(json);
+      setPlaceholderMapPreview(json);
+      setPlaceholderWarnings(response.warnings);
+      await refreshExports(workflow.id);
+      setNotice(response.warnings.length ? 'Placeholder map을 생성했습니다. 경고 항목을 확인해 주세요.' : 'Placeholder map을 생성했습니다.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Placeholder map 생성에 실패했습니다.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleExportTemplate = async () => {
     if (!workflow || !templateFile) return;
     setBusy(true);
@@ -651,6 +673,24 @@ export default function ResultPage() {
               <SectionCard title="Source evidence" desc="중요 추출값의 원문 근거를 접어서 확인할 수 있습니다.">
                 <EvidenceList evidence={activeAnalysis.source_evidence ?? []} />
               </SectionCard>
+
+              <SectionCard title="부족 정보 질문" desc="초안 생성을 위해 사용자에게 확인해야 할 항목입니다. 다음 단계의 입력 폼으로 이어집니다.">
+                {activeAnalysis.missing_questions?.length ? (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {activeAnalysis.missing_questions.map((question) => (
+                      <div key={question.id} className="rounded-lg border border-white/10 bg-white/[0.035] p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="text-sm font-semibold leading-6 text-text">{question.question}</p>
+                          <StatusBadge label={question.required_for} tone="info" />
+                        </div>
+                        <p className="mt-2 text-xs leading-5 text-text3">{question.reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState title="추가 질문이 없습니다." desc="현재 분석 결과만으로 기본 초안 생성을 시작할 수 있습니다." />
+                )}
+              </SectionCard>
             </div>
           ) : null}
 
@@ -789,10 +829,13 @@ export default function ResultPage() {
                   onExportHtml={handleExportHtml}
                   onExportHwpx={handleExportHwpx}
                   onExportTemplate={handleExportTemplate}
+                  onCreatePlaceholderMap={handleCreatePlaceholderMap}
                   onCopyMarkdown={handleCopyMarkdown}
                   exportHistory={exportHistory}
                   onDownloadStoredExport={handleDownloadStoredExport}
                   onRefreshExports={() => workflow ? refreshExports(workflow.id) : undefined}
+                  placeholderMapPreview={placeholderMapPreview}
+                  placeholderWarnings={placeholderWarnings}
                   busy={busy}
                 />
               )}

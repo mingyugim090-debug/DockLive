@@ -43,6 +43,14 @@ class SourceEvidence(BaseModel):
     quote: str
     page: Optional[int] = None
     note: Optional[str] = None
+    confidence: float = Field(default=0.7, ge=0, le=1)
+
+
+class MissingQuestion(BaseModel):
+    id: str
+    question: str
+    reason: str
+    required_for: str
 
 
 class AnalysisResult(BaseModel):
@@ -64,6 +72,7 @@ class AnalysisResult(BaseModel):
     cautions: list[str] = Field(default_factory=list)
     uncertain_fields: list[str] = Field(default_factory=list)
     source_evidence: list[SourceEvidence] = Field(default_factory=list)
+    missing_questions: list[MissingQuestion] = Field(default_factory=list)
 
 
 class CompanyProfile(BaseModel):
@@ -134,6 +143,10 @@ class DraftSection(BaseModel):
     section_id: str
     title: str
     content_markdown: str = ""
+    purpose: str = ""
+    related_criteria: list[str] = Field(default_factory=list)
+    source_evidence_ids: list[str] = Field(default_factory=list)
+    revision_notes: list[str] = Field(default_factory=list)
     status: DraftStatus = "empty"
     needs_confirmation: list[str] = Field(default_factory=list)
     confirmation_required: list[str] = Field(default_factory=list)
@@ -204,6 +217,19 @@ class ExportMetadata(BaseModel):
 class ExportListResponse(BaseModel):
     success: bool
     data: list[ExportMetadata] = Field(default_factory=list)
+
+
+class HwpxPlaceholderMapResponse(BaseModel):
+    success: bool
+    export_job_id: str
+    workflow_id: str
+    template_id: str
+    format: Literal["HWPX"] = "HWPX"
+    status: Literal["completed", "completed_with_warnings"] = "completed"
+    placeholder_map: dict[str, str] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
+    generated_at: str
+    download_id: Optional[str] = None
 
 
 class HwpxComposeResponse(ExportResponse):

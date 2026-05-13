@@ -36,6 +36,64 @@ SECTION_DRAFT_SYSTEM_PROMPT = """당신은 한국 공모전, 지원사업, 장�
 마감일, 자격, 금액, 기관명, 제출 방법처럼 중요한 사실을 새로 만들지 마세요.
 검증이 필요한 주장은 초안에 단정하지 말고 확인 필요 항목으로 남겨야 합니다."""
 
+DRAFT_RESPONSE_SCHEMA = {
+    "title": "generated_draft_sections",
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "draft_sections": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "section_id": {"type": "string"},
+                    "content_markdown": {"type": "string"},
+                    "purpose": {"type": "string"},
+                    "related_criteria": {"type": "array", "items": {"type": "string"}},
+                    "source_evidence_ids": {"type": "array", "items": {"type": "string"}},
+                    "revision_notes": {"type": "array", "items": {"type": "string"}},
+                    "needs_confirmation": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": [
+                    "section_id",
+                    "content_markdown",
+                    "purpose",
+                    "related_criteria",
+                    "source_evidence_ids",
+                    "revision_notes",
+                    "needs_confirmation",
+                ],
+            },
+        }
+    },
+    "required": ["draft_sections"],
+}
+
+HWPX_TEMPLATE_PLACEHOLDERS: dict[str, list[str]] = {
+    "basic_application_v1": [
+        "{title}",
+        "{announcement_title}",
+        "{organization}",
+        "{applicant_name}",
+        "{applicant_profile}",
+        "{project_summary}",
+        "{evidence}",
+        "{content}",
+        "{section_1_title}",
+        "{section_1_content}",
+    ],
+    "business_plan_v1": [
+        "{title}",
+        "{applicant_name}",
+        "{project_summary}",
+        "{section_1_content}",
+        "{section_2_content}",
+        "{section_3_content}",
+        "{section_4_content}",
+    ],
+}
+
 
 def create_input_fields(analysis: AnalysisResult, company_profile: CompanyProfile | None = None) -> list[UserInputField]:
     fields: list[UserInputField] = [
@@ -81,6 +139,20 @@ def create_input_fields(analysis: AnalysisResult, company_profile: CompanyProfil
                 section_id=section.id,
                 description=section.hint,
                 placeholder=f"{section.title} 초안에 꼭 들어가야 할 내용을 적어 주세요.",
+            )
+        )
+    for question in analysis.missing_questions[:6]:
+        field_id = f"missing_{question.id}"
+        if any(field.id == field_id for field in fields):
+            continue
+        fields.append(
+            UserInputField(
+                id=field_id,
+                label=question.question,
+                required=True,
+                section_id=question.required_for if question.required_for.startswith("section-") else None,
+                description=question.reason,
+                placeholder="공고와 제출 초안에 반영할 사실만 입력해 주세요.",
             )
         )
     return fields
@@ -174,6 +246,10 @@ def _mock_draft_section(workflow: WorkflowSession, draft: DraftSection) -> Draft
 
     confirmations = _confirmation_items(workflow)
     draft.content_markdown = "\n".join(body)
+    draft.purpose = f"{draft.title} 항목에서 공고 요구사항과 사용자 제공 사실을 연결합니다."
+    draft.related_criteria = workflow.analysis.evaluation_criteria[:3]
+    draft.source_evidence_ids = [item.field for item in workflow.analysis.source_evidence[:3]]
+    draft.revision_notes = ["제출 전 사용자 경험, 수치, 증빙자료와 일치하는지 확인하세요."]
     draft.status = "drafted" if not draft.user_feedback else "revised"
     draft.needs_confirmation = confirmations
     draft.confirmation_required = confirmations
@@ -182,7 +258,14 @@ def _mock_draft_section(workflow: WorkflowSession, draft: DraftSection) -> Draft
 
 
 def _call_draft_json(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> dict:
-    return call_json("draft", system_prompt, user_prompt, max_tokens=max_tokens)
+    return call_json(
+        "draft",
+        system_prompt,
+        user_prompt,
+        max_tokens=max_tokens,
+        json_schema=DRAFT_RESPONSE_SCHEMA,
+        schema_name="generated_draft_sections",
+    )
 
 
 def _draft_json_prompt(workflow: WorkflowSession) -> str:
@@ -196,7 +279,8 @@ def _draft_json_prompt(workflow: WorkflowSession) -> str:
     return (
         "아래 정보를 바탕으로 모든 섹션 초안을 작성하세요. "
         "응답 형식은 {\"draft_sections\":[{\"section_id\":\"...\",\"content_markdown\":\"...\","
-        "\"needs_confirmation\":[\"...\"]}]} 입니다.\n\n"
+        "\"purpose\":\"...\",\"related_criteria\":[\"...\"],\"source_evidence_ids\":[\"...\"],"
+        "\"revision_notes\":[\"...\"],\"needs_confirmation\":[\"...\"]}]} 입니다.\n\n"
         + json.dumps(user_payload, ensure_ascii=False)[: settings.MAX_DRAFT_INPUT_LENGTH]
     )
 
@@ -249,6 +333,10 @@ def generate_drafts(workflow: WorkflowSession) -> WorkflowSession:
                 continue
             confirmations = [str(v) for v in item.get("needs_confirmation", []) if str(v).strip()]
             draft.content_markdown = str(item.get("content_markdown", "")).strip()
+            draft.purpose = str(item.get("purpose", "")).strip()
+            draft.related_criteria = [str(v).strip() for v in item.get("related_criteria", []) if str(v).strip()]
+            draft.source_evidence_ids = [str(v).strip() for v in item.get("source_evidence_ids", []) if str(v).strip()]
+            draft.revision_notes = [str(v).strip() for v in item.get("revision_notes", []) if str(v).strip()]
             draft.needs_confirmation = confirmations
             draft.confirmation_required = confirmations
             draft.status = "drafted"
@@ -293,6 +381,10 @@ def stream_draft_events(workflow: WorkflowSession) -> Iterator[dict]:
             continue
 
         draft.content_markdown = "".join(chunks).strip()
+        draft.purpose = f"{draft.title} 항목의 제출용 초안"
+        draft.related_criteria = workflow.analysis.evaluation_criteria[:3]
+        draft.source_evidence_ids = [item.field for item in workflow.analysis.source_evidence[:3]]
+        draft.revision_notes = ["스트리밍 초안은 섹션 본문 중심으로 생성되었으므로 제출 전 사실 관계를 확인하세요."]
         draft.status = "drafted"
         draft.confirmation_required = _confirmation_items(workflow)
         draft.needs_confirmation = draft.confirmation_required
@@ -371,7 +463,12 @@ def finalize_document(workflow: WorkflowSession) -> WorkflowSession:
     if confirmations:
         lines.extend(["## 제출 전 확인 필요", "", *[f"- {item}" for item in confirmations], ""])
     for draft in sections:
-        lines.append(draft.content_markdown.strip())
+        content = draft.content_markdown.strip()
+        first_line = content.split("\n", 1)[0].strip()
+        if not first_line.startswith("## "):
+            lines.append(f"## {draft.title}")
+            lines.append("")
+        lines.append(content)
         lines.append("")
 
     workflow.final_document = FinalDocument(
@@ -528,6 +625,54 @@ def build_template_replacements(workflow: WorkflowSession, extra: dict[str, str]
     if extra:
         replacements.update({str(key): str(value) for key, value in extra.items()})
     return {key: value for key, value in replacements.items() if key}
+
+
+def create_hwpx_placeholder_map(
+    workflow: WorkflowSession,
+    template_id: str = "basic_application_v1",
+) -> tuple[dict[str, str], list[str]]:
+    """Create the MVP HWPX placeholder mapping without generating a file."""
+    if not workflow.final_document:
+        workflow = finalize_document(workflow)
+    assert workflow.final_document is not None
+
+    inputs = _input_map(workflow)
+    warnings: list[str] = []
+    section_order = {section.id: section.order for section in workflow.analysis.document_template}
+    sorted_drafts = sorted(workflow.draft_sections, key=lambda item: section_order.get(item.section_id, 999))
+    placeholder_map: dict[str, str] = {
+        "{title}": workflow.final_document.title,
+        "{announcement_title}": workflow.analysis.title,
+        "{organization}": workflow.analysis.organization,
+        "{source_name}": workflow.analysis.source_name or workflow.analysis.source_type,
+        "{applicant_name}": inputs.get("applicant_name", ""),
+        "{applicant_profile}": inputs.get("applicant_profile", ""),
+        "{project_summary}": inputs.get("project_summary", ""),
+        "{evidence}": inputs.get("evidence", ""),
+        "{content}": workflow.final_document.content_markdown,
+        "{created_date}": datetime.now().strftime("%Y.%m.%d"),
+    }
+
+    for index, draft in enumerate(sorted_drafts, start=1):
+        placeholder_map[f"{{section_{index}_title}}"] = draft.title
+        placeholder_map[f"{{section_{index}_content}}"] = draft.content_markdown
+        placeholder_map[f"{{section_{draft.section_id}_content}}"] = draft.content_markdown
+
+    for key, value in list(placeholder_map.items()):
+        if not str(value).strip():
+            warnings.append(f"{key} 값이 비어 있습니다. 템플릿 치환 전 사용자 입력을 확인하세요.")
+
+    expected = HWPX_TEMPLATE_PLACEHOLDERS.get(template_id)
+    if expected is None:
+        warnings.append(f"알 수 없는 templateId입니다: {template_id}. 기본 placeholder map만 생성했습니다.")
+    else:
+        for key in expected:
+            if key not in placeholder_map:
+                warnings.append(f"{template_id} 템플릿 필드 {key}에 대응하는 값이 없습니다.")
+
+    if not sorted_drafts:
+        warnings.append("생성된 초안 섹션이 없어 section_* placeholder가 비어 있습니다.")
+    return placeholder_map, list(dict.fromkeys(warnings))
 
 
 def clone_hwpx_template(

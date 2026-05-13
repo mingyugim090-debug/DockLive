@@ -669,6 +669,7 @@ export function EvidenceList({ evidence }: { evidence: SourceEvidence[] }) {
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge label={item.field} tone="info" />
               {item.page ? <StatusBadge label={`${item.page}p`} tone="neutral" /> : null}
+              <StatusBadge label={`${Math.round((item.confidence ?? 0.7) * 100)}%`} tone="neutral" />
             </div>
             <p className="mt-3 text-sm leading-6 text-text2">“{item.quote}”</p>
             {item.note ? <p className="mt-2 text-xs leading-5 text-text3">{item.note}</p> : null}
@@ -766,6 +767,8 @@ export function DraftSectionCard({
   busy: boolean;
 }) {
   const confirmationItems = Array.from(new Set([...(draft.confirmation_required ?? []), ...(draft.needs_confirmation ?? [])]));
+  const relatedCriteria = draft.related_criteria ?? [];
+  const revisionNotes = draft.revision_notes ?? [];
   return (
     <motion.article variants={fadeUp} className="rounded-lg border border-white/10 bg-white/[0.035] shadow-panel">
       <div className="flex flex-col gap-3 border-b border-white/10 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -784,6 +787,28 @@ export function DraftSectionCard({
               ))}
             </ul>
           </NoticeBanner>
+        ) : null}
+        {draft.purpose || relatedCriteria.length || revisionNotes.length ? (
+          <div className="grid gap-3 md:grid-cols-3">
+            {draft.purpose ? (
+              <div className="rounded-lg border border-sky-400/15 bg-sky-400/[0.05] p-3">
+                <p className="text-xs font-semibold text-sky-100">섹션 목적</p>
+                <p className="mt-2 text-xs leading-5 text-text2">{draft.purpose}</p>
+              </div>
+            ) : null}
+            {relatedCriteria.length ? (
+              <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3">
+                <p className="text-xs font-semibold text-text">관련 평가 기준</p>
+                <p className="mt-2 text-xs leading-5 text-text3">{relatedCriteria.join(', ')}</p>
+              </div>
+            ) : null}
+            {revisionNotes.length ? (
+              <div className="rounded-lg border border-amber-400/15 bg-amber-400/[0.05] p-3">
+                <p className="text-xs font-semibold text-amber-100">보완 메모</p>
+                <p className="mt-2 text-xs leading-5 text-text2">{revisionNotes.join(' · ')}</p>
+              </div>
+            ) : null}
+          </div>
         ) : null}
         {busy && streamState ? (
           <div className="rounded-lg border border-white/10 bg-bg/60 p-5">
@@ -829,10 +854,13 @@ export function ExportPanel({
   onExportHtml,
   onExportHwpx,
   onExportTemplate,
+  onCreatePlaceholderMap,
   onCopyMarkdown,
   exportHistory,
   onDownloadStoredExport,
   onRefreshExports,
+  placeholderMapPreview,
+  placeholderWarnings,
   busy,
 }: {
   finalTitle: string;
@@ -844,10 +872,13 @@ export function ExportPanel({
   onExportHtml: () => void;
   onExportHwpx: () => void;
   onExportTemplate: () => void;
+  onCreatePlaceholderMap: () => void;
   onCopyMarkdown: () => void;
   exportHistory: ExportMetadata[];
   onDownloadStoredExport: (exportId: string) => void;
   onRefreshExports: () => void;
+  placeholderMapPreview?: string;
+  placeholderWarnings?: string[];
   busy: boolean;
 }) {
   return (
@@ -864,6 +895,9 @@ export function ExportPanel({
             </Button>
             <Button type="button" onClick={onExportHwpx} disabled={busy}>
               HWPX export
+            </Button>
+            <Button type="button" variant="secondary" onClick={onCreatePlaceholderMap} disabled={busy}>
+              Placeholder map
             </Button>
             <Button type="button" variant="ghost" onClick={onCopyMarkdown}>
               Markdown 복사
@@ -939,6 +973,27 @@ export function ExportPanel({
                 템플릿 HWPX export
               </Button>
             </div>
+            {placeholderMapPreview ? (
+              <details className="mt-4 rounded-lg border border-sky-400/15 bg-sky-400/[0.05]">
+                <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-sky-100">
+                  생성된 placeholder map 미리보기
+                </summary>
+                <pre className="max-h-[260px] overflow-auto border-t border-sky-400/10 p-4 text-xs leading-5 text-text2">
+                  {placeholderMapPreview}
+                </pre>
+              </details>
+            ) : null}
+            {placeholderWarnings?.length ? (
+              <div className="mt-4">
+                <NoticeBanner tone="warning" title="Placeholder map 확인 필요">
+                  <ul className="space-y-1">
+                    {placeholderWarnings.map((item) => (
+                      <li key={item}>- {item}</li>
+                    ))}
+                  </ul>
+                </NoticeBanner>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>

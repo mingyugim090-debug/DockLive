@@ -21,6 +21,7 @@ try:
         build_template_replacements,
         clone_hwpx_template,
         confirm_workflow,
+        create_hwpx_placeholder_map,
         create_workflow_session,
         export_markdown_to_hwpx,
         finalize_document,
@@ -46,6 +47,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - local minimal Python fa
     should_use_mock_ai = None
     build_analysis_result = None
     build_template_replacements = None
+    create_hwpx_placeholder_map = None
     clone_hwpx_template = None
     confirm_workflow = None
     create_workflow_session = None
@@ -95,6 +97,7 @@ class AgentMvpContractTests(unittest.TestCase):
         self.assertGreaterEqual(len(restored.checklist), 1)
         self.assertGreaterEqual(len(restored.document_template), 1)
         self.assertGreaterEqual(len(restored.source_evidence), 1)
+        self.assertGreaterEqual(len(restored.missing_questions), 1)
 
     def test_export_metadata_contract(self):
         if ExportMetadata is None:
@@ -200,6 +203,22 @@ class AgentMvpContractTests(unittest.TestCase):
         self.assertIn("청년 창업", replacements["{{announcement_title}}"])
         self.assertIn("LiveDock", replacements["동아리명"])
         self.assertTrue(any(key.startswith("{{section:") for key in replacements))
+
+    def test_hwpx_placeholder_map_contains_brief_contract_keys(self):
+        if AnalysisResult is None:
+            self.skipTest("pydantic is not installed in this Python environment")
+        result = build_analysis_result(get_mock_result(), source_type="demo", source_name="mock")
+        workflow = create_workflow_session(result)
+        updates = {field.id: f"{field.label} 테스트 입력" for field in workflow.user_inputs if field.required}
+        workflow = finalize_document(generate_drafts(update_inputs(workflow, updates)))
+
+        placeholder_map, warnings = create_hwpx_placeholder_map(workflow)
+
+        self.assertIn("{title}", placeholder_map)
+        self.assertIn("{applicant_name}", placeholder_map)
+        self.assertIn("{section_1_title}", placeholder_map)
+        self.assertIn("{section_1_content}", placeholder_map)
+        self.assertIsInstance(warnings, list)
 
     def test_hwpx_clone_requires_enabled_toolchain(self):
         if AnalysisResult is None:
