@@ -22,14 +22,31 @@ FIXTURE_DIR = ROOT / "docs" / "evaluation" / "fixtures"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
+
+def load_backend_env() -> None:
+    env_path = BACKEND / ".env"
+    if not env_path.exists():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip())
+
+
+load_backend_env()
 os.environ.setdefault("MOCK_MODE", "true")
 
+from core.config import settings  # noqa: E402
 from models.schemas import AnalysisResult  # noqa: E402
 from services import storage  # noqa: E402
 from services.analyzer import build_analysis_result  # noqa: E402
+from services.document_ingestion import ingest_uploaded_document  # noqa: E402
 from services.drafting_service import (  # noqa: E402
     confirm_workflow,
     create_workflow_session,
+    export_markdown_to_hwpx,
     finalize_document,
     generate_drafts,
     markdown_to_hwp_compatible_html,
@@ -94,8 +111,8 @@ def deterministic_raw_analysis(fixture: dict[str, Any]) -> dict[str, Any]:
             {"title": "Expected impact", "hint": "Keep claims grounded and reviewable.", "order": 3},
         ],
         "eligibility": _expected_list(expected, "eligibility_contains"),
-        "submission_method": "See source notice" if expected.get("deadline") else None,
-        "evaluation_criteria": _expected_list(expected, "research_areas"),
+        "submission_method": expected.get("submission_method_contains") or ("See source notice" if expected.get("deadline") else None),
+        "evaluation_criteria": expected.get("evaluation_criteria", []) or _expected_list(expected, "research_areas"),
         "benefits": [],
         "cautions": [],
         "uncertain_fields": _expected_list(expected, "uncertain_fields"),
@@ -148,6 +165,19 @@ def score_analysis(result: AnalysisResult, fixture: dict[str, Any]) -> dict[str,
     for label in _expected_list(expected, "uncertain_fields"):
         add(f"uncertain_field:{label}", label in uncertainty_text, uncertainty_text)
 
+    submission_method = expected.get("submission_method_contains")
+    if submission_method:
+        add("submission_method", submission_method in (result.submission_method or ""), result.submission_method or "")
+
+    for label in _expected_list(expected, "evaluation_criteria"):
+        criteria_text = " | ".join(result.evaluation_criteria)
+        add(f"evaluation_criteria:{label}", label in criteria_text, criteria_text)
+
+    forbidden_benefits = _expected_list(expected, "forbidden_benefits")
+    if forbidden_benefits:
+        benefits_text = " | ".join(result.benefits)
+        add("no_forbidden_benefits", not _contains_any(benefits_text, forbidden_benefits), benefits_text)
+
     evidence_fields = {item.field for item in result.source_evidence}
     for field in _expected_list(expected, "must_have_source_evidence"):
         add(f"source_evidence:{field}", field in evidence_fields, ", ".join(sorted(evidence_fields)))
@@ -162,9 +192,16 @@ def score_analysis(result: AnalysisResult, fixture: dict[str, Any]) -> dict[str,
     }
 
 
-def run_one(fixture: dict[str, Any], mode: str) -> dict[str, Any]:
-    raw = analyze_announcement(fixture["announcement_text"], fixture["name"]) if mode == "real-ai" else deterministic_raw_analysis(fixture)
+def run_one(fixture: dict[str, Any], mode: str, include_hwpx: bool) -> dict[str, Any]:
+    old_mock_mode = settings.MOCK_MODE
+    if mode == "real-ai":
+        settings.MOCK_MODE = False
+        raw = analyze_announcement(fixture["announcement_text"], fixture["name"])
+    else:
+        raw = deterministic_raw_analysis(fixture)
+
     result = build_analysis_result(raw, source_type="text", source_name=fixture["name"])
+    settings.MOCK_MODE = True
     workflow = create_workflow_session(result)
     updates = {
         field.id: f"{field.label}: fixture eval input for {fixture['id']}"
@@ -194,6 +231,18 @@ def run_one(fixture: dict[str, Any], mode: str) -> dict[str, Any]:
     report["draft_sections"] = len(workflow.draft_sections)
     report["final_document_chars"] = len(workflow.final_document.content_markdown)
     report["analysis_id"] = result.id
+    if include_hwpx:
+        filename, content = export_markdown_to_hwpx(workflow.final_document.content_markdown, workflow.final_document.title)
+        ingested = ingest_uploaded_document(content, filename)
+        report["hwpx"] = {
+            "filename": filename,
+            "is_zip": content.startswith(b"PK"),
+            "text_chars": len(ingested.text),
+            "title_found": workflow.final_document.title[:20] in ingested.text,
+        }
+        if not report["hwpx"]["is_zip"] or report["hwpx"]["text_chars"] < 20:
+            report["score"] = min(report["score"], 79.0)
+    settings.MOCK_MODE = old_mock_mode
     return report
 
 
@@ -201,10 +250,11 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=["deterministic", "real-ai"], default="deterministic")
     parser.add_argument("--min-score", type=float, default=80.0)
+    parser.add_argument("--include-hwpx", action="store_true")
     parser.add_argument("--output", type=Path, default=ROOT / "outputs" / "fixture-e2e-report.json")
     args = parser.parse_args()
 
-    reports = [run_one(fixture, args.mode) for fixture in load_fixtures()]
+    reports = [run_one(fixture, args.mode, args.include_hwpx) for fixture in load_fixtures()]
     summary = {
         "mode": args.mode,
         "min_score": args.min_score,

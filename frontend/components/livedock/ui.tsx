@@ -8,6 +8,7 @@ import type {
   DayStatus,
   DraftSection,
   DraftStatus,
+  ExportMetadata,
   SourceEvidence,
   WorkflowStatus,
 } from '@/lib/types';
@@ -829,6 +830,9 @@ export function ExportPanel({
   onExportHwpx,
   onExportTemplate,
   onCopyMarkdown,
+  exportHistory,
+  onDownloadStoredExport,
+  onRefreshExports,
   busy,
 }: {
   finalTitle: string;
@@ -841,6 +845,9 @@ export function ExportPanel({
   onExportHwpx: () => void;
   onExportTemplate: () => void;
   onCopyMarkdown: () => void;
+  exportHistory: ExportMetadata[];
+  onDownloadStoredExport: (exportId: string) => void;
+  onRefreshExports: () => void;
   busy: boolean;
 }) {
   return (
@@ -862,6 +869,41 @@ export function ExportPanel({
               Markdown 복사
             </Button>
           </div>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-white/10 bg-white/[0.035] p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-text">최근 생성 파일</p>
+            <p className="mt-1 text-xs leading-5 text-text3">Supabase에 저장된 export 파일을 다시 다운로드할 수 있습니다.</p>
+          </div>
+          <Button type="button" variant="secondary" onClick={onRefreshExports} disabled={busy}>
+            새로고침
+          </Button>
+        </div>
+        <div className="mt-4 space-y-2">
+          {exportHistory.length ? (
+            exportHistory.map((item) => (
+              <div
+                key={item.id}
+                className="flex flex-col gap-3 rounded-md border border-white/10 bg-bg/45 p-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-text">{item.filename}</p>
+                  <p className="mt-1 text-xs text-text3">
+                    {item.export_type} · {Math.max(1, Math.round(item.size_bytes / 1024))}KB ·{' '}
+                    {new Date(item.created_at).toLocaleString('ko-KR')}
+                  </p>
+                </div>
+                <Button type="button" variant="ghost" onClick={() => onDownloadStoredExport(item.id)} disabled={busy}>
+                  다시 다운로드
+                </Button>
+              </div>
+            ))
+          ) : (
+            <EmptyState title="저장된 export 파일이 없습니다." desc="HTML 또는 HWPX export를 생성하면 여기에 표시됩니다." />
+          )}
         </div>
       </div>
 

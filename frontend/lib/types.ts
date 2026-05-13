@@ -164,6 +164,21 @@ export interface ExportResponse {
   encoding: 'text' | 'base64';
 }
 
+export interface ExportMetadata {
+  id: string;
+  workflow_id: string;
+  filename: string;
+  content_type: string;
+  export_type: string;
+  size_bytes: number;
+  created_at: string;
+}
+
+export interface ExportListResponse {
+  success: boolean;
+  data: ExportMetadata[];
+}
+
 export interface HwpxComposeResponse extends ExportResponse {
   template_id: string;
   download_id?: string | null;

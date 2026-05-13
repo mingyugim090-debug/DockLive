@@ -1,3 +1,4 @@
+import base64
 import json
 
 from fastapi import APIRouter, File, Form, UploadFile
@@ -6,6 +7,8 @@ from fastapi.responses import StreamingResponse
 from core.errors import AnalysisError, WorkflowNotFoundError
 from models.schemas import (
     DraftFeedbackRequest,
+    ExportListResponse,
+    ExportMetadata,
     ExportResponse,
     UserInputsRequest,
     WorkflowResponse,
@@ -56,6 +59,40 @@ def _ensure_finalized(workflow: WorkflowSession) -> WorkflowSession:
 @router.get("/{workflow_id}", response_model=WorkflowResponse)
 async def get_workflow(workflow_id: str):
     return WorkflowResponse(success=True, data=_load_workflow_or_404(workflow_id))
+
+
+@router.get("/{workflow_id}/exports", response_model=ExportListResponse)
+async def list_workflow_exports(workflow_id: str):
+    _load_workflow_or_404(workflow_id)
+    rows = storage.list_export_files(workflow_id)
+    return ExportListResponse(success=True, data=[ExportMetadata(**row) for row in rows])
+
+
+@router.get("/{workflow_id}/exports/{export_id}", response_model=ExportResponse)
+async def download_workflow_export(workflow_id: str, export_id: str):
+    _load_workflow_or_404(workflow_id)
+    row = storage.load_export_file(workflow_id, export_id)
+    if row is None:
+        raise AnalysisError("저장된 export 파일을 찾을 수 없습니다. 파일을 다시 생성해 주세요.")
+
+    content_type = row.get("content_type") or "application/octet-stream"
+    filename = row.get("filename") or "livedock_export"
+    content = row["content"]
+    if content_type.startswith("text/"):
+        return ExportResponse(
+            success=True,
+            filename=filename,
+            content_type=content_type,
+            content=content.decode("utf-8", errors="replace"),
+            encoding="text",
+        )
+    return ExportResponse(
+        success=True,
+        filename=filename,
+        content_type=content_type,
+        content=base64.b64encode(content).decode("ascii"),
+        encoding="base64",
+    )
 
 
 @router.post("/{workflow_id}/inputs", response_model=WorkflowResponse)

@@ -122,4 +122,22 @@ run:
 py backend\tests\evals\run_fixture_e2e.py --mode real-ai --min-score 80
 ```
 
+To include HWPX package validation and text extraction:
+
+```bash
+py backend\tests\evals\run_fixture_e2e.py --mode deterministic --min-score 90 --include-hwpx
+```
+
 The report is written to `outputs/fixture-e2e-report.json`.
+
+## Production Smoke Eval
+
+After Render and Vercel are deployed, run:
+
+```bash
+py backend\tests\evals\run_production_smoke.py --base-url https://your-backend.example.com
+```
+
+This checks health, text analysis, workflow resume, input saving, draft,
+finalization, HTML export, export metadata listing, and stored export download.
+Add `--require-hwpx` only when the deployed HWPX toolchain is expected to pass.

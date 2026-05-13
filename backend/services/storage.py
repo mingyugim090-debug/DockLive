@@ -118,7 +118,7 @@ def _check_supabase() -> bool:
         _supabase_available = True
         logger.info("Supabase persistence connected")
     except ImportError:
-        logger.warning("httpx package is not installed; Supabase persistence disabled")
+        logger.info("httpx package is not installed; Supabase persistence disabled")
         _supabase_available = False
     except Exception as e:
         logger.warning("Supabase persistence unavailable; using fallback cache: %s", e)
@@ -179,6 +179,21 @@ def _supabase_load_payload(table: str, item_id: str) -> Optional[dict]:
     return None
 
 
+def _supabase_select(url: str) -> list[dict[str, Any]]:
+    if not _check_supabase():
+        return []
+    try:
+        import httpx
+
+        response = httpx.get(url, headers=_supabase_headers(), timeout=_supabase_timeout())
+        response.raise_for_status()
+        rows = response.json()
+        return rows if isinstance(rows, list) else []
+    except Exception as e:
+        logger.warning("Supabase select failed for url=%s: %s", url, e)
+        return []
+
+
 def _supabase_upload(path: str, content: bytes, content_type: str) -> Optional[str]:
     if not _check_supabase():
         return None
@@ -195,6 +210,22 @@ def _supabase_upload(path: str, content: bytes, content_type: str) -> Optional[s
         return path
     except Exception as e:
         logger.warning("Supabase storage upload failed for path=%s: %s", path, e)
+        return None
+
+
+def _supabase_download(bucket: str, path: str) -> Optional[bytes]:
+    if not _check_supabase():
+        return None
+    try:
+        import httpx
+
+        encoded_path = "/".join(quote(part, safe="") for part in path.split("/"))
+        url = f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/{bucket}/{encoded_path}"
+        response = httpx.get(url, headers=_supabase_headers(), timeout=_supabase_timeout())
+        response.raise_for_status()
+        return response.content
+    except Exception as e:
+        logger.warning("Supabase storage download failed for path=%s: %s", path, e)
         return None
 
 
@@ -368,3 +399,37 @@ def save_export_file(
     if _supabase_insert(SUPABASE_EXPORT_TABLE, row):
         return row
     return None
+
+
+def list_export_files(workflow_id: str) -> list[dict[str, Any]]:
+    """List generated exports for a workflow from Supabase metadata."""
+    if not workflow_id:
+        return []
+    encoded_workflow_id = quote(workflow_id, safe="")
+    columns = "id,workflow_id,filename,content_type,export_type,size_bytes,created_at"
+    url = (
+        f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/{SUPABASE_EXPORT_TABLE}"
+        f"?workflow_id=eq.{encoded_workflow_id}&select={columns}&order=created_at.desc"
+    )
+    return _supabase_select(url)
+
+
+def load_export_file(workflow_id: str, export_id: str) -> Optional[dict[str, Any]]:
+    """Load a generated export and its bytes from Supabase Storage."""
+    if not workflow_id or not export_id:
+        return None
+    encoded_workflow_id = quote(workflow_id, safe="")
+    encoded_export_id = quote(export_id, safe="")
+    columns = "id,workflow_id,filename,content_type,export_type,size_bytes,created_at,storage_bucket,storage_path"
+    url = (
+        f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/{SUPABASE_EXPORT_TABLE}"
+        f"?id=eq.{encoded_export_id}&workflow_id=eq.{encoded_workflow_id}&select={columns}&limit=1"
+    )
+    rows = _supabase_select(url)
+    if not rows:
+        return None
+    row = rows[0]
+    content = _supabase_download(row.get("storage_bucket") or settings.SUPABASE_STORAGE_BUCKET, row.get("storage_path", ""))
+    if content is None:
+        return None
+    return {**row, "content": content}

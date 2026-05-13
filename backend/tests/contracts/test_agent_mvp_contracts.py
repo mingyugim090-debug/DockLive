@@ -13,22 +13,21 @@ os.environ.setdefault("MOCK_MODE", "true")
 
 try:
     from core.config import settings  # noqa: E402
-    from core.errors import AnalysisError  # noqa: E402
-    from models.schemas import AnalysisResult  # noqa: E402
+    from models.schemas import AnalysisResult, ExportListResponse, ExportMetadata  # noqa: E402
     from services.ai_provider import provider_name, should_use_mock_ai  # noqa: E402
     from services.analyzer import build_analysis_result  # noqa: E402
+    from services.document_ingestion import ingest_uploaded_document  # noqa: E402
     from services.drafting_service import (  # noqa: E402
         build_template_replacements,
         clone_hwpx_template,
         confirm_workflow,
         create_workflow_session,
-        finalize_document,
         export_markdown_to_hwpx,
+        finalize_document,
         generate_drafts,
         stream_draft_events,
         update_inputs,
     )
-    from services.document_ingestion import ingest_uploaded_document  # noqa: E402
     from services.hwpx_compose_service import (  # noqa: E402
         WITHUS_TEMPLATE_ID,
         compose_hwpx,
@@ -38,9 +37,10 @@ try:
 except ModuleNotFoundError as exc:  # pragma: no cover - local minimal Python fallback
     if exc.name != "pydantic":
         raise
-    AnalysisError = None
     settings = None
     AnalysisResult = None
+    ExportMetadata = None
+    ExportListResponse = None
     provider_name = None
     should_use_mock_ai = None
     build_analysis_result = None
@@ -48,16 +48,16 @@ except ModuleNotFoundError as exc:  # pragma: no cover - local minimal Python fa
     clone_hwpx_template = None
     confirm_workflow = None
     create_workflow_session = None
-    finalize_document = None
     export_markdown_to_hwpx = None
+    finalize_document = None
     generate_drafts = None
     stream_draft_events = None
+    update_inputs = None
     ingest_uploaded_document = None
     get_mock_result = None
     WITHUS_TEMPLATE_ID = None
     compose_hwpx = None
     detect_template = None
-    update_inputs = None
 
 
 class AgentMvpContractTests(unittest.TestCase):
@@ -91,6 +91,22 @@ class AgentMvpContractTests(unittest.TestCase):
         self.assertGreaterEqual(len(restored.checklist), 1)
         self.assertGreaterEqual(len(restored.document_template), 1)
         self.assertGreaterEqual(len(restored.source_evidence), 1)
+
+    def test_export_metadata_contract(self):
+        if ExportMetadata is None:
+            self.skipTest("pydantic is not installed in this Python environment")
+        metadata = ExportMetadata(
+            id="export-1",
+            workflow_id="workflow-1",
+            filename="final.html",
+            content_type="text/html; charset=utf-8",
+            export_type="html",
+            size_bytes=1024,
+            created_at="2026-05-13T00:00:00Z",
+        )
+        response = ExportListResponse(success=True, data=[metadata])
+        self.assertEqual(response.data[0].workflow_id, "workflow-1")
+        self.assertEqual(response.data[0].export_type, "html")
 
     def test_mock_workflow_reaches_final_document(self):
         if AnalysisResult is None:
@@ -166,11 +182,18 @@ class AgentMvpContractTests(unittest.TestCase):
         if AnalysisResult is None:
             self.skipTest("pydantic is not installed in this Python environment")
         result = build_analysis_result(get_mock_result(), source_type="demo", source_name="mock")
-        workflow = finalize_document(generate_drafts(update_inputs(create_workflow_session(result), {
-            "applicant_name": "LiveDock",
-            "applicant_profile": "문서 자동화 팀",
-            "project_summary": "공고 분석과 제출 문서 자동화",
-        })))
+        workflow = finalize_document(
+            generate_drafts(
+                update_inputs(
+                    create_workflow_session(result),
+                    {
+                        "applicant_name": "LiveDock",
+                        "applicant_profile": "문서 자동화 팀",
+                        "project_summary": "공고 분석과 제출 문서 자동화",
+                    },
+                )
+            )
+        )
 
         old_enabled = settings.HWPX_EXPORT_ENABLED
         try:
@@ -218,7 +241,7 @@ class AgentMvpContractTests(unittest.TestCase):
             response = compose_hwpx(
                 sample.read_bytes(),
                 "HWPX 자동작성 MVP를 검증하는 AI 문서 자동화 동아리 신청서를 만들어 주세요.",
-                "대표자 김라이브, 미래융합대학 인공지능응용학과",
+                "대표자 김라이브, 미래통합대학교 인공지능융합학과",
                 "LiveDock HWPX 자동작성 MVP",
             )
             self.assertTrue(response["success"])

@@ -2,6 +2,7 @@ import type {
   ApiResponse,
   CompanyProfile,
   DraftStreamEvent,
+  ExportListResponse,
   ExportResponse,
   HwpxComposeResponse,
   HwpxConvertResponse,
@@ -227,6 +228,26 @@ export async function exportWorkflowHwpxTemplate(
 
   if (!res.ok) {
     throw await readError(res, `HWPX 템플릿 export 실패: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export async function listWorkflowExports(id: string): Promise<ExportListResponse> {
+  const res = await fetch(`${API_URL}/api/workflow/${id}/exports`);
+
+  if (!res.ok) {
+    throw await readError(res, `Export 목록 조회 실패: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export async function downloadWorkflowExport(workflowId: string, exportId: string): Promise<ExportResponse> {
+  const res = await fetch(`${API_URL}/api/workflow/${workflowId}/exports/${exportId}`);
+
+  if (!res.ok) {
+    throw await readError(res, `저장된 export 다운로드 실패: ${res.status}`);
   }
 
   return res.json();

@@ -484,12 +484,17 @@ def export_markdown_to_hwpx(markdown: str, title: str) -> tuple[str, bytes]:
         markdown_path.write_text(markdown, encoding="utf-8")
 
         python_bin = sys.executable or "python"
-        try:
-            _run_hwpx_command([python_bin, str(scripts["md2hwpx.py"]), str(markdown_path), "-o", str(output_path)])
-            _run_hwpx_command([python_bin, str(scripts["fix_namespaces.py"]), str(output_path)])
-        except subprocess.CalledProcessError as exc:
-            logger.warning("md2hwpx.py failed; using minimal internal HWPX fallback: %s", (exc.stderr or exc.stdout or exc)[:500])
+        base_template = scripts["md2hwpx.py"].parents[1] / "templates" / "base"
+        if base_template.exists():
+            try:
+                _run_hwpx_command([python_bin, str(scripts["md2hwpx.py"]), str(markdown_path), "-o", str(output_path)])
+            except subprocess.CalledProcessError as exc:
+                logger.info("md2hwpx.py failed; using minimal internal HWPX fallback: %s", (exc.stderr or exc.stdout or exc)[:500])
+                _build_minimal_hwpx(markdown, title, output_path)
+        else:
+            logger.info("HWPX base template is not bundled; using minimal internal HWPX fallback")
             _build_minimal_hwpx(markdown, title, output_path)
+        _run_hwpx_command([python_bin, str(scripts["fix_namespaces.py"]), str(output_path)])
         _run_hwpx_command([python_bin, str(scripts["validate.py"]), str(output_path)])
         return output_path.name, output_path.read_bytes()
     finally:

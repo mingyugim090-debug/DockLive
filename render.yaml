@@ -15,6 +15,18 @@ services:
         value: "20"
       - key: MOCK_MODE
         value: "false"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: "livedock-documents"
+      - key: SUPABASE_TIMEOUT_SECONDS
+        value: "10"
+      - key: WORKFLOW_TTL_SECONDS
+        value: "604800"
       - key: HWPX_EXPORT_ENABLED
         value: "true"
       - key: HWPX_SKILL_DIR

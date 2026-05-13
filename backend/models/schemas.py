@@ -191,6 +191,21 @@ class ExportResponse(BaseModel):
     encoding: Literal["text", "base64"] = "text"
 
 
+class ExportMetadata(BaseModel):
+    id: str
+    workflow_id: str
+    filename: str
+    content_type: str
+    export_type: str
+    size_bytes: int = 0
+    created_at: str
+
+
+class ExportListResponse(BaseModel):
+    success: bool
+    data: list[ExportMetadata] = Field(default_factory=list)
+
+
 class HwpxComposeResponse(ExportResponse):
     template_id: str
     download_id: Optional[str] = None

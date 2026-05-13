@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   confirmWorkflow,
   createDraftStream,
+  downloadWorkflowExport,
   exportWorkflowHtml,
   exportWorkflowHwpx,
   exportWorkflowHwpxTemplate,
@@ -13,13 +14,14 @@ import {
   generateDraft,
   getResult,
   getWorkflow,
+  listWorkflowExports,
   reviseDraft,
   saveDraftFeedback,
   saveWorkflowInputs,
 } from '@/lib/api';
 import { loadResult, saveResult } from '@/lib/resultCache';
 import { useAppStore } from '@/lib/store';
-import type { AnalysisResult, DraftStreamEvent, UserInputField, WorkflowSession } from '@/lib/types';
+import type { AnalysisResult, DraftStreamEvent, ExportMetadata, UserInputField, WorkflowSession } from '@/lib/types';
 import {
   AppHeader,
   Button,
@@ -137,6 +139,7 @@ export default function ResultPage() {
   const [streamStates, setStreamStates] = useState<Record<string, string>>({});
   const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [templateMap, setTemplateMap] = useState('{}');
+  const [exportHistory, setExportHistory] = useState<ExportMetadata[]>([]);
   const [loading, setLoading] = useState(!analysisResult);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -177,6 +180,7 @@ export default function ResultPage() {
         setResult(nextResult);
         setLocalWorkflow(workflowRes.data);
         setWorkflow(workflowRes.data);
+        void refreshExports(workflowRes.data.id);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : '결과를 불러오지 못했습니다.');
       } finally {
@@ -213,6 +217,15 @@ export default function ResultPage() {
   }, [activeAnalysis]);
 
   const draftReady = Boolean(workflow?.draft_sections.some((draft) => draft.content_markdown.trim()));
+
+  const refreshExports = async (workflowId: string) => {
+    try {
+      const res = await listWorkflowExports(workflowId);
+      setExportHistory(res.data);
+    } catch {
+      setExportHistory([]);
+    }
+  };
 
   const applyWorkflow = (next: WorkflowSession) => {
     setLocalWorkflow(next);
@@ -410,6 +423,7 @@ export default function ResultPage() {
     try {
       const exported = await exportWorkflowHtml(workflow.id);
       downloadExport(exported.filename, exported.content_type, exported.content, exported.encoding);
+      await refreshExports(workflow.id);
       setNotice('HTML export를 생성했습니다.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'HTML export에 실패했습니다.');
@@ -425,6 +439,7 @@ export default function ResultPage() {
     try {
       const exported = await exportWorkflowHwpx(workflow.id);
       downloadExport(exported.filename, exported.content_type, exported.content, exported.encoding);
+      await refreshExports(workflow.id);
       setNotice('HWPX export를 생성했습니다.');
     } catch (err) {
       setError(
@@ -445,9 +460,25 @@ export default function ResultPage() {
       JSON.parse(templateMap || '{}');
       const exported = await exportWorkflowHwpxTemplate(workflow.id, templateFile, templateMap || '{}');
       downloadExport(exported.filename, exported.content_type, exported.content, exported.encoding);
+      await refreshExports(workflow.id);
       setNotice('템플릿 HWPX export를 생성했습니다.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'HWPX 템플릿 export에 실패했습니다.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDownloadStoredExport = async (exportId: string) => {
+    if (!workflow) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const exported = await downloadWorkflowExport(workflow.id, exportId);
+      downloadExport(exported.filename, exported.content_type, exported.content, exported.encoding);
+      setNotice('저장된 export 파일을 다운로드했습니다.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '저장된 export 파일 다운로드에 실패했습니다.');
     } finally {
       setBusy(false);
     }
@@ -759,6 +790,9 @@ export default function ResultPage() {
                   onExportHwpx={handleExportHwpx}
                   onExportTemplate={handleExportTemplate}
                   onCopyMarkdown={handleCopyMarkdown}
+                  exportHistory={exportHistory}
+                  onDownloadStoredExport={handleDownloadStoredExport}
+                  onRefreshExports={() => workflow ? refreshExports(workflow.id) : undefined}
                   busy={busy}
                 />
               )}

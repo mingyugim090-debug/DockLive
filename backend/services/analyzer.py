@@ -46,12 +46,12 @@ _FALLBACK_SECTIONS: dict[str, list[dict[str, str | int]]] = {
     "scholarship": [
         {"title": "지원 동기", "hint": "장학금이 필요한 이유와 계기를 작성하세요.", "order": 1},
         {"title": "학업 성과", "hint": "성적, 활동, 수상 경험을 작성하세요.", "order": 2},
-        {"title": "학업 계획", "hint": "장학금 수혜 후 학업 계획을 작성하세요.", "order": 3},
+        {"title": "학업 계획", "hint": "장학금 수혜 후의 학업 계획을 작성하세요.", "order": 3},
         {"title": "향후 목표", "hint": "진로 방향과 장기 목표를 작성하세요.", "order": 4},
     ],
     "startup": [
         {"title": "문제 정의", "hint": "고객 pain point와 시장 문제를 작성하세요.", "order": 1},
-        {"title": "솔루션 개요", "hint": "제품/서비스의 핵심 기능과 차별점을 작성하세요.", "order": 2},
+        {"title": "솔루션 개요", "hint": "제품 또는 서비스의 핵심 기능과 차별점을 작성하세요.", "order": 2},
         {"title": "비즈니스 모델", "hint": "수익 구조, 고객, 가격 전략을 작성하세요.", "order": 3},
         {"title": "시장 분석", "hint": "시장 규모, 경쟁 상황, 진입 전략을 작성하세요.", "order": 4},
         {"title": "팀 구성", "hint": "팀원의 역할과 역량을 작성하세요.", "order": 5},
@@ -126,6 +126,23 @@ def _source_evidence(value: Any) -> list[SourceEvidence]:
                 note=str(item.get("note")).strip() if item.get("note") else None,
             )
         )
+    return evidence
+
+
+def _ensure_deadline_evidence(evidence: list[SourceEvidence], timeline: list[TimelineItem]) -> list[SourceEvidence]:
+    fields = {item.field for item in evidence}
+    if "submission_deadline" in fields:
+        return evidence
+    deadline = next((item for item in timeline if item.is_deadline), None)
+    if not deadline:
+        return evidence
+    evidence.append(
+        SourceEvidence(
+            field="submission_deadline",
+            quote=f"{deadline.label}: {deadline.date}",
+            note="timeline에서 추출된 마감일",
+        )
+    )
     return evidence
 
 
@@ -226,6 +243,8 @@ def build_analysis_result(raw: dict, source_type: str = "pdf", source_name: str 
     if not timeline:
         logger.warning("Timeline is empty; no reliable dates were extracted")
 
+    source_evidence = _ensure_deadline_evidence(_source_evidence(raw.get("source_evidence")), timeline)
+
     return AnalysisResult(
         id=result_id,
         source_type=source_type,
@@ -244,5 +263,5 @@ def build_analysis_result(raw: dict, source_type: str = "pdf", source_name: str 
         benefits=_as_list(raw.get("benefits")),
         cautions=_as_list(raw.get("cautions")),
         uncertain_fields=_as_list(raw.get("uncertain_fields")),
-        source_evidence=_source_evidence(raw.get("source_evidence")),
+        source_evidence=source_evidence,
     )

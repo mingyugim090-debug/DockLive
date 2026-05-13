@@ -8,6 +8,8 @@
     "organization": "한국창업진흥원",
     "required_documents": ["참가 신청서", "사업계획서", "개인정보 수집 이용 동의서"],
     "deadline": "2026-06-07",
+    "submission_method_contains": "K-Startup",
+    "forbidden_benefits": ["5천만원", "1억원", "보증"],
     "must_have_source_evidence": ["title", "organization", "submission_deadline"]
   },
   "fail_if": [

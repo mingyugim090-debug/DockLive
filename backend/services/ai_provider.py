@@ -2,6 +2,8 @@ import json
 import logging
 import os
 import re
+import urllib.error
+import urllib.request
 from typing import Iterator, Literal
 
 from core.config import settings
@@ -75,8 +77,9 @@ def stream_text(task: AiTask, system_prompt: str, user_prompt: str, max_tokens: 
 def _call_openai_json(task: AiTask, system_prompt: str, user_prompt: str, max_tokens: int) -> dict:
     try:
         from openai import APIConnectionError, AuthenticationError, OpenAI, RateLimitError
-    except ImportError as exc:
-        raise AnalysisError("OpenAI SDK가 설치되어 있지 않습니다. backend requirements를 설치하세요.") from exc
+    except ImportError:
+        logger.info("OpenAI SDK is not installed; using urllib fallback for JSON request.")
+        return _call_openai_json_http(task, system_prompt, user_prompt, max_tokens)
 
     try:
         client = OpenAI(api_key=settings.OPENAI_API_KEY)
@@ -98,6 +101,41 @@ def _call_openai_json(task: AiTask, system_prompt: str, user_prompt: str, max_to
         raise AnalysisError("OpenAI API 연결에 실패했습니다. 네트워크 상태를 확인하세요.") from exc
     except RateLimitError as exc:
         raise AnalysisError("OpenAI API 요청 한도를 초과했습니다. 잠시 후 다시 시도하세요.") from exc
+
+
+def _call_openai_json_http(task: AiTask, system_prompt: str, user_prompt: str, max_tokens: int) -> dict:
+    payload = {
+        "model": _model_for_task(task),
+        "max_tokens": max_tokens,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+    }
+    request = urllib.request.Request(
+        "https://api.openai.com/v1/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=90) as response:
+            data = json.loads(response.read().decode("utf-8"))
+        content = data.get("choices", [{}])[0].get("message", {}).get("content", "{}")
+        return json.loads(clean_json(content))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:500]
+        if exc.code in {401, 403}:
+            raise AnalysisError("OpenAI API 키가 유효하지 않습니다.") from exc
+        if exc.code == 429:
+            raise AnalysisError("OpenAI API 요청 한도를 초과했습니다. 잠시 후 다시 시도하세요.") from exc
+        raise AnalysisError(f"OpenAI API 요청에 실패했습니다: {detail}") from exc
+    except urllib.error.URLError as exc:
+        raise AnalysisError("OpenAI API 연결에 실패했습니다. 네트워크 상태를 확인하세요.") from exc
 
 
 def _stream_openai_text(task: AiTask, system_prompt: str, user_prompt: str, max_tokens: int) -> Iterator[str]:

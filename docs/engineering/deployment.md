@@ -34,6 +34,7 @@ SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 SUPABASE_ANON_KEY=your_anon_key
 SUPABASE_STORAGE_BUCKET=livedock-documents
+SUPABASE_TIMEOUT_SECONDS=10
 
 REDIS_URL=
 WORKFLOW_TTL_SECONDS=604800
@@ -82,7 +83,17 @@ GET /api/workflow/{id}
 POST /api/workflow/{id}/draft
 POST /api/workflow/{id}/finalize
 GET /api/workflow/{id}/export/html
+GET /api/workflow/{id}/exports
+GET /api/workflow/{id}/exports/{export_id}
 ```
+
+Production smoke script:
+
+```bash
+python backend/tests/evals/run_production_smoke.py --base-url https://your-backend.example.com
+```
+
+Use `--require-hwpx` only after the deployed backend HWPX toolchain is confirmed.
 
 Frontend:
 
@@ -106,3 +117,10 @@ python -m compileall .
 4. Verify analysis with one representative fixture.
 5. Enable Supabase persistence.
 6. Enable HWPX export only after server toolchain validation passes.
+
+## Secret Rotation
+
+The Supabase service role key must live only in the backend deployment provider.
+If it is ever pasted into chat, logs, or a client-side environment, rotate it in
+Supabase and update the backend deployment secret before the next production
+release.
