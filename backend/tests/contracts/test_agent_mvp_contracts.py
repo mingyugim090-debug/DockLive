@@ -13,7 +13,7 @@ os.environ.setdefault("MOCK_MODE", "true")
 
 try:
     from core.config import settings  # noqa: E402
-    from models.schemas import AnalysisResult, ExportListResponse, ExportMetadata  # noqa: E402
+    from models.schemas import AnalysisResult, ExportListResponse, ExportMetadata, HwpxStatusResponse  # noqa: E402
     from services.ai_provider import provider_name, should_use_mock_ai  # noqa: E402
     from services.analyzer import build_analysis_result  # noqa: E402
     from services.document_ingestion import ingest_uploaded_document  # noqa: E402
@@ -26,6 +26,7 @@ try:
         export_markdown_to_hwpx,
         finalize_document,
         generate_drafts,
+        get_hwpx_toolchain_status,
         stream_draft_events,
         update_inputs,
     )
@@ -43,6 +44,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - local minimal Python fa
     AnalysisResult = None
     ExportMetadata = None
     ExportListResponse = None
+    HwpxStatusResponse = None
     provider_name = None
     should_use_mock_ai = None
     build_analysis_result = None
@@ -54,6 +56,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - local minimal Python fa
     export_markdown_to_hwpx = None
     finalize_document = None
     generate_drafts = None
+    get_hwpx_toolchain_status = None
     stream_draft_events = None
     update_inputs = None
     ingest_uploaded_document = None
@@ -114,6 +117,15 @@ class AgentMvpContractTests(unittest.TestCase):
         response = ExportListResponse(success=True, data=[metadata])
         self.assertEqual(response.data[0].workflow_id, "workflow-1")
         self.assertEqual(response.data[0].export_type, "html")
+        self.assertEqual(response.data[0].status, "success")
+
+    def test_hwpx_status_contract(self):
+        if HwpxStatusResponse is None:
+            self.skipTest("pydantic is not installed in this Python environment")
+        status = HwpxStatusResponse(**get_hwpx_toolchain_status())
+        self.assertIsInstance(status.scripts_found, dict)
+        self.assertIn("validate.py", status.scripts_found)
+        self.assertIsInstance(status.warnings, list)
 
     def test_export_file_fallback_can_list_and_reload(self):
         if save_export_file is None:
@@ -125,11 +137,14 @@ class AgentMvpContractTests(unittest.TestCase):
             "<h1>계약 테스트</h1>".encode("utf-8"),
             "text/html; charset=utf-8",
             "contract_html",
+            validation_summary={"validation_passed": True},
         )
 
         self.assertIsNotNone(row)
         exports = list_export_files(workflow_id)
         self.assertTrue(any(item["id"] == row["id"] for item in exports))
+        self.assertEqual(row["status"], "success")
+        self.assertTrue(row["validation_summary"]["validation_passed"])
         loaded = load_export_file(workflow_id, row["id"])
         self.assertIsNotNone(loaded)
         self.assertIn("계약 테스트".encode("utf-8"), loaded["content"])

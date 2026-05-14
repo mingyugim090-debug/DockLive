@@ -9,6 +9,7 @@ import type {
   DraftSection,
   DraftStatus,
   ExportMetadata,
+  HwpxStatusResponse,
   SourceEvidence,
   WorkflowStatus,
 } from '@/lib/types';
@@ -77,6 +78,20 @@ const dayTone: Record<DayStatus, BadgeTone> = {
   warning: 'warning',
   danger: 'danger',
   passed: 'neutral',
+};
+
+const exportStatusLabel: Record<string, string> = {
+  pending: '대기',
+  success: '완료',
+  failed: '실패',
+  validation_failed: '검증 실패',
+};
+
+const exportStatusTone: Record<string, BadgeTone> = {
+  pending: 'warning',
+  success: 'success',
+  failed: 'danger',
+  validation_failed: 'danger',
 };
 
 export function StatusBadge({ label, tone = 'neutral', className }: { label: string; tone?: BadgeTone; className?: string }) {
@@ -988,6 +1003,7 @@ export function ExportPanel({
   onRefreshExports,
   placeholderMapPreview,
   placeholderWarnings,
+  hwpxStatus,
   busy,
 }: {
   finalTitle: string;
@@ -1006,21 +1022,58 @@ export function ExportPanel({
   onRefreshExports: () => void;
   placeholderMapPreview?: string;
   placeholderWarnings?: string[];
+  hwpxStatus: HwpxStatusResponse | null;
   busy: boolean;
 }) {
+  const hwpxReady = Boolean(hwpxStatus?.enabled && hwpxStatus.validation_available);
+  const templateCloneReady = Boolean(hwpxReady && hwpxStatus?.template_clone_available);
+  const statusWarnings = hwpxStatus?.warnings ?? [];
+
   return (
     <div className="space-y-5">
+      <div className="rounded-lg border border-white/10 bg-white/[0.035] p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-text">HWPX toolchain 상태</p>
+            <p className="mt-1 text-xs leading-5 text-text3">
+              서버에서 namespace fix, validate, template clone 검증을 실행할 수 있는지 먼저 확인합니다.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <StatusBadge
+              label={hwpxStatus ? (hwpxReady ? 'HWPX 사용 가능' : 'HWPX 제한됨') : '상태 확인 중'}
+              tone={hwpxStatus ? (hwpxReady ? 'success' : 'warning') : 'neutral'}
+            />
+            <StatusBadge label={templateCloneReady ? '템플릿 검증 가능' : '템플릿 검증 제한'} tone={templateCloneReady ? 'success' : 'warning'} />
+          </div>
+        </div>
+        {hwpxStatus?.skill_dir ? <p className="mt-3 break-all text-xs text-text3">toolchain: {hwpxStatus.skill_dir}</p> : null}
+        {statusWarnings.length ? (
+          <div className="mt-3">
+            <NoticeBanner tone="warning" title="HWPX export 전 확인">
+              <ul className="space-y-1">
+                {statusWarnings.map((item) => (
+                  <li key={item}>- {item}</li>
+                ))}
+              </ul>
+            </NoticeBanner>
+          </div>
+        ) : null}
+      </div>
+
       <div className="rounded-lg border border-white/10 bg-white/[0.035] p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-sm font-semibold text-text">Export actions</p>
-            <p className="mt-1 text-xs leading-5 text-text3">HWPX가 실패하면 HTML export로 먼저 문서를 확보할 수 있습니다.</p>
+            <p className="mt-1 text-xs leading-5 text-text3">
+              HWPX가 제한되거나 실패하면 HTML export와 placeholder map으로 먼저 문서를 확보할 수 있습니다.
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="secondary" onClick={onExportHtml} disabled={busy}>
               HTML export
             </Button>
-            <Button type="button" onClick={onExportHwpx} disabled={busy}>
+            <Button type="button" onClick={onExportHwpx} disabled={busy || !hwpxReady}>
               HWPX export
             </Button>
             <Button type="button" variant="secondary" onClick={onCreatePlaceholderMap} disabled={busy}>
@@ -1051,13 +1104,23 @@ export function ExportPanel({
                 className="flex flex-col gap-3 rounded-md border border-white/10 bg-bg/45 p-3 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-text">{item.filename}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="truncate text-sm font-semibold text-text">{item.filename}</p>
+                    <StatusBadge label={exportStatusLabel[item.status] ?? item.status} tone={exportStatusTone[item.status] ?? 'neutral'} />
+                  </div>
                   <p className="mt-1 text-xs text-text3">
                     {item.export_type} · {Math.max(1, Math.round(item.size_bytes / 1024))}KB ·{' '}
                     {new Date(item.created_at).toLocaleString('ko-KR')}
                   </p>
+                  {item.error_message ? <p className="mt-2 text-xs leading-5 text-rose-200">{item.error_message}</p> : null}
+                  {item.validation_summary?.validation_passed || item.validation_summary?.generation_method ? (
+                    <p className="mt-2 text-xs leading-5 text-text3">
+                      검증: {item.validation_summary.validation_passed ? '통과' : '기록됨'}
+                      {item.validation_summary.generation_method ? ` · ${String(item.validation_summary.generation_method)}` : ''}
+                    </p>
+                  ) : null}
                 </div>
-                <Button type="button" variant="ghost" onClick={() => onDownloadStoredExport(item.id)} disabled={busy}>
+                <Button type="button" variant="ghost" onClick={() => onDownloadStoredExport(item.id)} disabled={busy || item.status !== 'success'}>
                   다시 다운로드
                 </Button>
               </div>
@@ -1096,7 +1159,7 @@ export function ExportPanel({
               minHeight="min-h-[180px]"
             />
             <div className="mt-3 flex justify-end">
-              <Button type="button" onClick={onExportTemplate} disabled={busy || !templateFile}>
+              <Button type="button" onClick={onExportTemplate} disabled={busy || !templateFile || !templateCloneReady}>
                 템플릿 HWPX export
               </Button>
             </div>

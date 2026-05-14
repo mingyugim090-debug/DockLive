@@ -13,6 +13,7 @@ import {
   exportWorkflowHwpxTemplate,
   finalizeWorkflow,
   generateDraft,
+  getHwpxStatus,
   getResult,
   getWorkflow,
   listWorkflowExports,
@@ -22,7 +23,7 @@ import {
 } from '@/lib/api';
 import { loadResult, saveResult } from '@/lib/resultCache';
 import { useAppStore } from '@/lib/store';
-import type { AnalysisResult, DraftStreamEvent, ExportMetadata, UserInputField, WorkflowSession } from '@/lib/types';
+import type { AnalysisResult, DraftStreamEvent, ExportMetadata, HwpxStatusResponse, UserInputField, WorkflowSession } from '@/lib/types';
 import {
   AppHeader,
   Button,
@@ -144,6 +145,7 @@ export default function ResultPage() {
   const [placeholderMapPreview, setPlaceholderMapPreview] = useState('');
   const [placeholderWarnings, setPlaceholderWarnings] = useState<string[]>([]);
   const [exportHistory, setExportHistory] = useState<ExportMetadata[]>([]);
+  const [hwpxStatus, setHwpxStatus] = useState<HwpxStatusResponse | null>(null);
   const [loading, setLoading] = useState(!analysisResult);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -156,6 +158,30 @@ export default function ResultPage() {
       streamRef.current?.close();
     };
   }, [id, setStep]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getHwpxStatus()
+      .then((status) => {
+        if (!cancelled) setHwpxStatus(status);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setHwpxStatus({
+            success: false,
+            enabled: false,
+            skill_dir: '',
+            scripts_found: {},
+            validation_available: false,
+            template_clone_available: false,
+            warnings: ['HWPX toolchain 상태를 확인하지 못했습니다. HTML export를 fallback으로 사용하세요.'],
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (workflow) {
@@ -446,6 +472,7 @@ export default function ResultPage() {
       await refreshExports(workflow.id);
       setNotice('HWPX export를 생성했습니다.');
     } catch (err) {
+      await refreshExports(workflow.id);
       setError(
         err instanceof Error
           ? `${err.message} HTML export를 fallback으로 먼저 사용할 수 있습니다.`
@@ -486,6 +513,7 @@ export default function ResultPage() {
       await refreshExports(workflow.id);
       setNotice('템플릿 HWPX export를 생성했습니다.');
     } catch (err) {
+      await refreshExports(workflow.id);
       setError(err instanceof Error ? err.message : 'HWPX 템플릿 export에 실패했습니다.');
     } finally {
       setBusy(false);
@@ -862,6 +890,7 @@ export default function ResultPage() {
                   onRefreshExports={() => workflow ? refreshExports(workflow.id) : undefined}
                   placeholderMapPreview={placeholderMapPreview}
                   placeholderWarnings={placeholderWarnings}
+                  hwpxStatus={hwpxStatus}
                   busy={busy}
                 />
               )}

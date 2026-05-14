@@ -11,7 +11,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Iterator
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 from xml.sax.saxutils import escape as xml_escape
 
@@ -548,6 +548,48 @@ def _require_hwpx_scripts(*names: str) -> dict[str, Path]:
     return scripts
 
 
+def get_hwpx_toolchain_status() -> dict[str, Any]:
+    """Return deployment-safe HWPX toolchain readiness for UI and smoke checks."""
+    skill_dir = _hwpx_skill_dir()
+    script_names = [
+        "md2hwpx.py",
+        "fix_namespaces.py",
+        "validate.py",
+        "text_extract.py",
+        "clone_form.py",
+        "verify_hwpx.py",
+        "convert_hwp.py",
+    ]
+    scripts_found = {name: (skill_dir / "scripts" / name).exists() for name in script_names}
+    warnings: list[str] = []
+
+    if not settings.HWPX_EXPORT_ENABLED:
+        warnings.append("HWPX_EXPORT_ENABLED=false 상태입니다. HTML export와 placeholder map만 사용할 수 있습니다.")
+    if not skill_dir.exists():
+        warnings.append(f"HWPX toolchain 디렉터리를 찾을 수 없습니다: {skill_dir}")
+
+    missing = [name for name, exists in scripts_found.items() if not exists]
+    if missing:
+        warnings.append(f"누락된 HWPX script: {', '.join(missing)}")
+
+    validation_available = scripts_found.get("fix_namespaces.py", False) and scripts_found.get("validate.py", False)
+    template_clone_available = validation_available and scripts_found.get("clone_form.py", False) and scripts_found.get("verify_hwpx.py", False)
+
+    if settings.HWPX_EXPORT_ENABLED and not validation_available:
+        warnings.append("namespace fix 또는 validate script가 없어 HWPX를 ready 상태로 제공할 수 없습니다.")
+    if settings.HWPX_EXPORT_ENABLED and not template_clone_available:
+        warnings.append("템플릿 클로닝 검증 script가 없어 공식 양식 채우기 export가 제한됩니다.")
+
+    return {
+        "enabled": bool(settings.HWPX_EXPORT_ENABLED),
+        "skill_dir": str(skill_dir),
+        "scripts_found": scripts_found,
+        "validation_available": validation_available,
+        "template_clone_available": template_clone_available,
+        "warnings": list(dict.fromkeys(warnings)),
+    }
+
+
 def _hwpx_subprocess_env() -> dict[str, str]:
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
@@ -567,14 +609,20 @@ def _run_hwpx_command(command: list[str]) -> subprocess.CompletedProcess[str]:
     )
 
 
-def export_markdown_to_hwpx(markdown: str, title: str) -> tuple[str, bytes]:
+def export_markdown_to_hwpx_with_validation(markdown: str, title: str) -> tuple[str, bytes, dict[str, Any]]:
     """Convert final markdown to HWPX through the optional hwpx-skill toolchain."""
     if not settings.HWPX_EXPORT_ENABLED:
         raise AnalysisError("HWPX export가 비활성화되어 있습니다. HTML export를 사용하거나 HWPX_EXPORT_ENABLED=true로 설정하세요.")
 
-    scripts = _require_hwpx_scripts("md2hwpx.py", "fix_namespaces.py", "validate.py")
+    scripts = _require_hwpx_scripts("md2hwpx.py", "fix_namespaces.py", "validate.py", "text_extract.py")
     safe_title = _safe_title(title)
     tmpdir = _make_tmp_dir()
+    summary: dict[str, Any] = {
+        "validation_passed": False,
+        "namespace_fixed": False,
+        "text_extract_available": scripts["text_extract.py"].exists(),
+        "warnings": [],
+    }
     try:
         markdown_path = tmpdir / "input.md"
         output_path = tmpdir / f"{safe_title}.hwpx"
@@ -585,17 +633,43 @@ def export_markdown_to_hwpx(markdown: str, title: str) -> tuple[str, bytes]:
         if base_template.exists():
             try:
                 _run_hwpx_command([python_bin, str(scripts["md2hwpx.py"]), str(markdown_path), "-o", str(output_path)])
+                summary["generation_method"] = "md2hwpx.py"
             except subprocess.CalledProcessError as exc:
                 logger.info("md2hwpx.py failed; using minimal internal HWPX fallback: %s", (exc.stderr or exc.stdout or exc)[:500])
+                summary["generation_method"] = "internal_minimal_fallback"
+                summary["warnings"].append("md2hwpx.py 실패로 내부 minimal HWPX fallback을 사용했습니다.")
                 _build_minimal_hwpx(markdown, title, output_path)
         else:
             logger.info("HWPX base template is not bundled; using minimal internal HWPX fallback")
+            summary["generation_method"] = "internal_minimal_fallback"
+            summary["warnings"].append("base template이 없어 내부 minimal HWPX fallback을 사용했습니다.")
             _build_minimal_hwpx(markdown, title, output_path)
-        _run_hwpx_command([python_bin, str(scripts["fix_namespaces.py"]), str(output_path)])
-        _run_hwpx_command([python_bin, str(scripts["validate.py"]), str(output_path)])
-        return output_path.name, output_path.read_bytes()
+        fix_result = _run_hwpx_command([python_bin, str(scripts["fix_namespaces.py"]), str(output_path)])
+        summary["namespace_fixed"] = True
+        summary["namespace_output"] = (fix_result.stdout or fix_result.stderr or "").strip()[:1000]
+        validate_result = _run_hwpx_command([python_bin, str(scripts["validate.py"]), str(output_path)])
+        summary["validation_passed"] = True
+        summary["validation_output"] = (validate_result.stdout or validate_result.stderr or "").strip()[:1000]
+        try:
+            text_result = _run_hwpx_command([python_bin, str(scripts["text_extract.py"]), str(output_path)])
+            extracted_text = text_result.stdout or ""
+            summary["text_extract_passed"] = True
+            summary["text_chars"] = len(extracted_text)
+            summary["title_found"] = title[:20] in extracted_text if title else False
+            summary["extracted_text_excerpt"] = extracted_text[:500]
+        except subprocess.CalledProcessError as exc:
+            summary["text_extract_passed"] = False
+            summary["text_chars"] = 0
+            summary["title_found"] = False
+            summary["warnings"].append(f"text_extract.py 실패: {(exc.stderr or exc.stdout or str(exc))[:500]}")
+        return output_path.name, output_path.read_bytes(), summary
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def export_markdown_to_hwpx(markdown: str, title: str) -> tuple[str, bytes]:
+    filename, content, _summary = export_markdown_to_hwpx_with_validation(markdown, title)
+    return filename, content
 
 
 def build_template_replacements(workflow: WorkflowSession, extra: dict[str, str] | None = None) -> dict[str, str]:
@@ -675,17 +749,17 @@ def create_hwpx_placeholder_map(
     return placeholder_map, list(dict.fromkeys(warnings))
 
 
-def clone_hwpx_template(
+def clone_hwpx_template_with_validation(
     template_content: bytes,
     workflow: WorkflowSession,
     replacements: dict[str, str] | None = None,
     keywords: dict[str, str] | None = None,
-) -> tuple[str, bytes]:
+) -> tuple[str, bytes, dict[str, Any]]:
     """Clone an uploaded HWPX form and replace text while preserving tables/styles."""
     if not settings.HWPX_EXPORT_ENABLED:
         raise AnalysisError("HWPX 템플릿 클로닝이 비활성화되어 있습니다. HWPX_EXPORT_ENABLED=true로 설정하세요.")
 
-    scripts = _require_hwpx_scripts("clone_form.py", "fix_namespaces.py", "validate.py", "verify_hwpx.py")
+    scripts = _require_hwpx_scripts("clone_form.py", "fix_namespaces.py", "validate.py", "verify_hwpx.py", "text_extract.py")
     if not template_content.startswith(b"PK"):
         raise AnalysisError("업로드한 파일이 HWPX ZIP 패키지 형식이 아닙니다.")
 
@@ -723,9 +797,9 @@ def clone_hwpx_template(
             "--validate",
         ]
         _run_hwpx_command(command)
-        _run_hwpx_command([python_bin, str(scripts["fix_namespaces.py"]), str(output_path)])
-        _run_hwpx_command([python_bin, str(scripts["validate.py"]), str(output_path)])
-        _run_hwpx_command(
+        fix_result = _run_hwpx_command([python_bin, str(scripts["fix_namespaces.py"]), str(output_path)])
+        validate_result = _run_hwpx_command([python_bin, str(scripts["validate.py"]), str(output_path)])
+        verify_result = _run_hwpx_command(
             [
                 python_bin,
                 str(scripts["verify_hwpx.py"]),
@@ -737,9 +811,48 @@ def clone_hwpx_template(
                 str(verify_path),
             ]
         )
-        return output_path.name, output_path.read_bytes()
+        extracted_text = ""
+        text_extract_passed = False
+        text_extract_warning = ""
+        try:
+            text_result = _run_hwpx_command([python_bin, str(scripts["text_extract.py"]), str(output_path)])
+            extracted_text = text_result.stdout or ""
+            text_extract_passed = True
+        except subprocess.CalledProcessError as exc:
+            text_extract_warning = (exc.stderr or exc.stdout or str(exc))[:500]
+        verify_report: dict[str, Any] = {}
+        if verify_path.exists():
+            try:
+                verify_report = json.loads(verify_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                verify_report = {"parse_error": "verify_hwpx.py JSON report를 읽지 못했습니다."}
+        summary = {
+            "generation_method": "clone_form.py",
+            "namespace_fixed": True,
+            "namespace_output": (fix_result.stdout or fix_result.stderr or "").strip()[:1000],
+            "validation_passed": True,
+            "validation_output": (validate_result.stdout or validate_result.stderr or "").strip()[:1000],
+            "verify_output": (verify_result.stdout or verify_result.stderr or "").strip()[:1000],
+            "verify_report": verify_report,
+            "text_extract_passed": text_extract_passed,
+            "text_chars": len(extracted_text),
+            "title_found": workflow.final_document.title[:20] in extracted_text if workflow.final_document else False,
+            "extracted_text_excerpt": extracted_text[:500],
+            "warnings": [f"text_extract.py 실패: {text_extract_warning}"] if text_extract_warning else [],
+        }
+        return output_path.name, output_path.read_bytes(), summary
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def clone_hwpx_template(
+    template_content: bytes,
+    workflow: WorkflowSession,
+    replacements: dict[str, str] | None = None,
+    keywords: dict[str, str] | None = None,
+) -> tuple[str, bytes]:
+    filename, content, _summary = clone_hwpx_template_with_validation(template_content, workflow, replacements, keywords)
+    return filename, content
 
 
 def hwpx_bytes_to_base64(content: bytes) -> str:

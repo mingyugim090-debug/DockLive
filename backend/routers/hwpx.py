@@ -8,15 +8,21 @@ from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import FileResponse
 
 from core.errors import AnalysisError
-from models.schemas import HwpxComposeResponse, HwpxConvertResponse
+from models.schemas import HwpxComposeResponse, HwpxConvertResponse, HwpxStatusResponse
 from services import storage
 from services.document_ingestion import convert_hwp_to_hwpx
 from services.hwpx_compose_service import compose_hwpx
+from services.drafting_service import get_hwpx_toolchain_status
 
 router = APIRouter()
 
 EXPORT_ROOT = Path(__file__).resolve().parents[2] / "outputs" / "hwpx_exports"
 HWPX_MEDIA_TYPE = "application/vnd.hancom.hwpx"
+
+
+@router.get("/hwpx/status", response_model=HwpxStatusResponse)
+async def get_hwpx_status():
+    return HwpxStatusResponse(**get_hwpx_toolchain_status())
 
 
 @router.post("/hwpx/compose", response_model=HwpxComposeResponse)

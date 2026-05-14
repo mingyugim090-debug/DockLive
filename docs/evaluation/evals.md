@@ -141,3 +141,15 @@ py backend\tests\evals\run_production_smoke.py --base-url https://your-backend.e
 This checks health, text analysis, workflow resume, input saving, draft,
 finalization, HTML export, export metadata listing, and stored export download.
 Add `--require-hwpx` only when the deployed HWPX toolchain is expected to pass.
+
+## Current Quality Gate
+
+Before a production push that changes analysis, drafting, storage, or export behavior:
+
+1. Run deterministic fixture E2E with `--min-score 80`.
+2. Run backend contract tests.
+3. Run frontend build if TS/TSX changed.
+4. Check `/api/hwpx/status` in the target backend environment.
+5. Run `--include-hwpx` only when status shows HWPX validation scripts are available.
+
+Real-AI eval remains a separate quality check because it depends on provider keys and model behavior. Treat a real-AI average score below `80` as a prompt/schema regression to investigate before enabling live drafting for new users.

@@ -43,11 +43,19 @@ create table if not exists public.exports (
   filename text not null,
   content_type text not null,
   export_type text not null,
+  status text not null default 'success',
+  error_message text,
+  validation_summary jsonb not null default '{}'::jsonb,
   size_bytes integer not null default 0,
   storage_bucket text not null,
   storage_path text not null,
   created_at timestamptz not null default now()
 );
+
+alter table public.exports
+  add column if not exists status text not null default 'success',
+  add column if not exists error_message text,
+  add column if not exists validation_summary jsonb not null default '{}'::jsonb;
 
 create index if not exists analysis_results_updated_at_idx
   on public.analysis_results(updated_at desc);

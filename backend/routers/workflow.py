@@ -18,10 +18,10 @@ from models.schemas import (
 )
 from services import storage
 from services.drafting_service import (
-    clone_hwpx_template,
+    clone_hwpx_template_with_validation,
     confirm_workflow,
     create_hwpx_placeholder_map,
-    export_markdown_to_hwpx,
+    export_markdown_to_hwpx_with_validation,
     finalize_document,
     generate_drafts,
     hwpx_bytes_to_base64,
@@ -87,6 +87,7 @@ async def download_workflow_export(workflow_id: str, export_id: str):
             content_type=content_type,
             content=content.decode("utf-8", errors="replace"),
             encoding="text",
+            validation_summary=row.get("validation_summary") or {},
         )
     return ExportResponse(
         success=True,
@@ -94,6 +95,7 @@ async def download_workflow_export(workflow_id: str, export_id: str):
         content_type=content_type,
         content=base64.b64encode(content).decode("ascii"),
         encoding="base64",
+        validation_summary=row.get("validation_summary") or {},
     )
 
 
@@ -184,6 +186,7 @@ async def export_hwp_compatible_html(workflow_id: str):
         html.encode("utf-8"),
         "text/html; charset=utf-8",
         "html",
+        validation_summary={"fallback": True, "format": "html"},
     )
     return ExportResponse(
         success=True,
@@ -198,18 +201,35 @@ async def export_hwp_compatible_html(workflow_id: str):
 async def export_hwpx(workflow_id: str):
     workflow = _ensure_finalized(_load_workflow_or_404(workflow_id))
     assert workflow.final_document is not None
-    filename, content = export_markdown_to_hwpx(
-        workflow.final_document.content_markdown,
-        workflow.final_document.title,
-    )
-    storage.save_export_file(workflow.id, filename, content, "application/vnd.hancom.hwpx", "hwpx")
-    return ExportResponse(
-        success=True,
-        filename=filename,
-        content_type="application/vnd.hancom.hwpx",
-        content=hwpx_bytes_to_base64(content),
-        encoding="base64",
-    )
+    try:
+        filename, content, validation_summary = export_markdown_to_hwpx_with_validation(
+            workflow.final_document.content_markdown,
+            workflow.final_document.title,
+        )
+        storage.save_export_file(
+            workflow.id,
+            filename,
+            content,
+            "application/vnd.hancom.hwpx",
+            "hwpx",
+            status="success",
+            validation_summary=validation_summary,
+        )
+        return ExportResponse(
+            success=True,
+            filename=filename,
+            content_type="application/vnd.hancom.hwpx",
+            content=hwpx_bytes_to_base64(content),
+            encoding="base64",
+            warnings=validation_summary.get("warnings", []),
+            validation_summary=validation_summary,
+        )
+    except Exception as exc:
+        status = _export_failure_status(exc)
+        _save_failed_export(workflow.id, "hwpx", status, str(exc))
+        if isinstance(exc, AnalysisError):
+            raise
+        raise AnalysisError(f"HWPX export 실패: {exc}")
 
 
 @router.post("/{workflow_id}/export/hwpx/placeholder-map", response_model=HwpxPlaceholderMapResponse)
@@ -231,6 +251,8 @@ async def export_hwpx_placeholder_map(workflow_id: str, template_id: str = "basi
         content,
         "application/json; charset=utf-8",
         "hwpx_placeholder_map",
+        status="success",
+        validation_summary={"template_id": template_id, "warnings": warnings},
     )
     return HwpxPlaceholderMapResponse(
         success=True,
@@ -264,17 +286,62 @@ async def export_hwpx_from_template(
     if not isinstance(replacements, dict) or not isinstance(keywords, dict):
         raise AnalysisError("치환 값과 키워드 값은 JSON 객체여야 합니다.")
 
-    filename, content = clone_hwpx_template(
-        await template.read(),
-        workflow,
-        replacements={str(key): str(value) for key, value in replacements.items()},
-        keywords={str(key): str(value) for key, value in keywords.items()},
-    )
-    storage.save_export_file(workflow.id, filename, content, "application/vnd.hancom.hwpx", "hwpx_template")
-    return ExportResponse(
-        success=True,
-        filename=filename,
-        content_type="application/vnd.hancom.hwpx",
-        content=hwpx_bytes_to_base64(content),
-        encoding="base64",
+    try:
+        filename, content, validation_summary = clone_hwpx_template_with_validation(
+            await template.read(),
+            workflow,
+            replacements={str(key): str(value) for key, value in replacements.items()},
+            keywords={str(key): str(value) for key, value in keywords.items()},
+        )
+        storage.save_export_file(
+            workflow.id,
+            filename,
+            content,
+            "application/vnd.hancom.hwpx",
+            "hwpx_template",
+            status="success",
+            validation_summary=validation_summary,
+        )
+        return ExportResponse(
+            success=True,
+            filename=filename,
+            content_type="application/vnd.hancom.hwpx",
+            content=hwpx_bytes_to_base64(content),
+            encoding="base64",
+            validation_summary=validation_summary,
+        )
+    except Exception as exc:
+        status = _export_failure_status(exc)
+        _save_failed_export(workflow.id, "hwpx_template", status, str(exc))
+        if isinstance(exc, AnalysisError):
+            raise
+        raise AnalysisError(f"HWPX 템플릿 export 실패: {exc}")
+
+
+def _export_failure_status(exc: Exception) -> str:
+    message = str(exc).lower()
+    return "validation_failed" if "validate" in message or "validation" in message or "검증" in message else "failed"
+
+
+def _save_failed_export(workflow_id: str, export_type: str, status: str, error_message: str) -> None:
+    content = json.dumps(
+        {
+            "success": False,
+            "export_type": export_type,
+            "status": status,
+            "error_message": error_message,
+            "created_at": utc_now_iso(),
+        },
+        ensure_ascii=False,
+        indent=2,
+    ).encode("utf-8")
+    storage.save_export_file(
+        workflow_id,
+        f"{export_type}_failed.json",
+        content,
+        "application/json; charset=utf-8",
+        export_type,
+        status=status,
+        error_message=error_message,
+        validation_summary={"status": status},
     )

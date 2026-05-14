@@ -7,6 +7,7 @@ import type {
   HwpxComposeResponse,
   HwpxConvertResponse,
   HwpxPlaceholderMapResponse,
+  HwpxStatusResponse,
   WorkflowResponse,
 } from './types';
 
@@ -26,6 +27,16 @@ const API_URL = resolveApiUrl();
 
 export function getApiUrl(): string {
   return API_URL;
+}
+
+export async function getHwpxStatus(): Promise<HwpxStatusResponse> {
+  const res = await fetch(`${API_URL}/api/hwpx/status`);
+
+  if (!res.ok) {
+    throw await readError(res, `HWPX status 조회 실패: ${res.status}`);
+  }
+
+  return res.json();
 }
 
 async function readError(res: Response, fallback: string): Promise<Error> {

@@ -375,6 +375,9 @@ def save_export_file(
     content: bytes,
     content_type: str,
     export_type: str,
+    status: str = "success",
+    error_message: str | None = None,
+    validation_summary: dict[str, Any] | None = None,
 ) -> Optional[dict]:
     """Persist a generated export in Supabase Storage when configured."""
     if not content:
@@ -391,12 +394,20 @@ def save_export_file(
         "size_bytes": len(content),
         "storage_bucket": settings.SUPABASE_STORAGE_BUCKET,
         "storage_path": storage_path,
+        "status": status,
+        "error_message": error_message,
+        "validation_summary": validation_summary or {},
         "created_at": _utc_now(),
     }
 
     uploaded_path = _supabase_upload(storage_path, content, content_type)
-    if uploaded_path and _supabase_insert(SUPABASE_EXPORT_TABLE, {**row, "storage_path": uploaded_path}):
-        return row
+    if uploaded_path:
+        stored_row = {**row, "storage_path": uploaded_path}
+        if _supabase_insert(SUPABASE_EXPORT_TABLE, stored_row):
+            return row
+        legacy_row = _legacy_export_row(stored_row)
+        if _supabase_insert(SUPABASE_EXPORT_TABLE, legacy_row):
+            return row
 
     fallback_key = f"export:{workflow_id}:{export_id}"
     fallback_row = {**row, "storage_bucket": "file_cache", "storage_path": fallback_key}
@@ -420,18 +431,27 @@ def list_export_files(workflow_id: str) -> list[dict[str, Any]]:
     if not workflow_id:
         return []
     encoded_workflow_id = quote(workflow_id, safe="")
-    columns = "id,workflow_id,filename,content_type,export_type,size_bytes,created_at"
+    columns = "id,workflow_id,filename,content_type,export_type,size_bytes,created_at,status,error_message,validation_summary"
     url = (
         f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/{SUPABASE_EXPORT_TABLE}"
         f"?workflow_id=eq.{encoded_workflow_id}&select={columns}&order=created_at.desc"
     )
     rows = _supabase_select(url)
     if rows:
-        return rows
+        return [_normalize_export_row(row) for row in rows]
+
+    legacy_columns = "id,workflow_id,filename,content_type,export_type,size_bytes,created_at"
+    legacy_url = (
+        f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/{SUPABASE_EXPORT_TABLE}"
+        f"?workflow_id=eq.{encoded_workflow_id}&select={legacy_columns}&order=created_at.desc"
+    )
+    legacy_rows = _supabase_select(legacy_url)
+    if legacy_rows:
+        return [_normalize_export_row(row) for row in legacy_rows]
 
     fallback = _load_file_cache(f"exports:{workflow_id}") or {}
     items = fallback.get("items", [])
-    return items if isinstance(items, list) else []
+    return [_normalize_export_row(item) for item in items] if isinstance(items, list) else []
 
 
 def load_export_file(workflow_id: str, export_id: str) -> Optional[dict[str, Any]]:
@@ -440,7 +460,7 @@ def load_export_file(workflow_id: str, export_id: str) -> Optional[dict[str, Any
         return None
     encoded_workflow_id = quote(workflow_id, safe="")
     encoded_export_id = quote(export_id, safe="")
-    columns = "id,workflow_id,filename,content_type,export_type,size_bytes,created_at,storage_bucket,storage_path"
+    columns = "id,workflow_id,filename,content_type,export_type,size_bytes,created_at,storage_bucket,storage_path,status,error_message,validation_summary"
     url = (
         f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/{SUPABASE_EXPORT_TABLE}"
         f"?id=eq.{encoded_export_id}&workflow_id=eq.{encoded_workflow_id}&select={columns}&limit=1"
@@ -450,7 +470,19 @@ def load_export_file(workflow_id: str, export_id: str) -> Optional[dict[str, Any
         row = rows[0]
         content = _supabase_download(row.get("storage_bucket") or settings.SUPABASE_STORAGE_BUCKET, row.get("storage_path", ""))
         if content is not None:
-            return {**row, "content": content}
+            return {**_normalize_export_row(row), "content": content}
+
+    legacy_columns = "id,workflow_id,filename,content_type,export_type,size_bytes,created_at,storage_bucket,storage_path"
+    legacy_url = (
+        f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/{SUPABASE_EXPORT_TABLE}"
+        f"?id=eq.{encoded_export_id}&workflow_id=eq.{encoded_workflow_id}&select={legacy_columns}&limit=1"
+    )
+    legacy_rows = _supabase_select(legacy_url)
+    if legacy_rows:
+        row = legacy_rows[0]
+        content = _supabase_download(row.get("storage_bucket") or settings.SUPABASE_STORAGE_BUCKET, row.get("storage_path", ""))
+        if content is not None:
+            return {**_normalize_export_row(row), "content": content}
 
     fallback = _load_file_cache(f"export:{workflow_id}:{export_id}")
     if not fallback:
@@ -463,4 +495,22 @@ def load_export_file(workflow_id: str, export_id: str) -> Optional[dict[str, Any
     except Exception as e:
         logger.warning("Fallback export decode failed for workflow=%s export=%s: %s", workflow_id, export_id, e)
         return None
-    return {**fallback, "content": content}
+    return {**_normalize_export_row(fallback), "content": content}
+
+
+def _normalize_export_row(row: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(row)
+    normalized.setdefault("status", "success")
+    normalized.setdefault("error_message", None)
+    summary = normalized.get("validation_summary")
+    normalized["validation_summary"] = summary if isinstance(summary, dict) else {}
+    return normalized
+
+
+def _legacy_export_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Return the export columns that existed before status metadata was added."""
+    return {
+        key: value
+        for key, value in row.items()
+        if key not in {"status", "error_message", "validation_summary"}
+    }

@@ -78,6 +78,7 @@ Backend:
 
 ```bash
 GET /health
+GET /api/hwpx/status
 POST /api/analyze/text
 GET /api/workflow/{id}
 POST /api/workflow/{id}/draft
@@ -116,7 +117,9 @@ python -m compileall .
 3. Add OpenAI key and set `MOCK_MODE=false`.
 4. Verify analysis with one representative fixture.
 5. Enable Supabase persistence.
-6. Enable HWPX export only after server toolchain validation passes.
+6. Check `/api/hwpx/status` and confirm `validation_available=true`.
+7. Enable HWPX export only after server toolchain validation passes.
+8. Run production smoke again with `--require-hwpx` only after HWPX readiness is confirmed.
 
 ## Secret Rotation
 

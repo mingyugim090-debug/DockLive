@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -12,6 +12,7 @@ InputFieldType = Literal["text", "textarea", "number", "date", "file_note"]
 DraftStatus = Literal["empty", "needs_input", "drafted", "revised", "confirmed"]
 WorkflowStatus = Literal["analyzed", "collecting_inputs", "drafting", "reviewing", "confirmed", "finalized"]
 DraftStreamEventType = Literal["section_start", "delta", "section_done", "workflow_done", "error"]
+ExportJobStatus = Literal["pending", "success", "failed", "validation_failed"]
 
 
 class TimelineItem(BaseModel):
@@ -202,6 +203,8 @@ class ExportResponse(BaseModel):
     content_type: str
     content: str
     encoding: Literal["text", "base64"] = "text"
+    warnings: list[str] = Field(default_factory=list)
+    validation_summary: dict[str, Any] = Field(default_factory=dict)
 
 
 class ExportMetadata(BaseModel):
@@ -212,11 +215,24 @@ class ExportMetadata(BaseModel):
     export_type: str
     size_bytes: int = 0
     created_at: str
+    status: ExportJobStatus = "success"
+    error_message: Optional[str] = None
+    validation_summary: dict[str, Any] = Field(default_factory=dict)
 
 
 class ExportListResponse(BaseModel):
     success: bool
     data: list[ExportMetadata] = Field(default_factory=list)
+
+
+class HwpxStatusResponse(BaseModel):
+    success: bool = True
+    enabled: bool
+    skill_dir: str
+    scripts_found: dict[str, bool] = Field(default_factory=dict)
+    validation_available: bool = False
+    template_clone_available: bool = False
+    warnings: list[str] = Field(default_factory=list)
 
 
 class HwpxPlaceholderMapResponse(BaseModel):

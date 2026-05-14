@@ -5,6 +5,7 @@ export type SourceType = 'pdf' | 'url' | 'text' | 'demo' | 'hwpx' | 'hwp';
 export type InputFieldType = 'text' | 'textarea' | 'number' | 'date' | 'file_note';
 export type DraftStatus = 'empty' | 'needs_input' | 'drafted' | 'revised' | 'confirmed';
 export type DraftStreamEventType = 'section_start' | 'delta' | 'section_done' | 'workflow_done' | 'error';
+export type ExportJobStatus = 'pending' | 'success' | 'failed' | 'validation_failed';
 export type WorkflowStatus =
   | 'analyzed'
   | 'collecting_inputs'
@@ -175,6 +176,8 @@ export interface ExportResponse {
   content_type: string;
   content: string;
   encoding: 'text' | 'base64';
+  warnings: string[];
+  validation_summary: Record<string, unknown>;
 }
 
 export interface ExportMetadata {
@@ -185,6 +188,9 @@ export interface ExportMetadata {
   export_type: string;
   size_bytes: number;
   created_at: string;
+  status: ExportJobStatus;
+  error_message?: string | null;
+  validation_summary: Record<string, unknown>;
 }
 
 export interface ExportListResponse {
@@ -203,6 +209,16 @@ export interface HwpxPlaceholderMapResponse {
   warnings: string[];
   generated_at: string;
   download_id?: string | null;
+}
+
+export interface HwpxStatusResponse {
+  success: boolean;
+  enabled: boolean;
+  skill_dir: string;
+  scripts_found: Record<string, boolean>;
+  validation_available: boolean;
+  template_clone_available: boolean;
+  warnings: string[];
 }
 
 export interface HwpxComposeResponse extends ExportResponse {
