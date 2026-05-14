@@ -142,8 +142,8 @@ export default function HwpxComposePage() {
               <Button type="button" variant="secondary" onClick={() => router.push('/')}>
                 돌아가기
               </Button>
-              <Button type="button" onClick={handleCompose} disabled={!canSubmit}>
-                {busy ? 'HWPX 생성 중...' : 'AI로 HWPX 자동 작성'}
+              <Button type="button" onClick={handleCompose} disabled={!canSubmit} loading={busy}>
+                AI로 HWPX 자동 작성
               </Button>
             </div>
           </div>
@@ -195,13 +195,13 @@ export default function HwpxComposePage() {
                       <a
                         href={downloadHref}
                         download={result.filename}
-                        className="inline-flex items-center justify-center rounded-md bg-[linear-gradient(135deg,#7c8cff,#9a6cff)] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_14px_34px_rgba(92,106,255,0.26)] transition duration-200 hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                        className="inline-flex items-center justify-center gap-2 rounded-md bg-[linear-gradient(135deg,#7c8cff,#9a6cff)] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(92,106,255,0.22)] transition duration-200 hover:brightness-110 active:scale-[0.98]"
                       >
                         HWPX 다운로드
                       </a>
                     ) : null}
                     <Button type="button" variant="secondary" onClick={handleDownloadAgain}>
-                      HWPX 다시 다운로드
+                      다시 다운로드
                     </Button>
                   </div>
                 </div>

@@ -22,11 +22,11 @@ export function LandingFooter() {
         <div className="flex flex-col items-center justify-between gap-6 sm:flex-row">
           {/* Logo */}
           <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-indigo-600">
+            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-indigo-600 to-violet-600 shadow-[0_0_16px_rgba(86,112,255,0.25)]">
               <DocIcon className="h-3.5 w-3.5 text-white" />
             </div>
             <span className="text-sm font-bold text-white">LiveDock</span>
-            <span className="text-xs text-slate-600">AI 문서 자동화 Agent</span>
+            <span className="text-xs text-slate-500">AI 문서 자동화 Agent</span>
           </div>
 
           <p className="text-sm text-slate-500">© 2026 LiveDock. All rights reserved.</p>

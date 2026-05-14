@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import { motion, type Variants } from 'framer-motion';
 import { useDropzone } from 'react-dropzone';
 import type {
@@ -336,6 +336,39 @@ export function ErrorBanner({ children }: { children: ReactNode }) {
   return <NoticeBanner tone="danger" title="문제가 발생했습니다">{children}</NoticeBanner>;
 }
 
+export function Toast({ message, onDismiss }: { message: string | null; onDismiss: () => void }) {
+  useEffect(() => {
+    if (!message) return;
+    const timer = setTimeout(onDismiss, 2800);
+    return () => clearTimeout(timer);
+  }, [message, onDismiss]);
+
+  if (!message) return null;
+
+  return (
+    <div className="pointer-events-none fixed bottom-6 left-1/2 z-[70] -translate-x-1/2 px-4 lg:bottom-8">
+      <div className="pointer-events-auto flex items-center gap-3 rounded-xl border border-emerald-400/25 bg-[rgba(13,19,36,0.92)] px-4 py-3 shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-xl">
+        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-400/15 text-emerald-300">
+          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+          </svg>
+        </span>
+        <span className="max-w-[280px] text-sm text-text">{message}</span>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="ml-1 shrink-0 text-text3 transition hover:text-text"
+          aria-label="닫기"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function Skeleton({ className }: { className?: string }) {
   return <div className={cn('skeleton', className)} aria-hidden />;
 }
@@ -645,100 +678,104 @@ export function WorkflowStepper({
   ];
 
   return (
-    <nav className="glass-panel overflow-hidden rounded-xl border border-white/[0.08]" aria-label="문서 생성 단계">
-      {/* Desktop: vertical list */}
-      <div className="hidden divide-y divide-white/[0.06] lg:block">
-        <p className="px-4 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-text3">작업 단계</p>
-        {steps.map((item, index) => {
-          const state = item.step < currentStep ? 'done' : item.step === currentStep ? 'current' : 'pending';
-          return (
-            <button
-              key={item.step}
-              type="button"
-              onClick={() => onChange(item.step)}
-              className={cn(
-                'group flex w-full items-center gap-3 px-4 py-3.5 text-left transition',
-                state === 'current'
-                  ? 'bg-primary/[0.09]'
-                  : 'hover:bg-white/[0.03]',
-              )}
-            >
-              {/* Step indicator */}
-              <span
+    <>
+      {/* Desktop: vertical sidebar list */}
+      <nav className="glass-panel hidden overflow-hidden rounded-xl border border-white/[0.08] lg:block" aria-label="문서 생성 단계">
+        <div className="divide-y divide-white/[0.06]">
+          <p className="px-4 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-text3">작업 단계</p>
+          {steps.map((item) => {
+            const state = item.step < currentStep ? 'done' : item.step === currentStep ? 'current' : 'pending';
+            return (
+              <button
+                key={item.step}
+                type="button"
+                onClick={() => onChange(item.step)}
                 className={cn(
-                  'relative flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border text-[11px] font-bold',
-                  state === 'current'
-                    ? 'border-primary/40 bg-primary/20 text-primary'
-                    : state === 'done'
-                      ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300'
-                      : 'border-white/10 bg-white/[0.04] text-text3',
+                  'group flex w-full items-center gap-3 px-4 py-3.5 text-left transition',
+                  state === 'current' ? 'bg-primary/[0.09]' : 'hover:bg-white/[0.03]',
                 )}
               >
-                {state === 'done' ? (
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                  </svg>
-                ) : (
-                  item.step
-                )}
-              </span>
-
-              {/* Label */}
-              <span className="min-w-0 flex-1">
                 <span
                   className={cn(
-                    'block text-sm font-semibold',
-                    state === 'current' ? 'text-text' : state === 'done' ? 'text-text2' : 'text-text3',
+                    'relative flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border text-[11px] font-bold',
+                    state === 'current'
+                      ? 'border-primary/40 bg-primary/20 text-primary'
+                      : state === 'done'
+                        ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300'
+                        : 'border-white/10 bg-white/[0.04] text-text3',
                   )}
                 >
-                  {item.label}
+                  {state === 'done' ? (
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                    </svg>
+                  ) : (
+                    item.step
+                  )}
                 </span>
-                <span className="mt-0.5 block text-[11px] text-text3">{item.desc}</span>
-              </span>
+                <span className="min-w-0 flex-1">
+                  <span
+                    className={cn(
+                      'block text-sm font-semibold',
+                      state === 'current' ? 'text-text' : state === 'done' ? 'text-text2' : 'text-text3',
+                    )}
+                  >
+                    {item.label}
+                  </span>
+                  <span className="mt-0.5 block text-[11px] text-text3">{item.desc}</span>
+                </span>
+                {state === 'current' ? <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-primary" /> : null}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
 
-              {/* Active indicator */}
-              {state === 'current' ? (
-                <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Mobile: horizontal tabs */}
-      <div className="flex overflow-x-auto lg:hidden">
-        {steps.map((item) => {
-          const state = item.step < currentStep ? 'done' : item.step === currentStep ? 'current' : 'pending';
-          return (
-            <button
-              key={item.step}
-              type="button"
-              onClick={() => onChange(item.step)}
-              className={cn(
-                'flex min-w-0 shrink-0 flex-col items-center gap-1 px-4 py-3 text-center transition',
-                state === 'current' ? 'border-b-2 border-primary' : 'border-b-2 border-transparent',
-              )}
-            >
-              <span
+      {/* Mobile: fixed bottom tab bar */}
+      <nav
+        className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/[0.08] bg-[rgba(6,10,22,0.92)] backdrop-blur-xl lg:hidden"
+        aria-label="문서 생성 단계"
+      >
+        <div className="flex">
+          {steps.map((item) => {
+            const state = item.step < currentStep ? 'done' : item.step === currentStep ? 'current' : 'pending';
+            return (
+              <button
+                key={item.step}
+                type="button"
+                onClick={() => onChange(item.step)}
                 className={cn(
-                  'flex h-6 w-6 items-center justify-center rounded-md border text-[10px] font-bold',
-                  state === 'current'
-                    ? 'border-primary/40 bg-primary/20 text-primary'
-                    : state === 'done'
-                      ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300'
-                      : 'border-white/10 bg-white/[0.04] text-text3',
+                  'flex flex-1 flex-col items-center gap-1 pb-safe px-2 py-3 text-center transition',
+                  state === 'current' ? 'border-t-2 border-primary' : 'border-t-2 border-transparent',
                 )}
               >
-                {state === 'done' ? '✓' : item.step}
-              </span>
-              <span className={cn('text-[11px] font-semibold', state === 'current' ? 'text-text' : 'text-text3')}>
-                {item.label}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </nav>
+                <span
+                  className={cn(
+                    'flex h-6 w-6 items-center justify-center rounded-md border text-[10px] font-bold',
+                    state === 'current'
+                      ? 'border-primary/40 bg-primary/20 text-primary'
+                      : state === 'done'
+                        ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300'
+                        : 'border-white/10 bg-white/[0.04] text-text3',
+                  )}
+                >
+                  {state === 'done' ? (
+                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                    </svg>
+                  ) : (
+                    item.step
+                  )}
+                </span>
+                <span className={cn('text-[11px] font-semibold', state === 'current' ? 'text-text' : 'text-text3')}>
+                  {item.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+    </>
   );
 }
 

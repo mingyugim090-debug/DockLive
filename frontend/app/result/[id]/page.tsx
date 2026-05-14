@@ -37,6 +37,7 @@ import {
   NoticeBanner,
   SectionCard,
   StatusBadge,
+  Toast,
   WorkflowStatusBadge,
   WorkflowStepper,
   cn,
@@ -572,7 +573,7 @@ export default function ResultPage() {
         }
       />
 
-      <div className="mx-auto grid max-w-7xl gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[260px_minmax(0,1fr)]">
+      <div className="mx-auto grid max-w-7xl gap-5 px-4 py-5 pb-20 sm:px-6 lg:grid-cols-[260px_minmax(0,1fr)] lg:pb-5">
         {/* Sidebar */}
         <aside className="space-y-4 lg:sticky lg:top-[72px] lg:h-fit">
           <WorkflowStepper currentStep={currentStep} onChange={setStep} />
@@ -606,7 +607,6 @@ export default function ResultPage() {
 
         <motion.div variants={stagger} initial={false} animate="show" className="min-w-0 space-y-5">
           {error ? <ErrorBanner>{error}</ErrorBanner> : null}
-          {notice ? <NoticeBanner tone="success">{notice}</NoticeBanner> : null}
 
           {currentStep === 1 ? (
             <div className="space-y-5">
@@ -869,6 +869,8 @@ export default function ResultPage() {
           ) : null}
         </motion.div>
       </div>
+
+      <Toast message={notice} onDismiss={() => setNotice(null)} />
     </main>
   );
 }
