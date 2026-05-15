@@ -26,9 +26,19 @@ export function TemplateCard({
         <p className="mt-1 text-sm text-[#273044]">{template.recommendedFor}</p>
         <p className="mt-3 text-xs font-bold text-[#8A91A0]">출력 형식</p>
         <p className="mt-1 text-sm text-[#273044]">{template.output}</p>
+        <p className="mt-3 text-xs font-bold text-[#8A91A0]">활용 결과</p>
+        <p className="mt-1 text-sm leading-6 text-[#273044]">{template.sampleResult}</p>
+      </div>
+      <div className="mt-4 space-y-2">
+        {template.workflow.slice(0, 3).map((step, index) => (
+          <div key={step} className="flex items-center gap-2 text-xs text-[#7B8190]">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#EEF2FF] text-[10px] font-bold text-[#5263E8]">{index + 1}</span>
+            <span>{step}</span>
+          </div>
+        ))}
       </div>
       <Button className="mt-5 w-full" variant={selected ? 'secondary' : 'primary'} onClick={onSelect}>
-        사용하기
+        워크플로우 시작
       </Button>
     </Card>
   );

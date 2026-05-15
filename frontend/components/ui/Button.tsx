@@ -5,8 +5,8 @@ type ButtonVariant = 'primary' | 'secondary' | 'ghost';
 
 const variants: Record<ButtonVariant, string> = {
   primary: 'gradient-primary text-white shadow-primary hover:-translate-y-0.5 hover:brightness-105',
-  secondary: 'border border-[#E5E7EB] bg-white text-[#273044] hover:-translate-y-0.5 hover:border-[#D8DDFC] hover:bg-[#FBFBFD]',
-  ghost: 'text-[#6B7280] hover:bg-[#EEF2FF] hover:text-[#273044]',
+  secondary: 'border border-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-text)] hover:-translate-y-0.5 hover:bg-[var(--theme-surface-muted)]',
+  ghost: 'text-[var(--theme-muted)] hover:bg-[var(--theme-primary-soft)] hover:text-[var(--theme-text)]',
 };
 
 export function Button({

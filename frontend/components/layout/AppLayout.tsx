@@ -1,7 +1,8 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { loadSavedTheme } from '@/lib/theme';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 
@@ -19,8 +20,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const title = useMemo(() => titles.find(([path]) => pathname === path || (path !== '/app' && pathname.startsWith(path)))?.[1] ?? '대시보드', [pathname]);
 
+  useEffect(() => {
+    loadSavedTheme();
+  }, []);
+
   return (
-    <div className="min-h-screen bg-[#FAFAF7] text-[#273044] lg:grid lg:grid-cols-[280px_1fr]">
+    <div className="min-h-screen bg-[var(--theme-bg)] text-[var(--theme-text)] transition-colors duration-300 lg:grid lg:grid-cols-[280px_1fr]">
       <Sidebar open={open} onClose={() => setOpen(false)} />
       <div className="min-w-0">
         <Header title={title} onMenu={() => setOpen(true)} />

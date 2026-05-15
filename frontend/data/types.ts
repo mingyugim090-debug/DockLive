@@ -34,4 +34,7 @@ export interface MockTemplate {
   description: string;
   recommendedFor: string;
   output: string;
+  useCase: string;
+  workflow: string[];
+  sampleResult: string;
 }
