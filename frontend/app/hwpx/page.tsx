@@ -89,7 +89,7 @@ export default function HwpxComposePage() {
     <main className="min-h-screen bg-bg text-text">
       <AppHeader
         title="HWPX 자동 작성"
-        subtitle="샘플 withUS 양식 MVP 검증"
+        subtitle="HWP/HWPX 공식 양식 자동 작성 테스트"
         onBack={() => router.push('/')}
         status={<StatusBadge label="MVP" tone="info" />}
       />
@@ -98,15 +98,15 @@ export default function HwpxComposePage() {
         <SectionCard
           title="양식과 요청사항"
           eyebrow="Compose"
-          desc="withUS 샘플 HWPX 양식과 자연어 요청사항을 입력하면 AI가 필드 JSON을 만들고 새 HWPX 파일을 생성합니다."
+          desc="HWP 또는 HWPX 공식 양식과 자연어 요청사항을 입력하면 AI가 자동작성 내용을 만들고 검증된 HWPX 파일을 생성합니다."
           action={<StatusBadge label={canSubmit ? 'Ready' : 'Input needed'} tone={canSubmit ? 'success' : 'warning'} />}
         >
           <div className="space-y-4">
             <label className="block rounded-lg border border-dashed border-white/14 bg-white/[0.035] p-4 text-sm text-text2">
-              <span className="block font-semibold text-text">HWPX 양식 업로드</span>
+              <span className="block font-semibold text-text">HWP/HWPX 양식 업로드</span>
               <input
                 type="file"
-                accept=".hwpx,application/vnd.hancom.hwpx"
+                accept=".hwp,.hwpx,application/vnd.hancom.hwpx,application/x-hwp"
                 onChange={(event) => setTemplate(event.target.files?.[0] ?? null)}
                 className="mt-3 w-full text-xs text-text3 file:mr-3 file:rounded-md file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-text2"
               />
@@ -117,14 +117,14 @@ export default function HwpxComposePage() {
               label="문서 제목"
               value={title}
               onChange={setTitle}
-              placeholder="예: LiveDock HWPX 자동작성 MVP 신청서"
+              placeholder="예: 딥페이크 인공지능 수술 세미나 참여 모집공고"
             />
 
             <TextArea
               label="요청사항"
               value={requestText}
               onChange={setRequestText}
-              placeholder="어떤 동아리/프로젝트인지, 참여하려는 공모전, 활동 목표, 운영 방법, 예산 사용 계획을 자연어로 적어 주세요."
+              placeholder="문서에 반영할 목적, 신청 내용, 운영 계획, 핵심 강점, 필요한 문구를 자연어로 적어 주세요."
               minHeight="min-h-[220px]"
             />
 
@@ -132,7 +132,7 @@ export default function HwpxComposePage() {
               label="신청자/팀 정보 (선택)"
               value={applicantContext}
               onChange={setApplicantContext}
-              placeholder="대표자명, 소속, 학과, 이메일, 지도교수 정보 등 실제로 문서에 반영할 수 있는 정보를 적어 주세요."
+              placeholder="신청자명, 소속, 학과, 이메일, 지도교수 등 실제로 문서에 반영해도 되는 정보만 적어 주세요."
               minHeight="min-h-[140px]"
             />
 
@@ -157,7 +157,7 @@ export default function HwpxComposePage() {
           >
             {!result ? (
               <NoticeBanner tone="info">
-                아직 생성된 파일이 없습니다. 샘플 HWPX 양식과 요청사항을 입력하면 결과가 이곳에 표시됩니다.
+                아직 생성된 파일이 없습니다. HWP 또는 HWPX 양식과 요청사항을 입력하면 결과가 여기에 표시됩니다.
               </NoticeBanner>
             ) : (
               <div className="space-y-4">
@@ -176,6 +176,16 @@ export default function HwpxComposePage() {
                     tone={result.verification.text_contains_generated_content ? 'success' : 'warning'}
                   />
                 </div>
+
+                {result.warnings.length ? (
+                  <NoticeBanner tone="warning" title="주의">
+                    <ul className="space-y-1">
+                      {result.warnings.map((item) => (
+                        <li key={item}>- {item}</li>
+                      ))}
+                    </ul>
+                  </NoticeBanner>
+                ) : null}
 
                 {result.confirmation_required.length ? (
                   <NoticeBanner tone="warning" title="제출 전 확인 필요">
@@ -217,7 +227,7 @@ export default function HwpxComposePage() {
           </SectionCard>
 
           {result ? (
-            <SectionCard title="AI 생성 필드" desc="AI가 HWPX 양식에 채운 주요 필드입니다. 제출 전 사실관계를 검토하세요.">
+            <SectionCard title="AI 생성 필드" desc="AI가 HWPX 파일에 반영한 주요 필드입니다. 제출 전 사실관계를 검토해 주세요.">
               <FieldPreview fields={result.generated_fields} />
             </SectionCard>
           ) : null}

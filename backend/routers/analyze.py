@@ -13,8 +13,8 @@ from models.schemas import (
     MatchReport,
 )
 from services import storage
-from services.analyzer import build_analysis_result
 from services.ai_provider import provider_name, should_use_mock_ai
+from services.analyzer import build_analysis_result
 from services.document_ingestion import ingest_uploaded_document
 from services.drafting_service import create_workflow_session
 from services.mock_data import get_mock_result

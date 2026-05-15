@@ -47,7 +47,7 @@ def ingest_uploaded_document(content: bytes, filename: str) -> IngestedDocument:
 
 
 def extract_text_from_hwpx(content: bytes) -> tuple[str, list[str]]:
-    """Extract text from HWPX with the skill script, falling back to direct ZIP XML parsing."""
+    """Extract text from HWPX with the toolchain script, falling back to ZIP XML parsing."""
     if not content.startswith(b"PK"):
         raise AnalysisError("업로드한 HWPX 파일이 ZIP 패키지 형식이 아닙니다.")
 
@@ -128,7 +128,7 @@ def convert_hwp_to_hwpx(content: bytes, filename: str) -> tuple[bytes, list[str]
 
         if not output_path.exists():
             raise AnalysisError("HWP 변환은 완료되었지만 출력 HWPX 파일을 찾지 못했습니다.")
-        warnings.append("HWP 원본은 HWPX로 변환한 뒤 텍스트를 추출했습니다.")
+        warnings.append("HWP 원본을 HWPX로 변환한 뒤 텍스트를 추출했습니다.")
         return output_path.read_bytes(), warnings
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)

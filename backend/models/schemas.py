@@ -167,6 +167,10 @@ class DraftFeedbackRequest(BaseModel):
     feedback: str
 
 
+class ConfirmationRequest(BaseModel):
+    confirmed_items: list[str] = Field(default_factory=list)
+
+
 class FinalDocument(BaseModel):
     title: str
     content_markdown: str
@@ -183,6 +187,7 @@ class WorkflowSession(BaseModel):
     draft_sections: list[DraftSection] = Field(default_factory=list)
     final_document: Optional[FinalDocument] = None
     confirmed_at: Optional[str] = None
+    confirmed_items: list[str] = Field(default_factory=list)
     created_at: str
     updated_at: str
 

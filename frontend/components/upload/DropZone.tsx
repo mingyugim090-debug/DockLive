@@ -26,7 +26,12 @@ export function DropZone({ onFileAccepted, isLoading = false }: DropZoneProps) {
 
   const { getRootProps, getInputProps } = useDropzone({
     onDrop,
-    accept: { 'application/pdf': ['.pdf'] },
+    accept: {
+      'application/pdf': ['.pdf'],
+      'application/vnd.hancom.hwpx': ['.hwpx'],
+      'application/x-hwp': ['.hwp'],
+      'application/octet-stream': ['.hwp', '.hwpx'],
+    },
     maxFiles: 1,
     onDragEnter: () => setIsDragOver(true),
     onDragLeave: () => setIsDragOver(false),

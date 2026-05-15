@@ -1,6 +1,5 @@
 import html
 import json
-import os
 import re
 import shutil
 import subprocess
@@ -23,9 +22,10 @@ from services.drafting_service import (
 
 
 WITHUS_TEMPLATE_ID = "withus-club-application-v1"
+GENERIC_TEMPLATE_ID = "generic-hwpx-form-v1"
 
 WITHUS_FIELD_DEFAULTS: dict[str, str] = {
-    "document_title": "공모전·연구동아리 참여 신청서",
+    "document_title": "공모전/연구동아리 참여 신청서",
     "team_or_club_name": "LiveDock 동아리",
     "applicant_name": "신청자",
     "university": "서울과학기술대학교",
@@ -44,10 +44,8 @@ WITHUS_FIELD_DEFAULTS: dict[str, str] = {
     "operation_plan": "",
     "budget_plan": "",
     "budget_items": "예상 항목: 회의비, 인쇄비, 자료구입비, 참가비, 결과물 제작비",
-    "first_month": "6월",
     "monthly_plan": "",
     "monthly_method": "",
-    "second_period": "9월~11월",
     "follow_up_plan": "",
     "submission_date": "",
     "representative_signature": "",
@@ -73,60 +71,45 @@ def compose_hwpx(
     applicant_context: str = "",
     title: str = "",
 ) -> dict:
-    """Fill the first supported HWPX sample form from natural-language input."""
+    """Create an HWPX draft from an uploaded HWPX form.
+
+    Known templates can be handled with template-specific field names. Unknown official
+    forms are still supported by preserving the original package and appending a clearly
+    labeled auto-written draft section, so users are not blocked by template detection.
+    """
     if not settings.HWPX_EXPORT_ENABLED:
-        raise AnalysisError("HWPX 자동 작성이 비활성화되어 있습니다. HWPX_EXPORT_ENABLED=true로 설정하세요.")
+        raise AnalysisError("HWPX 자동 작성이 비활성화되어 있습니다. HWPX_EXPORT_ENABLED=true로 설정해 주세요.")
     if not template_content.startswith(b"PK"):
         raise AnalysisError("업로드한 파일이 HWPX ZIP 패키지 형식이 아닙니다.")
     if len(request_text.strip()) < 20:
         raise AnalysisError("요청사항을 20자 이상 입력해야 HWPX 자동 작성을 시작할 수 있습니다.")
 
-    scripts = _require_hwpx_scripts(
-        "clone_form.py",
-        "fix_namespaces.py",
-        "validate.py",
-        "verify_hwpx.py",
-        "text_extract.py",
-    )
+    scripts = _require_hwpx_scripts("fix_namespaces.py", "validate.py", "verify_hwpx.py", "text_extract.py")
 
     tmpdir = _compose_temp_root() / f"compose_{uuid.uuid4().hex}"
     tmpdir.mkdir(parents=True, exist_ok=False)
     try:
         source_path = tmpdir / "template.hwpx"
         output_path = tmpdir / "composed.hwpx"
-        map_path = tmpdir / "replacements.json"
-        keyword_path = tmpdir / "keywords.json"
         verify_path = tmpdir / "verify.json"
         source_path.write_bytes(template_content)
 
         template_id = detect_template(source_path)
-        if template_id != WITHUS_TEMPLATE_ID:
-            raise AnalysisError("현재 샘플 withUS HWPX 양식만 지원합니다. 다른 공식 양식 자동 해석은 다음 단계 범위입니다.")
+        if template_id == WITHUS_TEMPLATE_ID:
+            generated = generate_withus_fields(request_text, applicant_context, title)
+            composed_markdown = _render_withus_markdown(generated)
+            warnings: list[str] = []
+        else:
+            generated = generate_generic_fields(request_text, applicant_context, title, source_path)
+            composed_markdown = _render_generic_markdown(generated)
+            warnings = [
+                "알 수 없는 HWPX 양식입니다. 원본 양식 구조는 보존하고 자동작성 내용을 새 섹션으로 추가했습니다. "
+                "정확한 칸 매핑이 필요한 공식 양식은 다음 단계에서 템플릿 매핑을 추가해 주세요."
+            ]
 
-        generated = generate_withus_fields(request_text, applicant_context, title)
-        replacements, keywords = build_withus_replacements(source_path, generated)
-        map_path.write_text(json.dumps(replacements, ensure_ascii=False, indent=2), encoding="utf-8")
-        keyword_path.write_text(json.dumps(keywords, ensure_ascii=False, indent=2), encoding="utf-8")
+        _copy_hwpx_with_appended_section(source_path, output_path, composed_markdown)
 
         python_bin = sys.executable or "python"
-        _run_required(
-            [
-                python_bin,
-                str(scripts["clone_form.py"]),
-                str(source_path),
-                str(output_path),
-                "--map",
-                str(map_path),
-                "--keywords",
-                str(keyword_path),
-                "--title",
-                generated["document_title"],
-                "--creator",
-                "LiveDock Agent",
-                "--validate",
-            ],
-            "HWPX 양식 복제",
-        )
         _run_required([python_bin, str(scripts["fix_namespaces.py"]), str(output_path)], "HWPX namespace 보정")
         validation = _validate_with_fallback(scripts["validate.py"], output_path)
         verify_report = _verify_with_fallback(scripts["verify_hwpx.py"], source_path, output_path, verify_path)
@@ -147,20 +130,22 @@ def compose_hwpx(
         if not validation["passed"]:
             raise AnalysisError("생성된 HWPX 구조 검증에 실패했습니다: " + "; ".join(validation["errors"]))
         if not content_ok:
-            raise AnalysisError("생성된 HWPX에서 AI 작성 핵심 문구를 확인하지 못했습니다.")
+            raise AnalysisError("생성된 HWPX에서 자동작성 핵심 문구를 확인하지 못했습니다.")
 
-        safe_title = _safe_title(generated["document_title"])
-        filename = f"{safe_title}_자동작성.hwpx"
+        document_title = generated.get("document_title") or title or "LiveDock HWPX 자동작성"
+        filename = f"{_safe_title(document_title)}_자동작성.hwpx"
         return {
             "success": True,
             "filename": filename,
             "content_type": "application/vnd.hancom.hwpx",
             "content": hwpx_bytes_to_base64(output_path.read_bytes()),
             "encoding": "base64",
+            "warnings": warnings,
+            "validation_summary": verification,
             "template_id": template_id,
             "verification": verification,
             "generated_fields": generated,
-            "confirmation_required": _confirmation_items(generated),
+            "confirmation_required": _confirmation_items(generated, template_id),
         }
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
@@ -169,25 +154,21 @@ def compose_hwpx(
 def detect_template(hwpx_path: Path) -> str:
     texts = _extract_texts_from_zip(hwpx_path)
     joined = "\n".join(texts)
-    markers = [
-        "참여 신청서",
-        "공모전/연구동아리",
-        "동아리 소개",
-        "활동계획서",
-    ]
+    markers = ["참여 신청서", "공모전", "연구동아리", "동아리 소개", "활동계획서"]
     if all(marker in joined for marker in markers):
         return WITHUS_TEMPLATE_ID
-    return "unsupported"
+    return GENERIC_TEMPLATE_ID
 
 
 def generate_withus_fields(request_text: str, applicant_context: str = "", title: str = "") -> dict[str, str]:
     if should_use_mock_ai() and settings.MOCK_MODE:
         return _mock_withus_fields(request_text, applicant_context, title)
 
-    system_prompt = """당신은 한국 대학 공모전/연구동아리 HWPX 신청서를 작성하는 문서 자동화 AI입니다.
-사용자 요청사항과 신청자 맥락만 근거로 삼아, 지정된 JSON 필드값을 한국어로 작성하세요.
-날짜, 소속, 학번, 지도교수 정보처럼 입력에 없는 개인정보는 지어내지 말고 빈 문자열로 두세요.
-HWPX/XML을 만들지 말고 JSON 객체만 반환하세요."""
+    system_prompt = (
+        "당신은 한국어 공모전/연구동아리 HWPX 신청서를 작성하는 문서 자동화 AI입니다. "
+        "사용자 요청사항과 신청자 맥락만 근거로 지정된 JSON 필드를 한국어로 작성하세요. "
+        "입력에 없는 개인정보, 날짜, 소속, 학번, 연락처는 지어내지 말고 빈 문자열로 두세요."
+    )
     user_payload = {
         "request_text": request_text,
         "applicant_context": applicant_context,
@@ -197,78 +178,49 @@ HWPX/XML을 만들지 말고 JSON 객체만 반환하세요."""
     user_prompt = (
         "아래 입력을 withUS 공모전/연구동아리 참여 신청서 필드 JSON으로 변환하세요.\n"
         "응답 형식은 {\"fields\": { ... }, \"confirmation_required\": [\"...\"]} 입니다.\n"
-        "필수 본문 필드는 2~5문장으로 구체적으로 작성하세요.\n"
-        "monthly_plan과 monthly_method는 한 줄 일정표에 들어갈 수 있게 120자 이내로 작성하세요.\n\n"
+        "필수 본문 필드는 2~5문장으로 구체적으로 작성하세요.\n\n"
         + json.dumps(user_payload, ensure_ascii=False)
     )
     data = call_json("draft", system_prompt, user_prompt, max_tokens=4096)
     raw_fields = data.get("fields", data)
     if not isinstance(raw_fields, dict):
         raise AnalysisError(f"{provider_name()}가 HWPX 필드 JSON을 반환하지 않았습니다.")
-    fields = _normalize_fields(raw_fields, request_text, applicant_context, title)
+    fields = _normalize_withus_fields(raw_fields, request_text, applicant_context, title)
     confirmations = data.get("confirmation_required", [])
     if isinstance(confirmations, list):
         fields["_confirmation_required"] = "\n".join(str(item).strip() for item in confirmations if str(item).strip())
     return fields
 
 
-def build_withus_replacements(source_path: Path, fields: dict[str, str]) -> tuple[dict[str, str], dict[str, str]]:
-    section_xml = _read_section_xml(source_path)
-    cells = _cells(section_xml)
+def generate_generic_fields(request_text: str, applicant_context: str, title: str, source_path: Path) -> dict[str, str]:
+    source_excerpt = "\n".join(_extract_texts_from_zip(source_path))[:5000]
+    if should_use_mock_ai() and settings.MOCK_MODE:
+        return _mock_generic_fields(request_text, applicant_context, title, source_excerpt)
 
-    cell_values = {
-        3: fields["document_title"],
-        8: fields["team_or_club_name"],
-        12: fields["college"],
-        14: fields["department"],
-        16: fields["student_id"],
-        18: fields["applicant_name"],
-        20: fields["email"],
-        22: fields["phone"],
-        26: fields["advisor_college"],
-        28: fields["advisor_department"],
-        30: fields["advisor_id"],
-        32: fields["advisor_name"],
-        34: fields["motivation"],
-        37: f"{fields['goals']}\n{fields['competition_plan']}",
-        39: fields["operation_plan"],
-        41: f"{fields['budget_plan']}\n{fields['budget_items']}",
-        46: fields["first_month"],
-        47: fields["monthly_plan"],
-        48: fields["monthly_method"],
-        49: fields["second_period"],
-        50: fields["competition_plan"],
-        51: fields["follow_up_plan"],
+    system_prompt = (
+        "당신은 한국어 공식 양식에 넣을 신청서 초안을 작성하는 문서 자동화 AI입니다. "
+        "HWPX/XML 파일을 직접 만들지 말고, 원본 양식에 덧붙일 수 있는 구조화된 JSON만 반환하세요. "
+        "입력에 없는 마감일, 기관명, 개인정보, 금액은 지어내지 말고 confirmation_required에 적으세요."
+    )
+    payload = {
+        "request_text": request_text,
+        "applicant_context": applicant_context,
+        "title": title,
+        "template_text_excerpt": source_excerpt,
     }
-    replacements: dict[str, str] = {}
-    for index, value in cell_values.items():
-        if index <= len(cells) and value:
-            old_cell = cells[index - 1]
-            replacements[old_cell] = _replace_cell_text(old_cell, value)
-
-    keywords = {
-        "○○ 공모전·연구": fields["document_title"],
-        "공공서비스 AI 자동화 연구": fields["document_title"],
-        "○○ 대학교": fields.get("university", ""),
-        "해당 신청 안내 문구를 삭제 후 총 3페이지 이내로 작성해 주시기 바랍니다.": _intro_notice(fields),
-        "자동화 예시: 아래 내용은 LiveDock Agent가 사용자의 입력값과 공고 요건을 바탕으로 초안 작성한 샘플입니다.": _intro_notice(fields),
-        "동아리 소개 및 프로그램 취지와 목적에 맞게 신청 동기 작성": fields["motivation"],
-        "동아리 목표와 연계하여 구체적으로 학습하고자 하는 목표 작성": fields["goals"],
-        "참여할 공모전 작성": fields["competition_plan"],
-        "동아리 운영 방법 설명": fields["operation_plan"],
-        "활동비 60만원 + 추가활동비 계획 작성": fields["budget_plan"],
-        "물품구입비 회의비 수수료비 참가비 등": fields["budget_items"],
-        "해당 월에 학습 또는 활동한 내용을 구체적으로 기술": fields["monthly_plan"],
-        "학습진행 방식기술": fields["monthly_method"],
-        "2026 년    월    일": fields["submission_date"],
-        "2026 년  5 월  3 일": fields["submission_date"],
-        "동아리 대표: 0 0 0 (서명 또는 인)": fields["representative_signature"],
-        "동아리 대표 : 김라이브 (서명 또는 인)": fields["representative_signature"],
-    }
-    return replacements, {key: value for key, value in keywords.items() if key and value}
+    prompt = (
+        "아래 정보를 바탕으로 HWPX 양식에 삽입할 자동작성 초안을 JSON으로 작성하세요.\n"
+        "형식: {\"document_title\":\"...\", \"summary\":\"...\", \"draft_content\":\"...\", "
+        "\"confirmation_required\":[\"...\"]}\n\n"
+        + json.dumps(payload, ensure_ascii=False)
+    )
+    data = call_json("draft", system_prompt, prompt, max_tokens=4096)
+    if not isinstance(data, dict):
+        raise AnalysisError(f"{provider_name()}가 HWPX 자동작성 JSON을 반환하지 않았습니다.")
+    return _normalize_generic_fields(data, request_text, applicant_context, title, source_excerpt)
 
 
-def _normalize_fields(raw: dict, request_text: str, applicant_context: str, title: str) -> dict[str, str]:
+def _normalize_withus_fields(raw: dict, request_text: str, applicant_context: str, title: str) -> dict[str, str]:
     fields = dict(WITHUS_FIELD_DEFAULTS)
     for key in fields:
         value = raw.get(key)
@@ -279,22 +231,41 @@ def _normalize_fields(raw: dict, request_text: str, applicant_context: str, titl
     if not fields["motivation"]:
         fields["motivation"] = _compact(request_text, 700)
     if not fields["goals"]:
-        fields["goals"] = "요청사항을 바탕으로 공모전 참여 목표를 구체화하고, 결과물 제작까지 이어지는 실행 역량을 기르는 것을 목표로 합니다."
+        fields["goals"] = "요청사항을 바탕으로 공모전 참여 목표를 구체화하고 결과물 제작까지 이어지는 실행 역량을 기르는 것을 목표로 합니다."
     if not fields["operation_plan"]:
         fields["operation_plan"] = "정기 회의와 역할 분담을 통해 자료 조사, 초안 작성, 검토, 보완을 단계적으로 진행합니다."
     if not fields["budget_plan"]:
-        fields["budget_plan"] = "지원금은 회의 운영, 자료 조사, 인쇄, 결과물 제작 및 공모전 참여 준비에 사용합니다."
+        fields["budget_plan"] = "지원금은 회의 운영, 자료 조사, 인쇄, 결과물 제작 및 제출 준비에 사용합니다."
     if not fields["monthly_plan"]:
         fields["monthly_plan"] = "공고 분석, 주제 선정, 자료 조사, 신청서 및 제안서 초안 작성"
     if not fields["monthly_method"]:
-        fields["monthly_method"] = "정기 회의, 역할별 리서치, 문서 리뷰, 피드백 반영"
+        fields["monthly_method"] = "정기 회의, 역할별 리서치, 문서 초안 리뷰, 피드백 반영"
     if not fields["competition_plan"]:
-        fields["competition_plan"] = "참여 예정 공모전은 요청사항을 기준으로 선정하며, 접수 일정과 자격 요건은 제출 전 재확인합니다."
+        fields["competition_plan"] = "참여 예정 공모전은 사용자 요청사항과 공고 요건을 기준으로 선정하며, 접수 일정과 자격 요건은 제출 전 확인합니다."
     if not fields["follow_up_plan"]:
-        fields["follow_up_plan"] = "결과물을 점검하고 제출 전 요구 양식, 증빙, 서명 여부를 최종 확인합니다."
+        fields["follow_up_plan"] = "결과물을 자체 검토하고 제출 전 요구 양식, 증빙, 서명 여부를 최종 확인합니다."
     if not fields["representative_signature"]:
-        fields["representative_signature"] = f"동아리 대표 : {fields['applicant_name']} (서명 또는 인)"
+        fields["representative_signature"] = f"동아리 대표: {fields['applicant_name']} (서명 또는 인)"
     return fields
+
+
+def _normalize_generic_fields(raw: dict, request_text: str, applicant_context: str, title: str, source_excerpt: str) -> dict[str, str]:
+    document_title = str(raw.get("document_title") or title or _guess_title(source_excerpt) or "LiveDock HWPX 자동작성").strip()
+    summary = str(raw.get("summary") or "").strip()
+    draft_content = str(raw.get("draft_content") or "").strip()
+    if not summary:
+        summary = _compact(request_text, 500)
+    if not draft_content:
+        draft_content = "\n\n".join(part for part in [request_text.strip(), applicant_context.strip()] if part)
+    confirmations = raw.get("confirmation_required", [])
+    confirmation_text = "\n".join(str(item).strip() for item in confirmations if str(item).strip()) if isinstance(confirmations, list) else ""
+    return {
+        "document_title": _compact(document_title, 120),
+        "summary": _compact(summary, 900),
+        "applicant_context": _compact(applicant_context, 900),
+        "draft_content": _compact(draft_content, 3000),
+        "_confirmation_required": confirmation_text,
+    }
 
 
 def _mock_withus_fields(request_text: str, applicant_context: str, title: str) -> dict[str, str]:
@@ -311,18 +282,132 @@ def _mock_withus_fields(request_text: str, applicant_context: str, title: str) -
             "budget_plan": "활동비는 회의 운영, 자료 조사, 문서 검증, 결과물 제작에 사용합니다.",
             "monthly_plan": "샘플 HWPX 양식 분석, 요청사항 기반 필드 생성, 자동작성 결과 검토",
             "monthly_method": "정기 회의, 역할별 테스트, 생성 파일 검증, 피드백 반영",
-            "submission_date": "2026 년 5 월 7 일",
-            "representative_signature": "동아리 대표 : 김라이브 (서명 또는 인)",
+            "submission_date": "2026년 5월 7일",
+            "representative_signature": "동아리 대표: 김라이브 (서명 또는 인)",
         }
     )
-    return _normalize_fields(fields, request_text, applicant_context, title)
+    return _normalize_withus_fields(fields, request_text, applicant_context, title)
 
 
-def _confirmation_items(fields: dict[str, str]) -> list[str]:
+def _mock_generic_fields(request_text: str, applicant_context: str, title: str, source_excerpt: str) -> dict[str, str]:
+    return _normalize_generic_fields(
+        {
+            "document_title": title.strip() or _guess_title(source_excerpt) or "HWPX 자동작성 초안",
+            "summary": "사용자 요청사항을 바탕으로 공식 양식에 반영할 신청서 초안을 작성했습니다.",
+            "draft_content": (
+                f"요청사항: {request_text.strip()}\n\n"
+                f"신청자/팀 정보: {applicant_context.strip() or '추가 입력 필요'}\n\n"
+                "위 내용을 바탕으로 제출 전 확인 가능한 초안을 구성했습니다. 양식의 세부 칸 매핑은 공식 서식을 확인해 보완해야 합니다."
+            ),
+            "confirmation_required": ["공식 양식의 각 입력 칸에 맞게 자동작성 내용이 들어갔는지 제출 전 확인해 주세요."],
+        },
+        request_text,
+        applicant_context,
+        title,
+        source_excerpt,
+    )
+
+
+def _render_withus_markdown(fields: dict[str, str]) -> str:
+    return "\n".join(
+        [
+            "# LiveDock 자동작성 내용",
+            f"문서 제목: {fields['document_title']}",
+            f"동아리명: {fields['team_or_club_name']}",
+            f"신청자: {fields['applicant_name']}",
+            "",
+            "## 신청동기",
+            fields["motivation"],
+            "",
+            "## 동아리 목표",
+            fields["goals"],
+            "",
+            "## 참여 예정 공모전",
+            fields["competition_plan"],
+            "",
+            "## 운영방법",
+            fields["operation_plan"],
+            "",
+            "## 지원금 사용계획",
+            fields["budget_plan"],
+            fields["budget_items"],
+            "",
+            "## 활동계획",
+            f"- 학습내용: {fields['monthly_plan']}",
+            f"- 학습방법: {fields['monthly_method']}",
+            f"- 사후계획: {fields['follow_up_plan']}",
+            "",
+            fields["representative_signature"],
+        ]
+    )
+
+
+def _render_generic_markdown(fields: dict[str, str]) -> str:
+    return "\n".join(
+        [
+            "# LiveDock 자동작성 내용",
+            f"문서 제목: {fields['document_title']}",
+            "",
+            "## 요약",
+            fields["summary"],
+            "",
+            "## 신청자/팀 정보",
+            fields["applicant_context"] or "추가 입력 필요",
+            "",
+            "## 자동작성 초안",
+            fields["draft_content"],
+        ]
+    )
+
+
+def _copy_hwpx_with_appended_section(source_path: Path, output_path: Path, markdown: str) -> None:
+    paragraphs = _markdown_to_hwpx_paragraphs(markdown)
+    with zipfile.ZipFile(source_path, "r") as zin:
+        with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zout:
+            for item in zin.infolist():
+                data = zin.read(item.filename)
+                if item.filename == "Contents/section0.xml":
+                    text = data.decode("utf-8", errors="replace")
+                    insert = "\n" + "\n".join(paragraphs) + "\n"
+                    if "</hs:sec>" in text:
+                        text = text.replace("</hs:sec>", insert + "</hs:sec>", 1)
+                    else:
+                        text += insert
+                    data = text.encode("utf-8")
+                if item.filename == "mimetype":
+                    zout.writestr(item, data, compress_type=zipfile.ZIP_STORED)
+                else:
+                    zout.writestr(item, data)
+
+
+def _markdown_to_hwpx_paragraphs(markdown: str) -> list[str]:
+    lines = [line.rstrip() for line in markdown.splitlines()]
+    paragraphs: list[str] = []
+    next_para_id = 900000
+    for raw in lines:
+        text = raw.strip()
+        if not text:
+            continue
+        text = re.sub(r"^#{1,6}\s+", "", text)
+        text = re.sub(r"^\s*[-*]\s+", "- ", text)
+        text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
+        text = re.sub(r"`(.+?)`", r"\1", text)
+        paragraphs.append(
+            f'<hp:p id="{next_para_id}" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
+            f'<hp:run charPrIDRef="0"><hp:t>{escape(text)}</hp:t></hp:run>'
+            f'</hp:p>'
+        )
+        next_para_id += 1
+    return paragraphs
+
+
+def _confirmation_items(fields: dict[str, str], template_id: str) -> list[str]:
     items = [
-        "신청자명, 소속, 학번, 연락처, 지도교수 정보는 실제 제출 전 반드시 확인하세요.",
-        "공모전명, 지원금 사용계획, 활동 일정은 공고 원문과 일치하는지 확인하세요.",
+        "제출 전 이름, 소속, 연락처, 날짜, 서명 등 개인정보와 제출 정보를 반드시 확인해 주세요.",
+        "공고명, 지원금 사용계획, 활동 일정이 실제 공고 원문과 일치하는지 확인해 주세요.",
     ]
+    if template_id == GENERIC_TEMPLATE_ID:
+        items.append("알 수 없는 양식은 자동작성 내용을 별도 섹션으로 추가했습니다. 공식 입력 칸별 배치가 맞는지 확인해 주세요.")
     extra = fields.get("_confirmation_required", "")
     if extra:
         items.extend(line.strip("- ").strip() for line in extra.splitlines() if line.strip())
@@ -368,11 +453,7 @@ def _validate_with_fallback(validate_script: Path, output_path: Path) -> dict:
     if "ModuleNotFoundError" not in output:
         return {"passed": False, "method": "validate.py", "errors": [output or "validate.py failed"]}
     errors = _internal_validate(output_path)
-    return {
-        "passed": not errors,
-        "method": "internal-zip-xml-fallback",
-        "errors": errors,
-    }
+    return {"passed": not errors, "method": "internal-zip-xml-fallback", "errors": errors}
 
 
 def _verify_with_fallback(verify_script: Path, source_path: Path, output_path: Path, verify_path: Path) -> dict:
@@ -459,18 +540,12 @@ def _structure_counts(hwpx_path: Path) -> dict:
 
 
 def _contains_generated_content(text: str, fields: dict[str, str]) -> bool:
-    candidates = [
-        fields.get("team_or_club_name", ""),
-        fields.get("applicant_name", ""),
-        fields.get("motivation", "")[:30],
-        fields.get("goals", "")[:30],
-    ]
+    candidates: list[str] = []
+    for key in ("team_or_club_name", "applicant_name", "document_title", "summary", "draft_content", "motivation", "goals"):
+        value = fields.get(key, "")
+        if value:
+            candidates.append(value[:30])
     return any(candidate and candidate in text for candidate in candidates)
-
-
-def _read_section_xml(hwpx_path: Path) -> str:
-    with zipfile.ZipFile(hwpx_path, "r") as zf:
-        return zf.read("Contents/section0.xml").decode("utf-8")
 
 
 def _extract_texts_from_zip(hwpx_path: Path) -> list[str]:
@@ -478,29 +553,20 @@ def _extract_texts_from_zip(hwpx_path: Path) -> list[str]:
     with zipfile.ZipFile(hwpx_path, "r") as zf:
         for name in zf.namelist():
             if name.startswith("Contents/") and name.endswith(".xml"):
-                data = zf.read(name).decode("utf-8")
-                for match in re.finditer(r"<hp:t>(.*?)</hp:t>", data, re.DOTALL):
+                data = zf.read(name).decode("utf-8", errors="replace")
+                for match in re.finditer(r"<hp:t[^>]*>(.*?)</hp:t>", data, re.DOTALL):
                     clean = re.sub(r"<[^>]+>", "", match.group(1)).strip()
                     if clean:
                         texts.append(html.unescape(clean))
     return texts
 
 
-def _cells(section_xml: str) -> list[str]:
-    return re.findall(r"<hp:tc[\s\S]*?</hp:tc>", section_xml)
-
-
-def _replace_cell_text(cell_xml: str, text: str) -> str:
-    escaped = escape(text)
-    if re.search(r"<hp:run([^>/]*)/>", cell_xml):
-        return re.sub(r"<hp:run([^>/]*)/>", rf"<hp:run\1><hp:t>{escaped}</hp:t></hp:run>", cell_xml, count=1)
-    if re.search(r"<hp:t>[\s\S]*?</hp:t>", cell_xml):
-        return re.sub(r"<hp:t>[\s\S]*?</hp:t>", f"<hp:t>{escaped}</hp:t>", cell_xml, count=1)
-    return re.sub(r"(</hp:subList>)", f'<hp:p id="999999" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="0"><hp:t>{escaped}</hp:t></hp:run></hp:p>\\1', cell_xml, count=1)
-
-
-def _intro_notice(fields: dict[str, str]) -> str:
-    return f"LiveDock Agent가 요청사항을 바탕으로 자동 작성한 {fields['document_title']} 초안입니다. 제출 전 개인정보와 공고 요건을 확인하세요."
+def _guess_title(source_excerpt: str) -> str:
+    for line in source_excerpt.splitlines():
+        value = line.strip()
+        if 4 <= len(value) <= 80 and any(token in value for token in ("신청서", "계획서", "공고", "지원", "모집")):
+            return value
+    return ""
 
 
 def _compact(text: str, limit: int) -> str:

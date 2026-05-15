@@ -11,8 +11,8 @@ from core.errors import AnalysisError
 from models.schemas import HwpxComposeResponse, HwpxConvertResponse, HwpxStatusResponse
 from services import storage
 from services.document_ingestion import convert_hwp_to_hwpx
-from services.hwpx_compose_service import compose_hwpx
 from services.drafting_service import get_hwpx_toolchain_status
+from services.hwpx_compose_service import compose_hwpx
 
 router = APIRouter()
 
@@ -32,15 +32,25 @@ async def compose_hwpx_document(
     applicant_context: str = Form(""),
     title: str = Form(""),
 ):
-    if not template.filename or not template.filename.lower().endswith(".hwpx"):
-        raise AnalysisError("HWPX 양식 파일만 업로드할 수 있습니다.")
+    """Generate a filled HWPX from an uploaded HWP/HWPX form and natural-language request."""
+    if not template.filename:
+        raise AnalysisError("HWP 또는 HWPX 양식 파일을 업로드해 주세요.")
+
+    raw_template = await template.read()
+    lower_name = template.filename.lower()
+    conversion_warnings: list[str] = []
+    if lower_name.endswith(".hwp") and not lower_name.endswith(".hwpx"):
+        raw_template, conversion_warnings = convert_hwp_to_hwpx(raw_template, template.filename)
+    elif not lower_name.endswith(".hwpx"):
+        raise AnalysisError("HWP 또는 HWPX 양식 파일만 업로드할 수 있습니다.")
 
     result = compose_hwpx(
-        await template.read(),
+        raw_template,
         request_text=request_text,
         applicant_context=applicant_context,
         title=title,
     )
+    result["warnings"] = conversion_warnings + result.get("warnings", [])
     storage.save_export_file(
         "standalone",
         result["filename"],
@@ -70,6 +80,7 @@ async def convert_hwp_document(file: UploadFile = File(...)):
         "source_filename": file.filename,
         "conversion_method": "convert_hwp.py -> fix_namespaces.py -> validate.py",
         "warnings": warnings,
+        "validation_summary": {"converted": True, "source_filename": file.filename},
     }
     download_id = _persist_hwpx_export(result)
     storage.save_export_file("standalone", filename, content, HWPX_MEDIA_TYPE, "hwp_to_hwpx")

@@ -9,3 +9,5 @@ python-dotenv==1.0.1
 redis>=5.0.0
 lxml>=5.2.0
 python-hwpx>=0.1.0
+olefile>=0.47
+pyhwp==0.1b15

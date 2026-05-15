@@ -9,22 +9,22 @@ logger = logging.getLogger(__name__)
 
 _FALLBACK_CHECKLIST: dict[str, list[dict[str, str]]] = {
     "competition": [
-        {"label": "참가 신청서", "category": "required", "description": "공고에서 지정한 신청 양식", "file_format": "HWP, PDF"},
-        {"label": "제안서 또는 활동 계획서", "category": "required", "description": "분량과 양식은 공고 원문 확인 필요", "file_format": "HWP, PDF"},
+        {"label": "참가 신청서", "category": "required", "description": "공고에서 지정한 신청 양식", "file_format": "HWP, HWPX, PDF"},
+        {"label": "제안서 또는 활동 계획서", "category": "required", "description": "분량과 양식은 공고 원문 확인 필요", "file_format": "HWP, HWPX, PDF"},
         {"label": "팀 구성원 정보", "category": "optional", "description": "팀 참가 시 제출", "file_format": "PDF"},
     ],
     "research": [
-        {"label": "연구계획서", "category": "required", "description": "지원기관 지정 양식", "file_format": "HWP, PDF"},
+        {"label": "연구계획서", "category": "required", "description": "지원기관 지정 양식", "file_format": "HWP, HWPX, PDF"},
         {"label": "연구책임자 이력서", "category": "required", "description": "책임연구자 기준", "file_format": "PDF"},
     ],
     "scholarship": [
-        {"label": "장학금 신청서", "category": "required", "description": "지원기관 지정 양식", "file_format": "HWP, PDF"},
+        {"label": "장학금 신청서", "category": "required", "description": "지원기관 지정 양식", "file_format": "HWP, HWPX, PDF"},
         {"label": "성적증명서", "category": "required", "description": "최근 발급본", "file_format": "PDF"},
         {"label": "재학증명서", "category": "required", "description": "최근 발급본", "file_format": "PDF"},
     ],
     "startup": [
-        {"label": "창업 신청서", "category": "required", "description": "지원기관 지정 양식", "file_format": "HWP, PDF"},
-        {"label": "사업계획서", "category": "required", "description": "공고 양식과 분량 확인 필요", "file_format": "HWP, PDF"},
+        {"label": "창업 지원 신청서", "category": "required", "description": "지원기관 지정 양식", "file_format": "HWP, HWPX, PDF"},
+        {"label": "사업계획서", "category": "required", "description": "공고 양식과 분량 확인 필요", "file_format": "HWP, HWPX, PDF"},
         {"label": "팀 구성원 이력서", "category": "optional", "description": "팀 참가 시 제출", "file_format": "PDF"},
     ],
 }
@@ -123,11 +123,14 @@ def _source_evidence(value: Any) -> list[SourceEvidence]:
             confidence = max(0.0, min(1.0, float(raw_confidence)))
         except (TypeError, ValueError):
             confidence = 0.7
+        page = item.get("page")
+        if not isinstance(page, int):
+            page = item.get("sourcePage") if isinstance(item.get("sourcePage"), int) else None
         evidence.append(
             SourceEvidence(
                 field=field,
                 quote=quote[:500],
-                page=item.get("page") if isinstance(item.get("page"), int) else item.get("sourcePage") if isinstance(item.get("sourcePage"), int) else None,
+                page=page,
                 note=str(item.get("note")).strip() if item.get("note") else None,
                 confidence=confidence,
             )
@@ -146,7 +149,7 @@ def _ensure_deadline_evidence(evidence: list[SourceEvidence], timeline: list[Tim
         SourceEvidence(
             field="submission_deadline",
             quote=f"{deadline.label}: {deadline.date}",
-            note="timeline에서 추출된 마감일",
+            note="timeline에서 추출한 마감일입니다.",
             confidence=0.65,
         )
     )
@@ -204,14 +207,18 @@ def _derive_missing_questions(
         add(f"{field} 항목을 확인해 주실 수 있나요?", "공고 원문에서 불명확한 핵심 조건입니다.", "analysis_confirmation")
 
     if not submission_method:
-        add("제출 방식이나 접수 경로를 알고 있나요?", "제출 방법이 명확하지 않으면 최종 안내 문구를 확정할 수 없습니다.", "submission_method")
+        add(
+            "제출 방식이나 접수 경로를 알고 있나요?",
+            "제출 방법이 명확하지 않으면 최종 안내 문구를 확정할 수 없습니다.",
+            "submission_method",
+        )
 
     if checklist:
         required_docs = [item.label for item in checklist if item.category == "required"][:3]
         if required_docs:
             add(
-                f"{', '.join(required_docs)}에 넣을 본인/팀 정보를 준비했나요?",
-                "필수 제출서류 초안을 실제 제출자 정보에 맞춰 작성해야 합니다.",
+                f"{', '.join(required_docs)}에 넣을 본인 또는 팀 정보를 준비했나요?",
+                "필수 제출서류 초안은 실제 제출자 정보에 맞춰 작성해야 합니다.",
                 "required_documents",
             )
 
@@ -219,11 +226,15 @@ def _derive_missing_questions(
         first_section = sections[0].title
         add(
             f"{first_section} 섹션에 반드시 넣어야 할 경험, 성과, 수치가 있나요?",
-            "섹션별 초안은 사용자 제공 사실만 근거로 작성해야 합니다.",
+            "섹션별 초안은 사용자가 제공한 사실만 근거로 작성해야 합니다.",
             sections[0].id,
         )
 
-    add("지원자 또는 팀의 핵심 강점과 증빙 가능한 성과는 무엇인가요?", "평가 기준에 맞는 제출용 문장을 만들기 위해 필요합니다.", "draft_quality")
+    add(
+        "지원자 또는 팀의 핵심 강점과 증명 가능한 성과는 무엇인가요?",
+        "평가 기준에 맞는 제출 문장을 만들기 위해 필요합니다.",
+        "draft_quality",
+    )
     return questions
 
 

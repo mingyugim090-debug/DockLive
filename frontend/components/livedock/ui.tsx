@@ -22,13 +22,13 @@ export function cn(...classes: Array<string | false | null | undefined>) {
 }
 
 export const fadeUp: Variants = {
-  hidden: { opacity: 0, y: 18 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1] as const } },
+  hidden: { opacity: 0, y: 16 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] as const } },
 };
 
 export const stagger: Variants = {
   hidden: {},
-  show: { transition: { staggerChildren: 0.08 } },
+  show: { transition: { staggerChildren: 0.06 } },
 };
 
 const badgeToneClass: Record<BadgeTone, string> = {
@@ -139,7 +139,6 @@ export function AppHeader({
   return (
     <header className="sticky top-0 z-40 border-b border-white/[0.08] bg-[rgba(6,10,22,0.82)] backdrop-blur-xl">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
-        {/* Left: logo + breadcrumb */}
         <div className="flex min-w-0 items-center gap-3">
           {onBack ? (
             <button
@@ -155,8 +154,8 @@ export function AppHeader({
           ) : null}
 
           <a href="/" className="flex shrink-0 items-center gap-2.5" aria-label="LiveDock 홈">
-            <span className="relative flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500/80 to-violet-500/60 shadow-[0_0_20px_rgba(86,112,255,0.3)]">
-              <svg className="relative h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500/80 to-violet-500/60 shadow-[0_0_20px_rgba(86,112,255,0.3)]">
+              <svg className="h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m6.75 12H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
               </svg>
             </span>
@@ -177,7 +176,6 @@ export function AppHeader({
           ) : null}
         </div>
 
-        {/* Center: nav */}
         {navItems?.length ? (
           <nav className="hidden items-center gap-0.5 md:flex" aria-label="주요 섹션">
             {navItems.map((item) => (
@@ -192,7 +190,6 @@ export function AppHeader({
           </nav>
         ) : null}
 
-        {/* Right: actions */}
         <div className="flex shrink-0 items-center gap-2">{right}</div>
       </div>
     </header>
@@ -259,9 +256,7 @@ export function SectionCard({
     >
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          {eyebrow ? (
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-primary">{eyebrow}</p>
-          ) : null}
+          {eyebrow ? <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-primary">{eyebrow}</p> : null}
           <h2 className="text-base font-semibold tracking-normal text-text">{title}</h2>
           {desc ? <p className="mt-1.5 max-w-2xl text-sm leading-6 text-text3">{desc}</p> : null}
         </div>
@@ -319,15 +314,7 @@ export function InfoCard({
   );
 }
 
-export function NoticeBanner({
-  title,
-  children,
-  tone = 'info',
-}: {
-  title?: string;
-  children: ReactNode;
-  tone?: BadgeTone;
-}) {
+export function NoticeBanner({ title, children, tone = 'info' }: { title?: string; children: ReactNode; tone?: BadgeTone }) {
   return (
     <div
       className={cn(
@@ -359,7 +346,6 @@ export function Toast({ message, onDismiss }: { message: string | null; onDismis
   }, [message, onDismiss]);
 
   if (!message) return null;
-
   return (
     <div className="pointer-events-none fixed bottom-6 left-1/2 z-[70] -translate-x-1/2 px-4 lg:bottom-8">
       <div className="pointer-events-auto flex items-center gap-3 rounded-xl border border-emerald-400/25 bg-[rgba(13,19,36,0.92)] px-4 py-3 shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-xl">
@@ -369,12 +355,7 @@ export function Toast({ message, onDismiss }: { message: string | null; onDismis
           </svg>
         </span>
         <span className="max-w-[280px] text-sm text-text">{message}</span>
-        <button
-          type="button"
-          onClick={onDismiss}
-          className="ml-1 shrink-0 text-text3 transition hover:text-text"
-          aria-label="닫기"
-        >
+        <button type="button" onClick={onDismiss} className="ml-1 shrink-0 text-text3 transition hover:text-text" aria-label="닫기">
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
           </svg>
@@ -399,24 +380,10 @@ export function LoadingState({ label = 'Agent 작업실을 불러오는 중입�
   );
 }
 
-export function EmptyState({
-  title,
-  desc,
-  action,
-  icon,
-}: {
-  title: string;
-  desc?: string;
-  action?: ReactNode;
-  icon?: ReactNode;
-}) {
+export function EmptyState({ title, desc, action, icon }: { title: string; desc?: string; action?: ReactNode; icon?: ReactNode }) {
   return (
     <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.025] px-6 py-10 text-center">
-      {icon ? (
-        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-text3">
-          {icon}
-        </div>
-      ) : null}
+      {icon ? <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-text3">{icon}</div> : null}
       <p className="text-sm font-semibold text-text2">{title}</p>
       {desc ? <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-text3">{desc}</p> : null}
       {action ? <div className="mt-5">{action}</div> : null}
@@ -425,70 +392,22 @@ export function EmptyState({
 }
 
 export function HeroMockup() {
-  const checklist = ['사업계획서', '개인정보 동의서', '실적 증빙', '예산 계획'];
   return (
-    <motion.div
-      variants={fadeUp}
-      className="relative mx-auto w-full max-w-[540px] rounded-lg border border-white/10 bg-[linear-gradient(145deg,rgba(18,24,42,0.94),rgba(10,13,26,0.92))] p-3 shadow-[0_28px_90px_rgba(0,0,0,0.44)]"
-    >
-      <div className="rounded-md border border-white/8 bg-black/20">
-        <div className="flex items-center justify-between border-b border-white/8 px-4 py-3">
-          <div>
-            <p className="text-xs font-semibold text-text">2026 창업성장 지원사업</p>
-            <p className="mt-1 text-[11px] text-text3">공고 분석 리포트</p>
-          </div>
-          <StatusBadge label="D-12" tone="warning" />
+    <motion.div variants={fadeUp} className="rounded-lg border border-white/10 bg-[rgba(13,19,36,0.7)] p-4 shadow-panel">
+      <div className="flex items-center justify-between border-b border-white/10 pb-3">
+        <div>
+          <p className="text-sm font-semibold text-text">공고 분석 리포트</p>
+          <p className="mt-1 text-xs text-text3">요구사항, 부족 정보, 초안 상태를 한 화면에서 확인합니다.</p>
         </div>
-        <div className="grid gap-3 p-4 md:grid-cols-[1fr_0.78fr]">
-          <div className="space-y-3">
-            <div className="rounded-lg border border-sky-400/15 bg-sky-400/[0.06] p-3">
-              <div className="mb-3 flex items-center justify-between">
-                <p className="text-xs font-semibold text-sky-100">분석 진행</p>
-                <span className="text-[11px] text-sky-200">82%</span>
-              </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-                <div className="h-full w-[82%] rounded-full bg-[linear-gradient(90deg,#6fd3ff,#8b78ff)]" />
-              </div>
-            </div>
-            <div className="rounded-lg border border-white/10 bg-white/[0.04] p-3">
-              <p className="text-xs font-semibold text-text">확인 필요 주장</p>
-              <div className="mt-3 space-y-2">
-                {['전년도 매출 3억 원 이하', '수도권 외 사업장 보유'].map((item) => (
-                  <div key={item} className="flex items-center justify-between gap-3 rounded-md bg-amber-400/[0.07] px-3 py-2">
-                    <span className="truncate text-[11px] text-amber-100">{item}</span>
-                    <span className="text-[10px] text-amber-200">검토</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="rounded-lg border border-white/10 bg-white/[0.04] p-3">
-              <p className="text-xs font-semibold text-text">HWPX export</p>
-              <p className="mt-2 text-[11px] leading-5 text-text3">최종 초안과 공식 양식을 연결할 준비가 되었습니다.</p>
-            </div>
+        <StatusBadge label="Agent MVP" tone="info" />
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        {['필수 서류 추출', '확인 필요 주장 표시', '섹션별 초안 생성', 'HWPX export'].map((item, index) => (
+          <div key={item} className="rounded-md border border-white/10 bg-white/[0.035] p-3">
+            <p className="text-xs font-semibold text-text">{item}</p>
+            <p className="mt-1 text-[11px] text-text3">{index < 2 ? '분석 완료' : '진행 대기'}</p>
           </div>
-          <div className="rounded-lg border border-white/10 bg-white/[0.04] p-3">
-            <p className="text-xs font-semibold text-text">제출서류 체크리스트</p>
-            <div className="mt-3 space-y-2">
-              {checklist.map((item, index) => (
-                <div key={item} className="flex items-center gap-2">
-                  <span
-                    className={cn(
-                      'flex h-4 w-4 items-center justify-center rounded border text-[9px]',
-                      index < 2 ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200' : 'border-white/12 bg-white/[0.04] text-text3',
-                    )}
-                  >
-                    {index < 2 ? '✓' : ''}
-                  </span>
-                  <span className="text-[11px] text-text2">{item}</span>
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 rounded-md border border-white/8 bg-bg/50 p-3">
-              <p className="text-[11px] font-semibold text-text">다음 질문</p>
-              <p className="mt-1 text-[11px] leading-5 text-text3">팀의 핵심 성과와 지원금 사용 계획을 입력해 주세요.</p>
-            </div>
-          </div>
-        </div>
+        ))}
       </div>
     </motion.div>
   );
@@ -496,8 +415,8 @@ export function HeroMockup() {
 
 export function InputModeTabs({ mode, onChange }: { mode: InputMode; onChange: (mode: InputMode) => void }) {
   const tabs: Array<{ id: InputMode; label: string; desc: string }> = [
-    { id: 'file', label: 'PDF', desc: '공고 파일' },
-    { id: 'url', label: 'URL', desc: '웹 공고' },
+    { id: 'file', label: '파일', desc: 'PDF, HWPX, HWP' },
+    { id: 'url', label: 'URL', desc: '공고 페이지' },
     { id: 'text', label: '텍스트', desc: '본문 붙여넣기' },
   ];
 
@@ -523,7 +442,12 @@ export function InputModeTabs({ mode, onChange }: { mode: InputMode; onChange: (
 
 export function UploadDropzone({ file, onFile }: { file: File | null; onFile: (file: File | null) => void }) {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    accept: { 'application/pdf': ['.pdf'] },
+    accept: {
+      'application/pdf': ['.pdf'],
+      'application/vnd.hancom.hwpx': ['.hwpx'],
+      'application/x-hwp': ['.hwp'],
+      'application/octet-stream': ['.hwp', '.hwpx'],
+    },
     maxFiles: 1,
     multiple: false,
     onDrop: (acceptedFiles) => onFile(acceptedFiles[0] ?? null),
@@ -534,18 +458,18 @@ export function UploadDropzone({ file, onFile }: { file: File | null; onFile: (f
       {...getRootProps()}
       className={cn(
         'group flex min-h-[220px] cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed p-6 text-center transition duration-200',
-        isDragActive
-          ? 'border-primary bg-primary/10'
-          : 'border-white/14 bg-white/[0.035] hover:border-primary/55 hover:bg-white/[0.055]',
+        isDragActive ? 'border-primary bg-primary/10' : 'border-white/14 bg-white/[0.035] hover:border-primary/55 hover:bg-white/[0.055]',
       )}
     >
       <input {...getInputProps()} />
-      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-md border border-white/10 bg-white/[0.06] text-xl text-text2 transition group-hover:text-text">
-        ↑
+      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-md border border-white/10 bg-white/[0.06] text-text2 transition group-hover:text-text">
+        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V9.75m0 0 3 3m-3-3-3 3M6.75 19.5h10.5A2.25 2.25 0 0 0 19.5 17.25V6.75A2.25 2.25 0 0 0 17.25 4.5H6.75A2.25 2.25 0 0 0 4.5 6.75v10.5A2.25 2.25 0 0 0 6.75 19.5Z" />
+        </svg>
       </div>
-      <p className="text-sm font-semibold text-text">{file ? file.name : 'PDF 공고문을 끌어오거나 선택하세요'}</p>
+      <p className="text-sm font-semibold text-text">{file ? file.name : '공고 파일을 끌어오거나 선택하세요'}</p>
       <p className="mt-2 max-w-md text-xs leading-5 text-text3">
-        일정, 제출 서류, 지원 자격, 평가 기준을 근거와 함께 추출합니다. PDF 형식을 권장합니다.
+        PDF, HWPX, HWP를 지원합니다. HWP는 서버에서 HWPX로 변환한 뒤 분석합니다.
       </p>
       {file ? (
         <button
@@ -563,55 +487,26 @@ export function UploadDropzone({ file, onFile }: { file: File | null; onFile: (f
   );
 }
 
-export function ProfileContextCard({
-  company,
-  onChange,
-}: {
-  company: CompanyProfile;
-  onChange: (company: CompanyProfile) => void;
-}) {
-  const update = <Key extends keyof CompanyProfile>(key: Key, value: CompanyProfile[Key]) => {
-    onChange({ ...company, [key]: value });
-  };
+export function ProfileContextCard({ company, onChange }: { company: CompanyProfile; onChange: (company: CompanyProfile) => void }) {
+  const update = <Key extends keyof CompanyProfile>(key: Key, value: CompanyProfile[Key]) => onChange({ ...company, [key]: value });
 
   return (
-    <SectionCard
-      title="지원자/팀 컨텍스트"
-      eyebrow="Optional"
-      desc="필수는 아니지만 입력하면 적합성 판단과 초안의 구체성이 좋아집니다."
-      className="lg:sticky lg:top-24"
-    >
+    <SectionCard title="지원자/팀 정보" eyebrow="Optional" desc="입력하면 적합도 판단과 초안이 더 구체적으로 좋아집니다." className="lg:sticky lg:top-24">
       <div className="grid gap-3 sm:grid-cols-2">
-        <TextInput label="팀/회사명" value={company.name} onChange={(value) => update('name', value)} placeholder="예: DockLive Team" />
+        <TextInput label="팀/회사명" value={company.name} onChange={(value) => update('name', value)} placeholder="예: LiveDock Team" />
         <TextInput label="분야" value={company.industry} onChange={(value) => update('industry', value)} placeholder="예: AI 문서 자동화" />
         <TextInput label="단계" value={company.stage} onChange={(value) => update('stage', value)} placeholder="예: 예비창업, 초기창업" />
-        <TextInput label="지역" value={company.region} onChange={(value) => update('region', value)} placeholder="예: 서울, 부산" />
+        <TextInput label="지역" value={company.region} onChange={(value) => update('region', value)} placeholder="예: 서울" />
       </div>
-
       <details className="group mt-4 rounded-lg border border-white/10 bg-white/[0.03]">
         <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-text">
-          강점과 필요 지원 항목
+          강점과 지원 필요 항목
           <span className="text-text3 transition group-open:rotate-180">⌄</span>
         </summary>
         <div className="grid gap-3 border-t border-white/10 p-4">
-          <TextArea
-            label="핵심 강점"
-            value={company.strengths}
-            onChange={(value) => update('strengths', value)}
-            placeholder="성과, 보유 역량, 팀의 차별점"
-          />
-          <TextArea
-            label="필요 지원"
-            value={company.needs}
-            onChange={(value) => update('needs', value)}
-            placeholder="지원금, 멘토링, 공간, 장비, 네트워크"
-          />
-          <TextArea
-            label="이전 지원 이력"
-            value={company.previous_support}
-            onChange={(value) => update('previous_support', value)}
-            placeholder="선정 이력, 중복 수혜 여부, 관련 사업 참여 이력"
-          />
+          <TextArea label="핵심 강점" value={company.strengths} onChange={(value) => update('strengths', value)} placeholder="성과, 보유 역량, 팀의 차별점" />
+          <TextArea label="필요 지원" value={company.needs} onChange={(value) => update('needs', value)} placeholder="지원금, 멘토링, 공간, 장비, 네트워크" />
+          <TextArea label="이전 지원 이력" value={company.previous_support} onChange={(value) => update('previous_support', value)} placeholder="선정 이력, 중복 수혜 여부, 관련 사업 참여 이력" />
           <TextInput
             label="팀 규모"
             type="number"
@@ -641,13 +536,7 @@ export function TextInput({
   return (
     <label className="block">
       <span className="mb-2 block text-xs font-semibold text-text2">{label}</span>
-      <input
-        type={type}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        className="input-shell w-full rounded-md px-3 py-2.5 text-sm"
-      />
+      <input type={type} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="input-shell w-full rounded-md px-3 py-2.5 text-sm" />
     </label>
   );
 }
@@ -678,23 +567,16 @@ export function TextArea({
   );
 }
 
-export function WorkflowStepper({
-  currentStep,
-  onChange,
-}: {
-  currentStep: 1 | 2 | 3 | 4 | 5;
-  onChange: (step: 1 | 2 | 3 | 4) => void;
-}) {
+export function WorkflowStepper({ currentStep, onChange }: { currentStep: 1 | 2 | 3 | 4 | 5; onChange: (step: 1 | 2 | 3 | 4) => void }) {
   const steps: Array<{ step: 1 | 2 | 3 | 4; label: string; desc: string }> = [
-    { step: 1, label: '분석', desc: '요구사항 · 근거' },
-    { step: 2, label: '입력', desc: '정보 수집' },
+    { step: 1, label: '분석', desc: '요구사항·근거' },
+    { step: 2, label: '입력', desc: '부족 정보' },
     { step: 3, label: '초안', desc: '섹션별 작성' },
-    { step: 4, label: '최종', desc: '검토 · Export' },
+    { step: 4, label: '최종', desc: '검토·Export' },
   ];
 
   return (
     <>
-      {/* Desktop: vertical sidebar list */}
       <nav className="glass-panel hidden overflow-hidden rounded-xl border border-white/[0.08] lg:block" aria-label="문서 생성 단계">
         <div className="divide-y divide-white/[0.06]">
           <p className="px-4 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-text3">작업 단계</p>
@@ -705,92 +587,57 @@ export function WorkflowStepper({
                 key={item.step}
                 type="button"
                 onClick={() => onChange(item.step)}
-                className={cn(
-                  'group flex w-full items-center gap-3 px-4 py-3.5 text-left transition',
-                  state === 'current' ? 'bg-primary/[0.09]' : 'hover:bg-white/[0.03]',
-                )}
+                className={cn('group flex w-full items-center gap-3 px-4 py-3.5 text-left transition', state === 'current' ? 'bg-primary/[0.09]' : 'hover:bg-white/[0.03]')}
               >
-                <span
-                  className={cn(
-                    'relative flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border text-[11px] font-bold',
-                    state === 'current'
-                      ? 'border-primary/40 bg-primary/20 text-primary'
-                      : state === 'done'
-                        ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300'
-                        : 'border-white/10 bg-white/[0.04] text-text3',
-                  )}
-                >
-                  {state === 'done' ? (
-                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                    </svg>
-                  ) : (
-                    item.step
-                  )}
+                <StepDot state={state} step={item.step} />
+                <span>
+                  <span className={cn('block text-sm font-semibold', state === 'current' ? 'text-text' : 'text-text2')}>{item.label}</span>
+                  <span className="mt-0.5 block text-xs text-text3">{item.desc}</span>
                 </span>
-                <span className="min-w-0 flex-1">
-                  <span
-                    className={cn(
-                      'block text-sm font-semibold',
-                      state === 'current' ? 'text-text' : state === 'done' ? 'text-text2' : 'text-text3',
-                    )}
-                  >
-                    {item.label}
-                  </span>
-                  <span className="mt-0.5 block text-[11px] text-text3">{item.desc}</span>
-                </span>
-                {state === 'current' ? <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-primary" /> : null}
               </button>
             );
           })}
         </div>
       </nav>
 
-      {/* Mobile: fixed bottom tab bar */}
-      <nav
-        className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/[0.08] bg-[rgba(6,10,22,0.92)] backdrop-blur-xl lg:hidden"
-        aria-label="문서 생성 단계"
-      >
-        <div className="flex">
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.08] bg-[rgba(6,10,22,0.9)] backdrop-blur-xl lg:hidden" aria-label="문서 생성 단계">
+        <div className="mx-auto flex max-w-7xl">
           {steps.map((item) => {
             const state = item.step < currentStep ? 'done' : item.step === currentStep ? 'current' : 'pending';
             return (
-              <button
-                key={item.step}
-                type="button"
-                onClick={() => onChange(item.step)}
-                className={cn(
-                  'flex flex-1 flex-col items-center gap-1 pb-safe px-2 py-3 text-center transition',
-                  state === 'current' ? 'border-t-2 border-primary' : 'border-t-2 border-transparent',
-                )}
-              >
-                <span
-                  className={cn(
-                    'flex h-6 w-6 items-center justify-center rounded-md border text-[10px] font-bold',
-                    state === 'current'
-                      ? 'border-primary/40 bg-primary/20 text-primary'
-                      : state === 'done'
-                        ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300'
-                        : 'border-white/10 bg-white/[0.04] text-text3',
-                  )}
-                >
-                  {state === 'done' ? (
-                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                    </svg>
-                  ) : (
-                    item.step
-                  )}
-                </span>
-                <span className={cn('text-[11px] font-semibold', state === 'current' ? 'text-text' : 'text-text3')}>
-                  {item.label}
-                </span>
+              <button key={item.step} type="button" onClick={() => onChange(item.step)} className={cn('flex flex-1 flex-col items-center gap-1 px-2 py-3 text-center transition', state === 'current' ? 'border-t-2 border-primary' : 'border-t-2 border-transparent')}>
+                <StepDot state={state} step={item.step} small />
+                <span className={cn('text-[11px] font-semibold', state === 'current' ? 'text-text' : 'text-text3')}>{item.label}</span>
               </button>
             );
           })}
         </div>
       </nav>
     </>
+  );
+}
+
+function StepDot({ state, step, small = false }: { state: string; step: number; small?: boolean }) {
+  return (
+    <span
+      className={cn(
+        'flex shrink-0 items-center justify-center rounded-md border font-bold',
+        small ? 'h-6 w-6 text-[10px]' : 'h-7 w-7 text-[11px]',
+        state === 'current'
+          ? 'border-primary/40 bg-primary/20 text-primary'
+          : state === 'done'
+            ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300'
+            : 'border-white/10 bg-white/[0.04] text-text3',
+      )}
+    >
+      {state === 'done' ? (
+        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+        </svg>
+      ) : (
+        step
+      )}
+    </span>
   );
 }
 
@@ -813,7 +660,7 @@ export function EvidenceList({ evidence }: { evidence: SourceEvidence[] }) {
               {item.page ? <StatusBadge label={`${item.page}p`} tone="neutral" /> : null}
               <StatusBadge label={`${Math.round((item.confidence ?? 0.7) * 100)}%`} tone="neutral" />
             </div>
-            <p className="mt-3 text-sm leading-6 text-text2">“{item.quote}”</p>
+            <p className="mt-3 text-sm leading-6 text-text2">"{item.quote}"</p>
             {item.note ? <p className="mt-2 text-xs leading-5 text-text3">{item.note}</p> : null}
           </div>
         ))}
@@ -826,10 +673,8 @@ function MarkdownPreview({ content, emptyText }: { content: string; emptyText: s
   const nodes = useMemo(() => {
     const trimmed = content.trim();
     if (!trimmed) return null;
-
     const elements: ReactNode[] = [];
     let listItems: string[] = [];
-
     const flushList = () => {
       if (!listItems.length) return;
       const current = listItems;
@@ -837,7 +682,7 @@ function MarkdownPreview({ content, emptyText }: { content: string; emptyText: s
       elements.push(
         <ul key={`list-${elements.length}`} className="my-3 space-y-1.5 pl-4">
           {current.map((item) => (
-            <li key={item} className="list-disc text-sm leading-7 text-text2">
+            <li key={`${item}-${elements.length}`} className="list-disc text-sm leading-7 text-text2">
               {item}
             </li>
           ))}
@@ -852,7 +697,6 @@ function MarkdownPreview({ content, emptyText }: { content: string; emptyText: s
         elements.push(<div key={`space-${elements.length}`} className="h-2" />);
         return;
       }
-
       const heading = line.match(/^(#{1,3})\s+(.+)$/);
       if (heading) {
         flushList();
@@ -865,13 +709,11 @@ function MarkdownPreview({ content, emptyText }: { content: string; emptyText: s
         );
         return;
       }
-
       const list = line.match(/^[-*]\s+(.+)$/);
       if (list) {
         listItems.push(list[1]);
         return;
       }
-
       flushList();
       elements.push(
         <p key={`p-${elements.length}`} className="text-sm leading-7 text-text2">
@@ -879,7 +721,6 @@ function MarkdownPreview({ content, emptyText }: { content: string; emptyText: s
         </p>,
       );
     });
-
     flushList();
     return elements;
   }, [content]);
@@ -887,7 +728,6 @@ function MarkdownPreview({ content, emptyText }: { content: string; emptyText: s
   if (!nodes) {
     return <EmptyState title={emptyText} desc="필수 정보를 입력한 뒤 섹션별 초안을 생성하면 이 영역에 문서 미리보기가 표시됩니다." />;
   }
-
   return <div className="document-preview rounded-lg border border-white/10 bg-bg/65 p-5">{nodes}</div>;
 }
 
@@ -1035,15 +875,10 @@ export function ExportPanel({
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-sm font-semibold text-text">HWPX toolchain 상태</p>
-            <p className="mt-1 text-xs leading-5 text-text3">
-              서버에서 namespace fix, validate, template clone 검증을 실행할 수 있는지 먼저 확인합니다.
-            </p>
+            <p className="mt-1 text-xs leading-5 text-text3">서버에서 namespace fix, validate, template clone 검증을 실행할 수 있는지 확인합니다.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <StatusBadge
-              label={hwpxStatus ? (hwpxReady ? 'HWPX 사용 가능' : 'HWPX 제한됨') : '상태 확인 중'}
-              tone={hwpxStatus ? (hwpxReady ? 'success' : 'warning') : 'neutral'}
-            />
+            <StatusBadge label={hwpxStatus ? (hwpxReady ? 'HWPX 사용 가능' : 'HWPX 제한됨') : '상태 확인 중'} tone={hwpxStatus ? (hwpxReady ? 'success' : 'warning') : 'neutral'} />
             <StatusBadge label={templateCloneReady ? '템플릿 검증 가능' : '템플릿 검증 제한'} tone={templateCloneReady ? 'success' : 'warning'} />
           </div>
         </div>
@@ -1065,23 +900,13 @@ export function ExportPanel({
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-sm font-semibold text-text">Export actions</p>
-            <p className="mt-1 text-xs leading-5 text-text3">
-              HWPX가 제한되거나 실패하면 HTML export와 placeholder map으로 먼저 문서를 확보할 수 있습니다.
-            </p>
+            <p className="mt-1 text-xs leading-5 text-text3">HWPX가 제한되거나 실패하면 HTML export와 placeholder map으로 먼저 문서를 확보할 수 있습니다.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="secondary" onClick={onExportHtml} disabled={busy}>
-              HTML export
-            </Button>
-            <Button type="button" onClick={onExportHwpx} disabled={busy || !hwpxReady}>
-              HWPX export
-            </Button>
-            <Button type="button" variant="secondary" onClick={onCreatePlaceholderMap} disabled={busy}>
-              Placeholder map
-            </Button>
-            <Button type="button" variant="ghost" onClick={onCopyMarkdown}>
-              Markdown 복사
-            </Button>
+            <Button type="button" variant="secondary" onClick={onExportHtml} disabled={busy}>HTML export</Button>
+            <Button type="button" onClick={onExportHwpx} disabled={busy || !hwpxReady}>HWPX export</Button>
+            <Button type="button" variant="secondary" onClick={onCreatePlaceholderMap} disabled={busy}>Placeholder map</Button>
+            <Button type="button" variant="ghost" onClick={onCopyMarkdown}>Markdown 복사</Button>
           </div>
         </div>
       </div>
@@ -1090,39 +915,23 @@ export function ExportPanel({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-semibold text-text">최근 생성 파일</p>
-            <p className="mt-1 text-xs leading-5 text-text3">Supabase에 저장된 export 파일을 다시 다운로드할 수 있습니다.</p>
+            <p className="mt-1 text-xs leading-5 text-text3">저장된 export 파일을 다시 다운로드할 수 있습니다.</p>
           </div>
-          <Button type="button" variant="secondary" onClick={onRefreshExports} disabled={busy}>
-            새로고침
-          </Button>
+          <Button type="button" variant="secondary" onClick={onRefreshExports} disabled={busy}>새로고침</Button>
         </div>
         <div className="mt-4 space-y-2">
           {exportHistory.length ? (
             exportHistory.map((item) => (
-              <div
-                key={item.id}
-                className="flex flex-col gap-3 rounded-md border border-white/10 bg-bg/45 p-3 sm:flex-row sm:items-center sm:justify-between"
-              >
+              <div key={item.id} className="flex flex-col gap-3 rounded-md border border-white/10 bg-bg/45 p-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="truncate text-sm font-semibold text-text">{item.filename}</p>
                     <StatusBadge label={exportStatusLabel[item.status] ?? item.status} tone={exportStatusTone[item.status] ?? 'neutral'} />
                   </div>
-                  <p className="mt-1 text-xs text-text3">
-                    {item.export_type} · {Math.max(1, Math.round(item.size_bytes / 1024))}KB ·{' '}
-                    {new Date(item.created_at).toLocaleString('ko-KR')}
-                  </p>
+                  <p className="mt-1 text-xs text-text3">{item.export_type} · {Math.max(1, Math.round(item.size_bytes / 1024))}KB · {new Date(item.created_at).toLocaleString('ko-KR')}</p>
                   {item.error_message ? <p className="mt-2 text-xs leading-5 text-rose-200">{item.error_message}</p> : null}
-                  {item.validation_summary?.validation_passed || item.validation_summary?.generation_method ? (
-                    <p className="mt-2 text-xs leading-5 text-text3">
-                      검증: {item.validation_summary.validation_passed ? '통과' : '기록됨'}
-                      {item.validation_summary.generation_method ? ` · ${String(item.validation_summary.generation_method)}` : ''}
-                    </p>
-                  ) : null}
                 </div>
-                <Button type="button" variant="ghost" onClick={() => onDownloadStoredExport(item.id)} disabled={busy || item.status !== 'success'}>
-                  다시 다운로드
-                </Button>
+                <Button type="button" variant="ghost" onClick={() => onDownloadStoredExport(item.id)} disabled={busy || item.status !== 'success'}>다시 다운로드</Button>
               </div>
             ))
           ) : (
@@ -1134,10 +943,9 @@ export function ExportPanel({
       <div className="rounded-lg border border-white/10 bg-white/[0.035] p-4">
         <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[0.8fr_1fr]">
           <div>
-            <p className="text-sm font-semibold text-text">공식 양식에 채우기</p>
+            <p className="text-sm font-semibold text-text">공식 양식 채우기</p>
             <p className="mt-2 text-sm leading-6 text-text2">
-              기관에서 제공한 HWPX 양식을 업로드하면 지정한 placeholder를 최종 문서 내용으로 치환합니다. 복잡한 양식은 기본 export보다
-              이 방식을 권장합니다.
+              기관에서 제공한 HWPX 양식을 업로드하면 지정한 placeholder를 최종 문서 내용으로 치환합니다. HWP 양식은 먼저 HWPX 자동작성 화면에서 변환해 주세요.
             </p>
             <label className="mt-4 block rounded-lg border border-dashed border-white/14 bg-bg/40 p-4 text-sm text-text2">
               <span className="block font-semibold text-text">HWPX 템플릿 업로드</span>
@@ -1159,18 +967,12 @@ export function ExportPanel({
               minHeight="min-h-[180px]"
             />
             <div className="mt-3 flex justify-end">
-              <Button type="button" onClick={onExportTemplate} disabled={busy || !templateFile || !templateCloneReady}>
-                템플릿 HWPX export
-              </Button>
+              <Button type="button" onClick={onExportTemplate} disabled={busy || !templateFile || !templateCloneReady}>템플릿 HWPX export</Button>
             </div>
             {placeholderMapPreview ? (
               <details className="mt-4 rounded-lg border border-sky-400/15 bg-sky-400/[0.05]">
-                <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-sky-100">
-                  생성된 placeholder map 미리보기
-                </summary>
-                <pre className="max-h-[260px] overflow-auto border-t border-sky-400/10 p-4 text-xs leading-5 text-text2">
-                  {placeholderMapPreview}
-                </pre>
+                <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-sky-100">생성된 placeholder map 미리보기</summary>
+                <pre className="max-h-[260px] overflow-auto border-t border-sky-400/10 p-4 text-xs leading-5 text-text2">{placeholderMapPreview}</pre>
               </details>
             ) : null}
             {placeholderWarnings?.length ? (

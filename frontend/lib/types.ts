@@ -151,6 +151,7 @@ export interface WorkflowSession {
   draft_sections: DraftSection[];
   final_document?: FinalDocument | null;
   confirmed_at?: string | null;
+  confirmed_items: string[];
   created_at: string;
   updated_at: string;
 }
