@@ -39,12 +39,12 @@ const config: Config = {
         "pulse-dot": "pulse-dot 1.5s ease-in-out infinite",
       },
       boxShadow: {
-        panel: "0 18px 52px rgba(0,0,0,0.28)",
-        primary: "0 14px 34px rgba(92,106,255,0.26)",
-        "sm-dark": "0 2px 8px rgba(0,0,0,0.18)",
+        panel: "0 18px 48px rgba(39,48,68,0.08)",
+        primary: "0 14px 34px rgba(108,125,255,0.22)",
+        "sm-dark": "0 2px 8px rgba(39,48,68,0.08)",
       },
       borderRadius: {
-        DEFAULT: "8px",
+        DEFAULT: "18px",
       },
     },
   },

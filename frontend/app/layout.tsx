@@ -1,21 +1,20 @@
 import type { Metadata } from 'next';
-import { Noto_Sans_KR } from 'next/font/google';
+import localFont from 'next/font/local';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import './globals.css';
 
-const notoSansKR = Noto_Sans_KR({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
+const appFont = localFont({
+  src: './fonts/GeistVF.woff',
   display: 'swap',
 });
 
 export const metadata: Metadata = {
-  title: 'LiveDock - Document Automation Agent',
-  description: 'AI document automation for public notice analysis, drafting, and HWPX export.',
-  keywords: ['LiveDock', 'document automation', 'public notices', 'HWPX', 'AI'],
+  title: 'DockLive - Document Automation Agent',
+  description: 'Document automation service for upload, analysis, summary, formatting, and downloads.',
+  keywords: ['DockLive', 'document automation', 'documents', 'HWPX', 'AI'],
   openGraph: {
-    title: 'LiveDock',
-    description: 'Document automation agent for public notice analysis, drafting, and HWPX export.',
+    title: 'DockLive',
+    description: 'Document automation agent for document analysis and formatting.',
     type: 'website',
   },
 };
@@ -27,7 +26,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko">
-      <body className={notoSansKR.className}>
+      <body className={appFont.className}>
         <ErrorBoundary>{children}</ErrorBoundary>
       </body>
     </html>

@@ -1,57 +1,34 @@
-'use client';
+type BadgeTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
+type LegacyVariant = 'required' | 'optional';
 
-interface BadgeProps {
-  variant?: 'required' | 'optional' | 'safe' | 'warning' | 'danger' | 'passed' | 'default';
-  children: React.ReactNode;
-  className?: string;
-}
-
-const variants: Record<string, { bg: string; text: string; border: string }> = {
-  required: {
-    bg: 'rgba(124,111,247,0.15)',
-    text: '#B89EFF',
-    border: 'rgba(124,111,247,0.3)',
-  },
-  optional: {
-    bg: 'rgba(255,255,255,0.06)',
-    text: 'rgba(255,255,255,0.45)',
-    border: 'rgba(255,255,255,0.1)',
-  },
-  safe: {
-    bg: 'rgba(74,222,128,0.12)',
-    text: '#4ADE80',
-    border: 'rgba(74,222,128,0.25)',
-  },
-  warning: {
-    bg: 'rgba(251,191,36,0.12)',
-    text: '#FBBF24',
-    border: 'rgba(251,191,36,0.25)',
-  },
-  danger: {
-    bg: 'rgba(248,113,113,0.12)',
-    text: '#F87171',
-    border: 'rgba(248,113,113,0.25)',
-  },
-  passed: {
-    bg: 'rgba(255,255,255,0.05)',
-    text: '#4A4A6A',
-    border: 'rgba(255,255,255,0.08)',
-  },
-  default: {
-    bg: 'rgba(255,255,255,0.06)',
-    text: 'rgba(255,255,255,0.5)',
-    border: 'rgba(255,255,255,0.1)',
-  },
+const toneClass: Record<BadgeTone, string> = {
+  success: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+  warning: 'bg-amber-50 text-amber-700 border-amber-100',
+  danger: 'bg-rose-50 text-rose-700 border-rose-100',
+  info: 'bg-[#EEF2FF] text-[#5263E8] border-[#D8DDFC]',
+  neutral: 'bg-[#F6F8FB] text-[#6B7280] border-[#ECECF1]',
 };
 
-export function Badge({ variant = 'default', children, className = '' }: BadgeProps) {
-  const style = variants[variant];
+export function Badge({
+  children,
+  tone,
+  variant,
+}: {
+  children: React.ReactNode;
+  tone?: BadgeTone;
+  variant?: LegacyVariant;
+}) {
+  const resolvedTone: BadgeTone = tone ?? (variant === 'required' ? 'warning' : variant === 'optional' ? 'neutral' : 'neutral');
   return (
-    <span
-      className={`inline-flex items-center text-xs px-2 py-0.5 rounded-md font-semibold ${className}`}
-      style={{ background: style.bg, color: style.text, border: `1px solid ${style.border}` }}
-    >
+    <span className={['inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold', toneClass[resolvedTone]].join(' ')}>
       {children}
     </span>
   );
+}
+
+export function statusTone(status: string): BadgeTone {
+  if (['분석 완료', '완료'].includes(status)) return 'success';
+  if (['처리 중', '진행 중', '대기 중', '대기'].includes(status)) return 'warning';
+  if (status === '오류') return 'danger';
+  return 'neutral';
 }
