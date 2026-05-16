@@ -1,20 +1,64 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { TemplateCard } from '@/components/templates/TemplateCard';
 import { TemplateWorkflowPanel } from '@/components/templates/TemplateWorkflowPanel';
 import { Card } from '@/components/ui/Card';
 import { mockDocuments } from '@/data/mockDocuments';
 import { mockTemplates } from '@/data/mockTemplates';
+import type { OutputFormat, WorkflowTaskId } from '@/data/workspaceTasks';
+import { savePendingTemplate } from '@/lib/workflow/workflowStore';
+
+const templateTaskMap: Record<string, { taskId: WorkflowTaskId; outputFormat: OutputFormat; instructionHint: string }> = {
+  'tpl-meeting': {
+    taskId: 'minutes',
+    outputFormat: 'Markdown',
+    instructionHint: '회의 목적, 참석자, 강조할 결정사항을 입력하세요.',
+  },
+  'tpl-report': {
+    taskId: 'report',
+    outputFormat: 'Markdown',
+    instructionHint: '보고 목적, 대상 독자, 강조할 결론을 입력하세요.',
+  },
+  'tpl-plan': {
+    taskId: 'plan',
+    outputFormat: 'HWPX',
+    instructionHint: '대상 사용자, 핵심 문제, 실행 계획을 입력하세요.',
+  },
+  'tpl-assignment': {
+    taskId: 'report',
+    outputFormat: 'Markdown',
+    instructionHint: '과제 주제, 분량, 반드시 포함할 참고 자료를 입력하세요.',
+  },
+  'tpl-official': {
+    taskId: 'official',
+    outputFormat: 'HWPX',
+    instructionHint: '수신 기관, 요청 목적, 포함해야 할 첨부 항목을 입력하세요.',
+  },
+  'tpl-slide': {
+    taskId: 'custom',
+    outputFormat: 'Markdown',
+    instructionHint: '청중, 발표 시간, 꼭 강조할 메시지를 입력하세요.',
+  },
+};
 
 export default function TemplatesPage() {
+  const router = useRouter();
   const [selected, setSelected] = useState('tpl-report');
   const selectedTemplate = mockTemplates.find((template) => template.id === selected) ?? mockTemplates[0];
 
-  const scrollToWorkflow = () => {
-    window.setTimeout(() => {
-      document.getElementById('template-workflow-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 0);
+  const startTemplateWorkflow = (templateId: string) => {
+    const template = mockTemplates.find((item) => item.id === templateId) ?? mockTemplates[0];
+    const mapping = templateTaskMap[template.id] ?? templateTaskMap['tpl-report'];
+    savePendingTemplate({
+      templateId: template.id,
+      templateName: template.name,
+      taskId: mapping.taskId,
+      outputFormat: mapping.outputFormat,
+      instructionHint: mapping.instructionHint,
+    });
+    router.push('/app');
   };
 
   return (
@@ -34,7 +78,7 @@ export default function TemplatesPage() {
               template={template}
               selected={selected === template.id}
               onSelect={() => setSelected(template.id)}
-              onStart={scrollToWorkflow}
+              onStart={() => startTemplateWorkflow(template.id)}
             />
           ))}
         </div>

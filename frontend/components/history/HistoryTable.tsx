@@ -1,5 +1,6 @@
 import { Badge, statusTone } from '@/components/ui/Badge';
 import type { MockJob } from '@/data/types';
+import Link from 'next/link';
 
 export function HistoryTable({ jobs }: { jobs: MockJob[] }) {
   return (
@@ -14,9 +15,14 @@ export function HistoryTable({ jobs }: { jobs: MockJob[] }) {
           <p className="text-sm text-[#6B7280]">{job.type}</p>
           <Badge tone={statusTone(job.status)}>{job.status}</Badge>
           <p className="text-sm text-[#6B7280]">{job.duration}</p>
-          <button className="text-left text-sm font-bold text-[#5263E8]">결과 보기</button>
+          {'resultId' in job ? (
+            <Link href={`/app/documents/${job.resultId}`} className="text-left text-sm font-bold text-[#5263E8]">결과 보기</Link>
+          ) : (
+            <span className="text-left text-sm font-bold text-[#8A91A0]">샘플</span>
+          )}
         </div>
       ))}
+      {!jobs.length ? <p className="p-8 text-center text-sm text-[#7B8190]">아직 실행한 작업 이력이 없습니다.</p> : null}
     </div>
   );
 }

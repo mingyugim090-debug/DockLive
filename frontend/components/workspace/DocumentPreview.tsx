@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/Button';
+import Link from 'next/link';
 import type { GeneratedDocument, WorkflowTask } from '@/data/workspaceTasks';
 
 export function DocumentPreview({
@@ -6,13 +7,19 @@ export function DocumentPreview({
   task,
   onRegenerate,
   onReset,
-  onDownload,
+  onDownloadHwpx,
+  onDownloadMarkdown,
+  downloadError,
+  documentHref,
 }: {
   result: GeneratedDocument;
   task: WorkflowTask | null;
   onRegenerate: () => void;
   onReset: () => void;
-  onDownload: () => void;
+  onDownloadHwpx: () => void;
+  onDownloadMarkdown: () => void;
+  downloadError?: string | null;
+  documentHref: string;
 }) {
   return (
     <section className="rounded-[30px] border border-[var(--theme-border)] bg-white p-6 shadow-panel">
@@ -27,9 +34,18 @@ export function DocumentPreview({
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="secondary" onClick={onRegenerate}>다시 생성하기</Button>
           <Button type="button" variant="secondary" onClick={onReset}>새 문서 업로드</Button>
-          <Button type="button" onClick={onDownload}>HWPX 다운로드</Button>
+          <Link href={documentHref} className="inline-flex items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] px-5 py-2.5 text-sm font-semibold text-[var(--theme-text)] transition duration-200 hover:-translate-y-0.5 hover:bg-[var(--theme-surface-muted)]">
+            문서 목록에서 보기
+          </Link>
+          <Button type="button" variant="secondary" onClick={onDownloadMarkdown}>Markdown 다운로드</Button>
+          <Button type="button" onClick={onDownloadHwpx}>HWPX 다운로드</Button>
         </div>
       </div>
+      {downloadError ? (
+        <div className="mt-5 rounded-[18px] border border-amber-100 bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-800">
+          {downloadError}
+        </div>
+      ) : null}
 
       <div className="mt-6 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
         <div className="space-y-3">

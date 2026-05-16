@@ -1,13 +1,29 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Input, Select } from '@/components/ui/Input';
+import type { OutputFormat, ProcessingMode } from '@/data/workspaceTasks';
+import { loadWorkflowSettings, saveWorkflowSettings } from '@/lib/workflow/workflowStore';
 import { ThemeSettings } from './ThemeSettings';
 
 export function SettingsPanel() {
-  const [format, setFormat] = useState('HWPX');
-  const [summary, setSummary] = useState('보고서형 정리');
+  const [format, setFormat] = useState<OutputFormat>('HWPX');
+  const [summary, setSummary] = useState<ProcessingMode>('보고서형 정리');
+
+  useEffect(() => {
+    const settings = loadWorkflowSettings();
+    setFormat(settings.outputFormat);
+    setSummary(settings.processingMode);
+  }, []);
+
+  useEffect(() => {
+    saveWorkflowSettings({
+      outputFormat: format,
+      processingMode: summary,
+      themeMode: '시스템 기본',
+    });
+  }, [format, summary]);
 
   return (
     <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
@@ -25,7 +41,7 @@ export function SettingsPanel() {
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           <label className="text-sm font-semibold text-[var(--theme-muted)]">
             기본 출력 형식
-            <Select value={format} onChange={(event) => setFormat(event.target.value)} className="mt-2">
+            <Select value={format} onChange={(event) => setFormat(event.target.value as OutputFormat)} className="mt-2">
               {['PDF', 'DOCX', 'HWPX', 'Markdown'].map((item) => (
                 <option key={item}>{item}</option>
               ))}
@@ -33,7 +49,7 @@ export function SettingsPanel() {
           </label>
           <label className="text-sm font-semibold text-[var(--theme-muted)]">
             AI 처리 옵션
-            <Select value={summary} onChange={(event) => setSummary(event.target.value)} className="mt-2">
+            <Select value={summary} onChange={(event) => setSummary(event.target.value as ProcessingMode)} className="mt-2">
               {['간결한 요약', '자세한 요약', '보고서형 정리'].map((item) => (
                 <option key={item}>{item}</option>
               ))}

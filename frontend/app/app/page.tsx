@@ -30,7 +30,8 @@ export default function WorkspacePage() {
             <div className="mt-4 space-y-3 text-sm leading-6 text-[#6B7280]">
               <p><span className="font-bold text-[#273044]">파일:</span> {workflow.uploadedFile ? `${workflow.uploadedFile.name} (${formatFileSize(workflow.uploadedFile.size)})` : '아직 없음'}</p>
               <p><span className="font-bold text-[#273044]">작업:</span> {workflow.selectedTask?.name ?? '아직 선택 안 함'}</p>
-              <p><span className="font-bold text-[#273044]">출력:</span> {workflow.selectedTask?.expectedFormat ?? 'HWPX 문서'}</p>
+              <p><span className="font-bold text-[#273044]">템플릿:</span> {workflow.selectedTemplate?.templateName ?? '선택 안 함'}</p>
+              <p><span className="font-bold text-[#273044]">출력:</span> {workflow.outputFormat}</p>
             </div>
           </div>
         </div>
@@ -64,6 +65,8 @@ export default function WorkspacePage() {
           file={workflow.uploadedFile}
           task={workflow.selectedTask}
           instructions={workflow.instructions}
+          outputFormat={workflow.outputFormat}
+          templateName={workflow.selectedTemplate?.templateName}
           onBack={() => workflow.setCurrentStep('instructions')}
           onStart={workflow.startGeneration}
         />
@@ -79,7 +82,10 @@ export default function WorkspacePage() {
           task={workflow.selectedTask}
           onRegenerate={workflow.regenerate}
           onReset={workflow.resetWorkflow}
-          onDownload={workflow.downloadResult}
+          onDownloadHwpx={workflow.downloadHwpxResult}
+          onDownloadMarkdown={workflow.downloadMarkdown}
+          downloadError={workflow.downloadError}
+          documentHref={workflow.savedDocumentId ? `/app/documents/${workflow.savedDocumentId}` : '/app/documents'}
         />
       ) : null}
 

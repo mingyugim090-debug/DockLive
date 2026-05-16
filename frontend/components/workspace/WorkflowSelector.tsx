@@ -37,6 +37,9 @@ export function WorkflowSelector({
               <p className="mt-4 rounded-[16px] bg-white px-3 py-2 text-xs font-semibold leading-5 text-[#5263E8]">
                 예시: {task.exampleOutput}
               </p>
+              <p className="mt-2 text-xs font-semibold leading-5 text-[#8A91A0]">
+                추천 문서: {task.recommendedInput}
+              </p>
             </button>
           );
         })}

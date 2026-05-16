@@ -1,16 +1,20 @@
 import { Button } from '@/components/ui/Button';
-import { formatFileSize, getFileExtension, type WorkflowTask } from '@/data/workspaceTasks';
+import { formatFileSize, getFileExtension, type OutputFormat, type WorkflowTask } from '@/data/workspaceTasks';
 
 export function ReviewStep({
   file,
   task,
   instructions,
+  outputFormat,
+  templateName,
   onBack,
   onStart,
 }: {
   file: File | null;
   task: WorkflowTask | null;
   instructions: string;
+  outputFormat: OutputFormat;
+  templateName?: string | null;
   onBack: () => void;
   onStart: () => void;
 }) {
@@ -19,8 +23,9 @@ export function ReviewStep({
     ['파일 형식', file ? getFileExtension(file.name).toUpperCase() : '-'],
     ['파일 크기', file ? formatFileSize(file.size) : '-'],
     ['선택한 작업 유형', task?.name ?? '-'],
+    ['선택한 템플릿', templateName ?? '선택하지 않음'],
     ['추가 지시사항', instructions.trim() || '입력하지 않음'],
-    ['예상 출력 형식', task?.expectedFormat ?? 'HWPX 문서'],
+    ['출력 형식', outputFormat],
   ];
 
   return (

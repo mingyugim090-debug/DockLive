@@ -28,7 +28,7 @@ export function FileUpload({
       <div className="flex flex-col gap-2">
         <p className="text-sm font-bold text-[#5263E8]">Step 1</p>
         <h2 className="text-2xl font-bold text-[#273044]">문서 업로드</h2>
-        <p className="text-sm leading-6 text-[#6B7280]">PDF, DOCX, HWP, HWPX 파일을 올리고 문서 자동화 작업을 시작하세요.</p>
+        <p className="text-sm leading-6 text-[#6B7280]">PDF, DOCX, HWP, HWPX, TXT, MD 파일을 올리고 문서 자동화 작업을 시작하세요.</p>
       </div>
 
       <div
@@ -51,13 +51,13 @@ export function FileUpload({
         <input
           ref={inputRef}
           type="file"
-          accept=".pdf,.docx,.hwp,.hwpx"
+          accept=".pdf,.docx,.hwp,.hwpx,.txt,.md"
           className="hidden"
           onChange={(event) => handleFiles(event.target.files)}
         />
         <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-white text-2xl text-[#5263E8] shadow-sm">↑</div>
         <p className="mt-5 text-lg font-bold text-[#273044]">{file ? file.name : '문서를 끌어오거나 클릭해서 선택하세요'}</p>
-        <p className="mt-2 text-sm text-[#7B8190]">지원 형식: .pdf, .docx, .hwp, .hwpx</p>
+        <p className="mt-2 text-sm text-[#7B8190]">지원 형식: .pdf, .docx, .hwp, .hwpx, .txt, .md</p>
         <span className="mt-5 rounded-full border border-[#ECECF1] bg-white px-4 py-2 text-sm font-semibold text-[#6B7280]">파일 선택</span>
       </div>
 

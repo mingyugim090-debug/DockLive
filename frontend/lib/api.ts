@@ -234,6 +234,16 @@ export async function convertHwpToHwpx(file: File): Promise<HwpxConvertResponse>
   return res.json();
 }
 
+export async function exportMarkdownToHwpx(markdown: string, title: string): Promise<ExportResponse> {
+  const res = await fetch(`${API_URL}/api/hwpx/from-markdown`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ markdown, title }),
+  });
+  if (!res.ok) throw await readError(res, `Markdown HWPX export 실패: ${res.status}`);
+  return res.json();
+}
+
 export async function getDemo(): Promise<ApiResponse> {
   const res = await fetch(`${API_URL}/api/demo`);
   if (!res.ok) throw await readError(res, `Demo 실패: ${res.status}`);

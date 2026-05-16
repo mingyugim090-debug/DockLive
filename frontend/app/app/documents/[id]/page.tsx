@@ -1,12 +1,14 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Badge, statusTone } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Tabs } from '@/components/ui/Tabs';
 import { mockDocuments } from '@/data/mockDocuments';
+import type { MockDocument } from '@/data/types';
+import { findStoredDocument } from '@/lib/workflow/workflowStore';
 
 const tabs = ['요약', '핵심 키워드', '문서 구조', '생성 결과', '원본 미리보기'];
 
@@ -46,9 +48,15 @@ const actionCopy: Record<ActionKey, { label: string; title: string; body: string
 };
 
 export default function DocumentDetailPage({ params }: { params: { id: string } }) {
-  const document = useMemo(() => mockDocuments.find((item) => item.id === params.id), [params.id]);
+  const [storedDocument, setStoredDocument] = useState<MockDocument | null>(null);
+  const mockDocument = useMemo(() => mockDocuments.find((item) => item.id === params.id) ?? null, [params.id]);
+  const document = storedDocument ?? mockDocument;
   const [active, setActive] = useState('요약');
   const [result, setResult] = useState(actionCopy.summary);
+
+  useEffect(() => {
+    setStoredDocument(findStoredDocument(params.id));
+  }, [params.id]);
 
   if (!document) {
     return (

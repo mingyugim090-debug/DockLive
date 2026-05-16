@@ -6,18 +6,24 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 from core.errors import AnalysisError
 from models.schemas import HwpxComposeResponse, HwpxConvertResponse, HwpxStatusResponse
 from services import storage
 from services.document_ingestion import convert_hwp_to_hwpx
-from services.drafting_service import get_hwpx_toolchain_status
+from services.drafting_service import export_markdown_to_hwpx_with_validation, get_hwpx_toolchain_status, hwpx_bytes_to_base64
 from services.hwpx_compose_service import compose_hwpx
 
 router = APIRouter()
 
 EXPORT_ROOT = Path(__file__).resolve().parents[2] / "outputs" / "hwpx_exports"
 HWPX_MEDIA_TYPE = "application/vnd.hancom.hwpx"
+
+
+class MarkdownHwpxRequest(BaseModel):
+    title: str = "DockLive 결과 문서"
+    markdown: str
 
 
 @router.get("/hwpx/status", response_model=HwpxStatusResponse)
@@ -62,6 +68,30 @@ async def compose_hwpx_document(
     result["download_id"] = download_id
     result["download_url"] = f"/api/hwpx/download/{download_id}?filename={quote(result['filename'], safe='')}"
     return HwpxComposeResponse(**result)
+
+
+@router.post("/hwpx/from-markdown")
+async def create_hwpx_from_markdown(payload: MarkdownHwpxRequest):
+    """Create a validated HWPX file from Markdown content for frontend MVP exports."""
+    markdown = payload.markdown.strip()
+    if len(markdown) < 5:
+        raise AnalysisError("HWPX로 변환할 Markdown 내용이 비어 있습니다.")
+
+    filename, content, validation_summary = export_markdown_to_hwpx_with_validation(markdown, payload.title)
+    result = {
+        "success": True,
+        "filename": filename,
+        "content_type": HWPX_MEDIA_TYPE,
+        "content": hwpx_bytes_to_base64(content),
+        "encoding": "base64",
+        "warnings": validation_summary.get("warnings", []),
+        "validation_summary": validation_summary,
+    }
+    download_id = _persist_hwpx_export(result)
+    storage.save_export_file("standalone", filename, content, HWPX_MEDIA_TYPE, "markdown_to_hwpx")
+    result["download_id"] = download_id
+    result["download_url"] = f"/api/hwpx/download/{download_id}?filename={quote(filename, safe='')}"
+    return result
 
 
 @router.post("/hwpx/convert-hwp", response_model=HwpxConvertResponse)

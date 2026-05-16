@@ -1,19 +1,25 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DocumentTable } from '@/components/documents/DocumentTable';
 import { Input } from '@/components/ui/Input';
 import { Tabs } from '@/components/ui/Tabs';
-import { mockDocuments } from '@/data/mockDocuments';
+import type { MockDocument } from '@/data/types';
+import { loadAllDocuments } from '@/lib/workflow/workflowStore';
 
 const filters = ['전체', '분석 완료', '처리 중', '오류', '최근 업로드'];
 
 export default function DocumentsPage() {
   const [filter, setFilter] = useState('전체');
   const [query, setQuery] = useState('');
+  const [sourceDocuments, setSourceDocuments] = useState<MockDocument[]>([]);
+
+  useEffect(() => {
+    setSourceDocuments(loadAllDocuments());
+  }, []);
 
   const documents = useMemo(() => {
-    return mockDocuments.filter((doc) => {
+    return sourceDocuments.filter((doc) => {
       const matchesQuery = doc.name.toLowerCase().includes(query.toLowerCase()) || doc.category.includes(query);
       const matchesFilter =
         filter === '전체' ||
@@ -21,7 +27,7 @@ export default function DocumentsPage() {
         (filter === '최근 업로드' && ['2026.05.12', '2026.05.11', '2026.05.10'].includes(doc.createdAt));
       return matchesQuery && matchesFilter;
     });
-  }, [filter, query]);
+  }, [filter, query, sourceDocuments]);
 
   return (
     <div className="space-y-6">
