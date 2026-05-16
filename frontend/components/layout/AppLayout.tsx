@@ -12,13 +12,13 @@ const titles: Array<[string, string]> = [
   ['/app/templates', '템플릿'],
   ['/app/history', '작업 이력'],
   ['/app/settings', '설정'],
-  ['/app', '대시보드'],
+  ['/app', '문서 자동화 워크스페이스'],
 ];
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const title = useMemo(() => titles.find(([path]) => pathname === path || (path !== '/app' && pathname.startsWith(path)))?.[1] ?? '대시보드', [pathname]);
+  const title = useMemo(() => titles.find(([path]) => pathname === path || (path !== '/app' && pathname.startsWith(path)))?.[1] ?? '문서 자동화 워크스페이스', [pathname]);
 
   useEffect(() => {
     loadSavedTheme();

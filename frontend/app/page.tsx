@@ -18,9 +18,9 @@ export default function HomePage() {
           <nav className="hidden items-center gap-6 text-sm font-semibold text-[#6B7280] md:flex">
             <a href="#features" className="hover:text-[#273044]">기능</a>
             <a href="#workflow" className="hover:text-[#273044]">사용 흐름</a>
-            <a href="/app" className="hover:text-[#273044]">대시보드</a>
+            <a href="/app" className="hover:text-[#273044]">워크스페이스</a>
           </nav>
-          <ButtonLink href="/app" className="px-4 py-2">서비스 시작하기</ButtonLink>
+          <ButtonLink href="/app" className="px-4 py-2">문서 자동화 시작하기</ButtonLink>
         </div>
       </header>
 

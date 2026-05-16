@@ -1,53 +1,93 @@
-import Link from 'next/link';
-import { RecentDocuments } from '@/components/dashboard/RecentDocuments';
-import { RecentJobs } from '@/components/dashboard/RecentJobs';
-import { StatCard } from '@/components/dashboard/StatCard';
-import { ButtonLink } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
-import { mockDocuments } from '@/data/mockDocuments';
-import { mockJobs } from '@/data/mockJobs';
-import { mockTemplates } from '@/data/mockTemplates';
+'use client';
 
-export default function DashboardPage() {
-  const completed = mockDocuments.filter((doc) => doc.status === '분석 완료').length;
+import { Button } from '@/components/ui/Button';
+import { DocumentPreview } from '@/components/workspace/DocumentPreview';
+import { FileUpload } from '@/components/workspace/FileUpload';
+import { InstructionInput } from '@/components/workspace/InstructionInput';
+import { ProcessingStatus } from '@/components/workspace/ProcessingStatus';
+import { ReviewStep } from '@/components/workspace/ReviewStep';
+import { StepProgress } from '@/components/workspace/StepProgress';
+import { WorkflowSelector } from '@/components/workspace/WorkflowSelector';
+import { formatFileSize } from '@/data/workspaceTasks';
+import { useDocumentWorkflow } from '@/hooks/useDocumentWorkflow';
+
+export default function WorkspacePage() {
+  const workflow = useDocumentWorkflow();
 
   return (
-    <div className="space-y-8">
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="전체 문서 수" value={`${mockDocuments.length}`} hint="업로드된 문서" />
-        <StatCard label="이번 달 작업" value="24" hint="요약, 변환, 정리 포함" />
-        <StatCard label="생성 결과물" value={`${completed + 4}`} hint="최근 완료된 결과" />
-        <StatCard label="사용 가능 템플릿" value={`${mockTemplates.length}`} hint="문서 유형별 템플릿" />
-      </section>
-
-      <Card className="bg-[#EEF2FF]">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+    <div className="space-y-6">
+      <section className="overflow-hidden rounded-[34px] border border-[#D8DDFC] bg-[#EEF2FF] p-6 shadow-panel lg:p-8">
+        <div className="grid gap-6 lg:grid-cols-[1fr_340px] lg:items-center">
           <div>
-            <p className="text-sm font-bold text-[#5263E8]">빠른 실행</p>
-            <h2 className="mt-2 text-2xl font-bold text-[#273044]">문서를 업로드하고 원하는 작업을 선택하세요.</h2>
-            <p className="mt-2 text-sm leading-6 text-[#6B7280]">요약, 회의록 변환, 보고서 초안, 서식 정리까지 한 화면에서 시작할 수 있습니다.</p>
+            <p className="text-sm font-bold text-[#5263E8]">Document Automation Workspace</p>
+            <h2 className="mt-3 text-3xl font-bold leading-tight text-[#273044]">문서를 업로드하고 결과 파일까지 바로 만들어보세요.</h2>
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-[#6B7280]">
+              백엔드 연결 없이도 MVP 흐름을 끝까지 체험할 수 있습니다. 파일 업로드, 작업 선택, 추가 지시사항, 생성 진행, 결과 미리보기, 다운로드를 한 화면에서 진행합니다.
+            </p>
           </div>
-          <div className="flex flex-wrap gap-3">
-            <ButtonLink href="/app/upload">문서 업로드</ButtonLink>
-            <ButtonLink href="/app/templates" variant="secondary">템플릿 선택</ButtonLink>
-            <ButtonLink href={`/app/documents/${mockDocuments[0].id}`} variant="secondary">최근 문서 열기</ButtonLink>
+          <div className="rounded-[26px] border border-white/80 bg-white/80 p-5">
+            <p className="text-sm font-bold text-[#273044]">현재 작업</p>
+            <div className="mt-4 space-y-3 text-sm leading-6 text-[#6B7280]">
+              <p><span className="font-bold text-[#273044]">파일:</span> {workflow.uploadedFile ? `${workflow.uploadedFile.name} (${formatFileSize(workflow.uploadedFile.size)})` : '아직 없음'}</p>
+              <p><span className="font-bold text-[#273044]">작업:</span> {workflow.selectedTask?.name ?? '아직 선택 안 함'}</p>
+              <p><span className="font-bold text-[#273044]">출력:</span> {workflow.selectedTask?.expectedFormat ?? 'Markdown 문서'}</p>
+            </div>
           </div>
         </div>
-      </Card>
-
-      <section className="grid gap-6 xl:grid-cols-[1.35fr_0.85fr]">
-        <RecentDocuments documents={mockDocuments.slice(0, 4)} />
-        <RecentJobs jobs={mockJobs.slice(0, 4)} />
       </section>
 
-      <section className="grid gap-4 md:grid-cols-4">
-        {['문서 업로드', '새 자동화 작업 시작', '템플릿 선택', '최근 문서 열기'].map((item, index) => (
-          <Link key={item} href={index === 0 ? '/app/upload' : index === 2 ? '/app/templates' : '/app/documents'} className="rounded-[24px] border border-[#ECECF1] bg-white p-5 shadow-panel transition hover:-translate-y-1">
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#EEF2FF] text-[#5263E8]">{index + 1}</span>
-            <p className="mt-5 font-bold text-[#273044]">{item}</p>
-          </Link>
-        ))}
-      </section>
+      <StepProgress currentStep={workflow.currentStep} />
+
+      {workflow.currentStep === 'upload' ? (
+        <FileUpload file={workflow.uploadedFile} error={workflow.error} onFile={workflow.setFile} onRemove={workflow.removeFile} />
+      ) : null}
+
+      {workflow.currentStep === 'task' ? (
+        <div className="space-y-4">
+          <FileUpload file={workflow.uploadedFile} error={workflow.error} onFile={workflow.setFile} onRemove={workflow.removeFile} />
+          <WorkflowSelector selectedTaskId={workflow.selectedTaskId} onSelect={workflow.selectTask} />
+        </div>
+      ) : null}
+
+      {workflow.currentStep === 'instructions' ? (
+        <InstructionInput
+          task={workflow.selectedTask}
+          value={workflow.instructions}
+          onChange={workflow.setInstructions}
+          onBack={() => workflow.setCurrentStep('task')}
+          onNext={workflow.goToReview}
+        />
+      ) : null}
+
+      {workflow.currentStep === 'review' ? (
+        <ReviewStep
+          file={workflow.uploadedFile}
+          task={workflow.selectedTask}
+          instructions={workflow.instructions}
+          onBack={() => workflow.setCurrentStep('instructions')}
+          onStart={workflow.startGeneration}
+        />
+      ) : null}
+
+      {workflow.currentStep === 'processing' ? (
+        <ProcessingStatus progress={workflow.progress} steps={workflow.processingSteps} currentIndex={workflow.processingIndex} />
+      ) : null}
+
+      {workflow.currentStep === 'result' && workflow.result ? (
+        <DocumentPreview
+          result={workflow.result}
+          task={workflow.selectedTask}
+          onRegenerate={workflow.regenerate}
+          onReset={workflow.resetWorkflow}
+          onDownload={workflow.downloadResult}
+        />
+      ) : null}
+
+      {workflow.currentStep !== 'upload' && workflow.currentStep !== 'processing' && workflow.currentStep !== 'result' ? (
+        <div className="flex justify-start">
+          <Button type="button" variant="ghost" onClick={workflow.resetWorkflow}>처음부터 다시 시작</Button>
+        </div>
+      ) : null}
     </div>
   );
 }

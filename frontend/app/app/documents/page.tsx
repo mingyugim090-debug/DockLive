@@ -29,7 +29,9 @@ export default function DocumentsPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h2 className="text-2xl font-bold text-[#273044]">업로드한 문서</h2>
-            <p className="mt-2 text-sm text-[#7B8190]">문서 상태를 확인하고 필요한 작업 결과를 다시 열어보세요.</p>
+            <p className="mt-2 text-sm leading-6 text-[#7B8190]">
+              문서를 열면 분석 요약, 생성 결과, 후속 작업 패널로 이동합니다. 문서명이나 열기 버튼을 눌러 이어서 작업하세요.
+            </p>
           </div>
           <div className="w-full max-w-md">
             <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="문서 이름 또는 유형 검색" />

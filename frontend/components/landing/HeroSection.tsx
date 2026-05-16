@@ -16,7 +16,7 @@ export function HeroSection() {
             보고서, 기획서, 회의록, 공문서, 과제 문서를 업로드하면 AI가 분석하고 정리하여 바로 활용 가능한 결과물로 변환합니다.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <ButtonLink href="/app">서비스 시작하기</ButtonLink>
+            <ButtonLink href="/app">문서 자동화 시작하기</ButtonLink>
             <ButtonLink href="#features" variant="secondary">기능 살펴보기</ButtonLink>
           </div>
         </div>

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -51,17 +52,17 @@ export function TemplateWorkflowPanel({
   const canRun = Boolean(selectedDocument && request.trim().length >= 8);
 
   return (
-    <Card className="sticky top-24">
+    <Card id="template-workflow-panel" className="scroll-mt-24 xl:sticky xl:top-24 xl:h-fit">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-sm font-bold text-[#5263E8]">Template workflow</p>
-          <h2 className="mt-2 text-xl font-bold text-[#273044]">{template.name} 활용하기</h2>
+          <h2 className="mt-2 text-xl font-bold text-[#273044]">{template.name} 사용하기</h2>
           <p className="mt-2 text-sm leading-6 text-[#7B8190]">{template.useCase}</p>
         </div>
       </div>
 
       <div className="mt-6 rounded-[22px] bg-[#FBFBFD] p-4">
-        <p className="text-xs font-bold text-[#8A91A0]">생성될 결과물</p>
+        <p className="text-xs font-bold text-[#8A91A0]">이 워크플로우의 목적</p>
         <p className="mt-2 text-sm leading-6 text-[#273044]">{template.sampleResult}</p>
       </div>
 
@@ -83,7 +84,7 @@ export function TemplateWorkflowPanel({
             className="mt-2 min-h-[110px]"
             value={request}
             onChange={(event) => setRequest(event.target.value)}
-            placeholder="예: 과제 주제는 생성형 AI 활용 사례이고, 3쪽 분량의 제출 초안과 참고 자료 요약이 필요합니다."
+            placeholder="예: 공고 평가 기준에 맞춰 사업계획서 초안을 만들고, 팀 강점과 실행 계획은 확인 필요 항목으로 표시해 주세요."
           />
         </label>
 
@@ -96,7 +97,7 @@ export function TemplateWorkflowPanel({
             setRunning(true);
           }}
         >
-          선택한 템플릿으로 문서 만들기
+          {running ? '문서 생성 중' : '선택한 템플릿으로 문서 만들기'}
         </Button>
       </div>
 
@@ -121,10 +122,24 @@ export function TemplateWorkflowPanel({
 
       {completed ? (
         <div className="mt-6 rounded-[22px] border border-emerald-100 bg-emerald-50 p-4">
-          <p className="font-bold text-emerald-800">mock 결과가 생성되었습니다.</p>
+          <p className="font-bold text-emerald-800">생성 결과가 준비되었습니다.</p>
           <p className="mt-2 text-sm leading-6 text-emerald-700">
-            {selectedDocument?.name}을 기준으로 {template.name} 구조를 적용했습니다. 실제 연결 단계에서는 이 결과가 문서 상세의 자동 생성 결과와 다운로드 파일로 저장됩니다.
+            {selectedDocument?.name}에 {template.name} 구조를 적용했습니다. 실제 제품에서는 이 결과가 문서 상세의 초안 검토, 확인 필요 주장, HWPX export 단계로 저장됩니다.
           </p>
+          <div className="mt-4 rounded-[18px] bg-white p-4">
+            <p className="text-sm font-bold text-[#273044]">생성된 초안 구성</p>
+            <ul className="mt-2 space-y-2 text-sm leading-6 text-[#6B7280]">
+              {template.workflow.map((step) => <li key={step}>- {step}</li>)}
+            </ul>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link href={`/app/documents/${selectedDocument?.id ?? 'doc-001'}`} className="inline-flex items-center justify-center rounded-full bg-[#5263E8] px-5 py-2.5 text-sm font-semibold text-white">
+              문서 상세에서 이어가기
+            </Link>
+            <Link href="/app/upload" className="inline-flex items-center justify-center rounded-full border border-emerald-200 bg-white px-5 py-2.5 text-sm font-semibold text-emerald-800">
+              새 공고문 업로드
+            </Link>
+          </div>
         </div>
       ) : null}
     </Card>

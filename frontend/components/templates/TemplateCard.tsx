@@ -8,15 +8,22 @@ export function TemplateCard({
   template,
   selected,
   onSelect,
+  onStart,
 }: {
   template: MockTemplate;
   selected: boolean;
   onSelect: () => void;
+  onStart: () => void;
 }) {
+  const handleStart = () => {
+    onSelect();
+    onStart();
+  };
+
   return (
     <Card hover className={selected ? 'border-[#B8C0FF] bg-[#F8F7FF]' : ''}>
       <div className="flex items-start justify-between gap-4">
-        <div className="flex h-12 w-12 items-center justify-center rounded-[20px] bg-[#EEF2FF] text-[#5263E8]">◇</div>
+        <div className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-[#EEF2FF] text-[#5263E8]">◇</div>
         {selected ? <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-[#5263E8]">선택됨</span> : null}
       </div>
       <h3 className="mt-5 text-lg font-bold text-[#273044]">{template.name}</h3>
@@ -37,8 +44,8 @@ export function TemplateCard({
           </div>
         ))}
       </div>
-      <Button className="mt-5 w-full" variant={selected ? 'secondary' : 'primary'} onClick={onSelect}>
-        워크플로우 시작
+      <Button className="mt-5 w-full" variant={selected ? 'secondary' : 'primary'} onClick={handleStart}>
+        {selected ? '설정 패널로 이동' : '선택하고 설정하기'}
       </Button>
     </Card>
   );
