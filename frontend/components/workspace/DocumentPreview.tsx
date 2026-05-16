@@ -21,13 +21,13 @@ export function DocumentPreview({
           <p className="text-sm font-bold text-[#5263E8]">Step 6 · 결과 미리보기</p>
           <h2 className="mt-1 text-2xl font-bold text-[#273044]">{result.title}</h2>
           <p className="mt-2 text-sm leading-6 text-[#6B7280]">
-            {task ? `${task.name} 결과가 생성되었습니다. 미리보기를 확인한 뒤 Markdown 파일로 다운로드할 수 있습니다.` : '생성 결과가 준비되었습니다.'}
+            {task ? `${task.name} 결과가 생성되었습니다. 미리보기를 확인한 뒤 HWPX 파일로 다운로드할 수 있습니다.` : '생성 결과가 준비되었습니다.'}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="secondary" onClick={onRegenerate}>다시 생성하기</Button>
           <Button type="button" variant="secondary" onClick={onReset}>새 문서 업로드</Button>
-          <Button type="button" onClick={onDownload}>다운로드</Button>
+          <Button type="button" onClick={onDownload}>HWPX 다운로드</Button>
         </div>
       </div>
 

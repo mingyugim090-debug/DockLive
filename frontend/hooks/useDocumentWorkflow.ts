@@ -10,6 +10,7 @@ import {
   type GeneratedDocument,
   type WorkflowTaskId,
 } from '@/data/workspaceTasks';
+import { createMockHwpxBlob } from '@/lib/mockHwpx';
 
 export type WorkflowStep = 'upload' | 'task' | 'instructions' | 'review' | 'processing' | 'result';
 
@@ -130,20 +131,17 @@ export function useDocumentWorkflow() {
       String(date.getMonth() + 1).padStart(2, '0'),
       String(date.getDate()).padStart(2, '0'),
     ].join('');
-    const content = [
-      result.markdown,
-      '',
-      '---',
-      `작업 유형: ${selectedTask.name}`,
-      uploadedFile ? `원본 파일: ${uploadedFile.name}` : '',
-      instructions.trim() ? `추가 지시사항: ${instructions.trim()}` : '추가 지시사항: 없음',
-    ].filter(Boolean).join('\n');
 
-    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+    const blob = createMockHwpxBlob({
+      result,
+      task: selectedTask,
+      sourceFileName: uploadedFile?.name ?? 'uploaded-document',
+      instructions,
+    });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `docklive-result-${yyyymmdd}.md`;
+    link.download = `docklive-result-${yyyymmdd}.hwpx`;
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
   };

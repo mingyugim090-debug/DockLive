@@ -20,7 +20,7 @@ export function ReviewStep({
     ['파일 크기', file ? formatFileSize(file.size) : '-'],
     ['선택한 작업 유형', task?.name ?? '-'],
     ['추가 지시사항', instructions.trim() || '입력하지 않음'],
-    ['예상 출력 형식', task?.expectedFormat ?? 'Markdown 문서'],
+    ['예상 출력 형식', task?.expectedFormat ?? 'HWPX 문서'],
   ];
 
   return (

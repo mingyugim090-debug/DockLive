@@ -25,7 +25,7 @@ export const workflowTasks: WorkflowTask[] = [
     name: '문서 요약',
     description: '긴 문서에서 핵심 내용, 주요 근거, 결론을 빠르게 정리합니다.',
     exampleOutput: '1페이지 요약본, 핵심 bullet point, 결론',
-    expectedFormat: 'Markdown 요약 문서',
+    expectedFormat: 'HWPX 요약 문서',
     instructionHint: '요약 분량, 강조할 항목, 표 포함 여부를 자유롭게 적어주세요.',
   },
   {
@@ -33,7 +33,7 @@ export const workflowTasks: WorkflowTask[] = [
     name: '회의록 정리',
     description: '회의 메모나 녹취 정리본을 안건, 결정사항, TODO 중심으로 정리합니다.',
     exampleOutput: '참석자, 안건, 결정사항, 담당자별 TODO',
-    expectedFormat: 'Markdown 회의록',
+    expectedFormat: 'HWPX 회의록',
     instructionHint: '참석자, 회의 목적, TODO 정리 방식이 있으면 적어주세요.',
   },
   {
@@ -41,7 +41,7 @@ export const workflowTasks: WorkflowTask[] = [
     name: '보고서 초안 생성',
     description: '자료 문서를 보고서 구조로 재구성하고 초안 흐름을 잡습니다.',
     exampleOutput: '제목, 개요, 본문 구조, 결론과 제안',
-    expectedFormat: 'Markdown 보고서 초안',
+    expectedFormat: 'HWPX 보고서 초안',
     instructionHint: '보고 대상, 원하는 톤, 분량, 포함할 결론 방향을 적어주세요.',
   },
   {
@@ -49,7 +49,7 @@ export const workflowTasks: WorkflowTask[] = [
     name: '문서 형식 정리',
     description: '흩어진 문서 내용을 읽기 좋은 제목, 문단, 표 구조로 정돈합니다.',
     exampleOutput: '정리 전/후 구조, 표준 문단 구성, 누락 항목',
-    expectedFormat: 'Markdown 정리본',
+    expectedFormat: 'HWPX 정리본',
     instructionHint: '기관 제출용, 학업용, 업무용 등 맞추고 싶은 형식을 적어주세요.',
   },
   {
@@ -57,7 +57,7 @@ export const workflowTasks: WorkflowTask[] = [
     name: '맞춤형 지시사항 입력',
     description: '사용자가 작성한 지시사항을 중심으로 원하는 결과물을 생성합니다.',
     exampleOutput: '사용자 지시를 반영한 맞춤 문서',
-    expectedFormat: 'Markdown 맞춤 결과물',
+    expectedFormat: 'HWPX 맞춤 결과물',
     instructionHint: '예: 핵심 내용 중심으로 1페이지 요약해줘. 표 형태로 정리하고, 마지막에 결론을 추가해줘.',
   },
 ];
@@ -110,7 +110,7 @@ export function createMockGeneratedDocument(taskId: WorkflowTaskId, file: File, 
         '',
         '## 결정사항',
         '- 사용자는 한 화면에서 문서 생성 흐름을 끝까지 테스트할 수 있어야 함',
-        '- 다운로드 파일은 MVP 기준 Markdown 형식으로 제공',
+        '- 다운로드 파일은 MVP 기준 HWPX 형식으로 제공',
         '',
         '## TODO',
         '- 담당자별 후속 작업과 마감일 입력 필요',

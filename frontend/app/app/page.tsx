@@ -30,7 +30,7 @@ export default function WorkspacePage() {
             <div className="mt-4 space-y-3 text-sm leading-6 text-[#6B7280]">
               <p><span className="font-bold text-[#273044]">파일:</span> {workflow.uploadedFile ? `${workflow.uploadedFile.name} (${formatFileSize(workflow.uploadedFile.size)})` : '아직 없음'}</p>
               <p><span className="font-bold text-[#273044]">작업:</span> {workflow.selectedTask?.name ?? '아직 선택 안 함'}</p>
-              <p><span className="font-bold text-[#273044]">출력:</span> {workflow.selectedTask?.expectedFormat ?? 'Markdown 문서'}</p>
+              <p><span className="font-bold text-[#273044]">출력:</span> {workflow.selectedTask?.expectedFormat ?? 'HWPX 문서'}</p>
             </div>
           </div>
         </div>
