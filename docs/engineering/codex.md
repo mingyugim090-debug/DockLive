@@ -9,7 +9,7 @@
 3. 사용자 입력 수집과 섹션별 초안 작성
 4. 최종 문서 확인/수정/export
 5. HWPX export 검증
-6. Supabase 기반 persistence
+6. InsForge 기반 persistence
 
 커뮤니티 기능은 v2입니다. 사용자가 명시하지 않는 한 피드, 팀 모집, 추천, 프로필 구현으로 넘어가지 않습니다.
 

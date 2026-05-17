@@ -8,7 +8,7 @@
 | Backend | FastAPI, Python 3.11+ |
 | AI | OpenAI API via environment-selected models |
 | PDF | PyMuPDF |
-| Persistence Target | Supabase |
+| Persistence Target | InsForge |
 | Temporary Cache | Redis/in-memory fallback |
 | Export | HTML fallback, HWPX target |
 
@@ -56,9 +56,9 @@ HWPX_SKILL_DIR=C:\Users\alseh\.codex\skills\hwpx
 
 Codex may need to be restarted after installing new skills so the skill appears in the active skill list automatically.
 
-## Supabase Pattern
+## InsForge Pattern
 
-Supabase is the production target for:
+InsForge is the production target for:
 
 - Users and auth
 - Uploaded source documents
@@ -66,7 +66,7 @@ Supabase is the production target for:
 - Workflow sessions
 - Final documents and generated exports
 
-Do not hard-code Supabase keys. Use `.env.example` as the contract.
+Do not hard-code InsForge keys. Use `.env.example` as the contract.
 
 ## Frontend Pattern
 

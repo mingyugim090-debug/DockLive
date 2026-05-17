@@ -1,15 +1,16 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const items = [
-  { href: '/app', label: 'Workspace', icon: '⌂' },
-  { href: '/app/upload', label: 'Upload', icon: '↑' },
-  { href: '/app/documents', label: 'Documents', icon: '□' },
-  { href: '/app/templates', label: 'Templates', icon: '◇' },
-  { href: '/app/history', label: 'History', icon: '◷' },
-  { href: '/app/settings', label: 'Settings', icon: '⚙' },
+  { href: '/app', label: 'Workspace', icon: 'W' },
+  { href: '/app/upload', label: 'Upload', icon: 'U' },
+  { href: '/app/documents', label: 'Documents', icon: 'D' },
+  { href: '/app/templates', label: 'Templates', icon: 'T' },
+  { href: '/app/history', label: 'History', icon: 'H' },
+  { href: '/app/settings', label: 'Settings', icon: 'S' },
 ];
 
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -31,7 +32,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         ].join(' ')}
       >
         <Link href="/" className="flex items-center gap-3 rounded-[22px] px-3 py-2" onClick={onClose}>
-          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--theme-primary-soft)] text-lg font-bold text-[var(--theme-primary)]">D</span>
+          <Image src="/docklive-mark.svg" alt="" width={42} height={42} className="h-10 w-10" />
           <span>
             <span className="block text-base font-bold text-[var(--theme-text)]">DockLive</span>
             <span className="text-xs text-[var(--theme-muted)]">Document Agent</span>
@@ -48,10 +49,14 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                 onClick={onClose}
                 className={[
                   'flex items-center gap-3 rounded-full px-4 py-3 text-sm font-semibold transition',
-                  active ? 'bg-[var(--theme-primary-soft)] text-[var(--theme-primary)]' : 'text-[var(--theme-muted)] hover:bg-[var(--theme-surface-muted)] hover:text-[var(--theme-text)]',
+                  active
+                    ? 'bg-[var(--theme-primary-soft)] text-[var(--theme-primary)]'
+                    : 'text-[var(--theme-muted)] hover:bg-[var(--theme-surface-muted)] hover:text-[var(--theme-text)]',
                 ].join(' ')}
               >
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--theme-surface)] text-sm">{item.icon}</span>
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--theme-surface)] text-xs font-bold">
+                  {item.icon}
+                </span>
                 {item.label}
               </Link>
             );
@@ -59,8 +64,10 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         </nav>
 
         <div className="mt-auto rounded-[24px] border border-[var(--theme-border)] bg-[var(--theme-bg-soft)] p-4">
-          <p className="text-sm font-semibold text-[var(--theme-text)]">이번 달 사용량</p>
-          <p className="mt-1 text-xs leading-5 text-[var(--theme-muted)]">문서 24개 중 15개를 처리했습니다.</p>
+          <p className="text-sm font-semibold text-[var(--theme-text)]">Agent MVP</p>
+          <p className="mt-1 text-xs leading-5 text-[var(--theme-muted)]">
+            공고 분석, 입력 수집, 초안 작성, HWPX export를 한곳에서 진행합니다.
+          </p>
           <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--theme-primary-soft)]">
             <div className="h-full w-[62%] rounded-full gradient-primary" />
           </div>

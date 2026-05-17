@@ -10,7 +10,7 @@ flowchart LR
   FE --> API["FastAPI Backend"]
   API --> Parser["PDF / URL / Text / HWPX Parser"]
   API --> AI["AI Provider: analysis, match, draft"]
-  API --> Store["Supabase Postgres / Storage"]
+  API --> Store["InsForge Postgres / Storage"]
   API --> Cache["Redis or file cache fallback"]
   API --> HWPX["HWPX ZIP/XML Toolchain"]
 ```
@@ -64,13 +64,13 @@ flowchart LR
 
 ## Storage Strategy
 
-Production 목표는 Supabase입니다.
+Production 목표는 InsForge입니다.
 
-- Supabase Postgres: analysis, workflow, export metadata
-- Supabase Storage: uploaded source documents and generated exports
+- InsForge Postgres: analysis, workflow, export metadata
+- InsForge Storage: uploaded source documents and generated exports
 - Redis/file cache: 개발 및 장애 fallback
 
-Production에서 in-memory/file cache만으로 workflow를 유지하면 서버 재시작 시 사용자 작업이 사라질 수 있습니다. 배포 환경에서는 Supabase 연결과 Storage bucket을 먼저 확인해야 합니다.
+Production에서 in-memory/file cache만으로 workflow를 유지하면 서버 재시작 시 사용자 작업이 사라질 수 있습니다. 배포 환경에서는 InsForge 연결과 Storage bucket을 먼저 확인해야 합니다.
 
 ## HWPX Export Strategy
 

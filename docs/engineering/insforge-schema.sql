@@ -1,8 +1,23 @@
--- LiveDock Agent MVP persistence schema.
--- Run this in the Supabase SQL editor, then create a private Storage bucket
--- named by SUPABASE_STORAGE_BUCKET, default: livedock-documents.
+-- LiveDock Agent MVP persistence schema for InsForge.
+-- Import this with:
+--   npx @insforge/cli db import docs/engineering/insforge-schema.sql
+-- Then create a private Storage bucket named by INSFORGE_STORAGE_BUCKET,
+-- default: livedock-documents.
 
 create extension if not exists pgcrypto;
+
+create table if not exists public.users (
+  id text primary key,
+  email text unique,
+  name text,
+  avatar_url text,
+  provider text,
+  role text not null default 'user',
+  metadata jsonb not null default '{}'::jsonb,
+  last_sign_in_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
 
 create table if not exists public.analysis_results (
   id text primary key,
@@ -60,6 +75,9 @@ alter table public.exports
 create index if not exists analysis_results_updated_at_idx
   on public.analysis_results(updated_at desc);
 
+create index if not exists users_email_idx
+  on public.users(email);
+
 create index if not exists workflow_sessions_analysis_id_idx
   on public.workflow_sessions(analysis_id);
 
@@ -72,10 +90,5 @@ create index if not exists documents_analysis_id_idx
 create index if not exists exports_workflow_id_idx
   on public.exports(workflow_id);
 
-alter table public.analysis_results enable row level security;
-alter table public.workflow_sessions enable row level security;
-alter table public.documents enable row level security;
-alter table public.exports enable row level security;
-
--- The backend uses SUPABASE_SERVICE_ROLE_KEY and bypasses RLS.
--- Add user-scoped policies only when Auth is introduced after the Agent MVP.
+-- The backend uses INSFORGE_API_KEY server-side. Add user-scoped policies only
+-- when Auth is introduced after the Agent MVP.

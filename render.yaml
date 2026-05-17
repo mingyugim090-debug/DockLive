@@ -15,15 +15,15 @@ services:
         value: "20"
       - key: MOCK_MODE
         value: "false"
-      - key: SUPABASE_URL
+      - key: INSFORGE_BASE_URL
         sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
+      - key: INSFORGE_API_KEY
         sync: false
-      - key: SUPABASE_ANON_KEY
+      - key: INSFORGE_ANON_KEY
         sync: false
-      - key: SUPABASE_STORAGE_BUCKET
+      - key: INSFORGE_STORAGE_BUCKET
         value: "livedock-documents"
-      - key: SUPABASE_TIMEOUT_SECONDS
+      - key: INSFORGE_TIMEOUT_SECONDS
         value: "10"
       - key: WORKFLOW_TTL_SECONDS
         value: "604800"

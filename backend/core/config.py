@@ -17,11 +17,11 @@ if BaseSettings:
         MAX_PDF_SIZE_MB: int = 20
         MOCK_MODE: bool = False
         REDIS_URL: str = ""
-        SUPABASE_URL: str = ""
-        SUPABASE_SERVICE_ROLE_KEY: str = ""
-        SUPABASE_ANON_KEY: str = ""
-        SUPABASE_STORAGE_BUCKET: str = "livedock-documents"
-        SUPABASE_TIMEOUT_SECONDS: int = 10
+        INSFORGE_BASE_URL: str = ""
+        INSFORGE_API_KEY: str = ""
+        INSFORGE_ANON_KEY: str = ""
+        INSFORGE_STORAGE_BUCKET: str = "livedock-documents"
+        INSFORGE_TIMEOUT_SECONDS: int = 10
         OPENAI_ANALYSIS_MODEL: str = "gpt-4o-mini"
         OPENAI_DRAFT_MODEL: str = "gpt-4o-mini"
         GEMMA_ANALYSIS_MODEL: str = "gemma-4-26b-a4b-it"
@@ -34,6 +34,7 @@ if BaseSettings:
 
         class Config:
             env_file = ".env"
+            extra = "ignore"
 
 else:
 
@@ -46,11 +47,11 @@ else:
         MAX_PDF_SIZE_MB: int = int(os.getenv("MAX_PDF_SIZE_MB", "20"))
         MOCK_MODE: bool = os.getenv("MOCK_MODE", "false").lower() == "true"
         REDIS_URL: str = os.getenv("REDIS_URL", "")
-        SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
-        SUPABASE_SERVICE_ROLE_KEY: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
-        SUPABASE_ANON_KEY: str = os.getenv("SUPABASE_ANON_KEY", "")
-        SUPABASE_STORAGE_BUCKET: str = os.getenv("SUPABASE_STORAGE_BUCKET", "livedock-documents")
-        SUPABASE_TIMEOUT_SECONDS: int = int(os.getenv("SUPABASE_TIMEOUT_SECONDS", "10"))
+        INSFORGE_BASE_URL: str = os.getenv("INSFORGE_BASE_URL", "")
+        INSFORGE_API_KEY: str = os.getenv("INSFORGE_API_KEY", "")
+        INSFORGE_ANON_KEY: str = os.getenv("INSFORGE_ANON_KEY", "")
+        INSFORGE_STORAGE_BUCKET: str = os.getenv("INSFORGE_STORAGE_BUCKET", "livedock-documents")
+        INSFORGE_TIMEOUT_SECONDS: int = int(os.getenv("INSFORGE_TIMEOUT_SECONDS", "10"))
         OPENAI_ANALYSIS_MODEL: str = os.getenv("OPENAI_ANALYSIS_MODEL", "gpt-4o-mini")
         OPENAI_DRAFT_MODEL: str = os.getenv("OPENAI_DRAFT_MODEL", "gpt-4o-mini")
         GEMMA_ANALYSIS_MODEL: str = os.getenv("GEMMA_ANALYSIS_MODEL", "gemma-4-26b-a4b-it")

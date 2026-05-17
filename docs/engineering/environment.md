@@ -34,20 +34,23 @@ copy .env.example .env.local
 npm run dev
 ```
 
-## Supabase
+## InsForge
 
 Create a project and prepare:
 
-- Project URL
+- Backend base URL
 - anon key
-- service role key
+- API key for server-side backend access
 - storage bucket: `livedock-documents`
 
-Run `docs/engineering/supabase-schema.sql` in the Supabase SQL editor before
-enabling production persistence. The backend writes with the service role key,
-so row-level security policies can remain locked down until Auth is added.
+Run the InsForge schema import before enabling production persistence:
 
-Production persistence should use Supabase. Redis/in-memory is only a temporary fallback.
+```bash
+npx @insforge/cli db import docs/engineering/insforge-schema.sql
+npx @insforge/cli storage create-bucket livedock-documents --private
+```
+
+Production persistence should use InsForge. Redis/in-memory is only a temporary fallback.
 
 ## HWPX Skill
 
@@ -95,6 +98,6 @@ Vercel hosts the frontend. Set:
 
 ```env
 NEXT_PUBLIC_API_URL=https://your-backend.example.com
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+NEXT_PUBLIC_INSFORGE_BASE_URL=https://your-app.region.insforge.app
+NEXT_PUBLIC_INSFORGE_ANON_KEY=your_insforge_anon_key
 ```

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, type ReactNode } from 'react';
+import Image from 'next/image';
 import { motion, type Variants } from 'framer-motion';
 import { useDropzone } from 'react-dropzone';
 import type {
@@ -153,13 +154,9 @@ export function AppHeader({
             </button>
           ) : null}
 
-          <a href="/" className="flex shrink-0 items-center gap-2.5" aria-label="LiveDock 홈">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500/80 to-violet-500/60 shadow-[0_0_20px_rgba(86,112,255,0.3)]">
-              <svg className="h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m6.75 12H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-              </svg>
-            </span>
-            <span className="hidden text-sm font-semibold tracking-tight text-text sm:inline">LiveDock</span>
+          <a href="/" className="flex shrink-0 items-center gap-2.5" aria-label="DockLive 홈">
+            <Image src="/docklive-mark.svg" alt="" width={28} height={28} className="h-7 w-7" />
+            <span className="hidden text-sm font-semibold tracking-tight text-text sm:inline">DockLive</span>
           </a>
 
           {title ? (
@@ -493,7 +490,7 @@ export function ProfileContextCard({ company, onChange }: { company: CompanyProf
   return (
     <SectionCard title="지원자/팀 정보" eyebrow="Optional" desc="입력하면 적합도 판단과 초안이 더 구체적으로 좋아집니다." className="lg:sticky lg:top-24">
       <div className="grid gap-3 sm:grid-cols-2">
-        <TextInput label="팀/회사명" value={company.name} onChange={(value) => update('name', value)} placeholder="예: LiveDock Team" />
+        <TextInput label="팀/회사명" value={company.name} onChange={(value) => update('name', value)} placeholder="예: DockLive Team" />
         <TextInput label="분야" value={company.industry} onChange={(value) => update('industry', value)} placeholder="예: AI 문서 자동화" />
         <TextInput label="단계" value={company.stage} onChange={(value) => update('stage', value)} placeholder="예: 예비창업, 초기창업" />
         <TextInput label="지역" value={company.region} onChange={(value) => update('region', value)} placeholder="예: 서울" />

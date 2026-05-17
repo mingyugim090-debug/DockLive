@@ -48,12 +48,12 @@ Status labels:
 | P3-05 | Add form cloning path for uploaded HWPX templates | Done |
 | P3-06 | Add HWP to HWPX conversion path | Done |
 
-## Phase 4 - Supabase
+## Phase 4 - InsForge
 
 | ID | Task | Status |
 | --- | --- | --- |
-| P4-01 | Define Supabase tables for workflows and documents | Done |
-| P4-02 | Persist analysis/workflow sessions in Supabase | Done |
+| P4-01 | Define InsForge tables for workflows and documents | Done |
+| P4-02 | Persist analysis/workflow sessions in InsForge | Done |
 | P4-03 | Store uploaded PDFs and generated exports | Done |
 | P4-04 | Add auth only after Agent MVP workflow is stable | Planned |
 

@@ -1,11 +1,12 @@
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useState } from 'react';
 
 const NAV_LINKS = [
   { label: '사용 방법', href: '#how-it-works' },
   { label: '기능', href: '#features' },
-  { label: '사용 사례', href: '#use-cases' },
+  { label: '활용 사례', href: '#use-cases' },
   { label: 'FAQ', href: '#faq' },
 ];
 
@@ -23,7 +24,6 @@ export function LandingHeader({ onScrollToWorkspace }: LandingHeaderProps) {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  // Close mobile menu on resize to desktop
   useEffect(() => {
     const onResize = () => {
       if (window.innerWidth >= 768) setMobileOpen(false);
@@ -35,23 +35,14 @@ export function LandingHeader({ onScrollToWorkspace }: LandingHeaderProps) {
   return (
     <header
       className={`fixed top-0 z-50 w-full transition-all duration-300 ${
-        scrolled
-          ? 'border-b border-slate-200/80 bg-white/96 shadow-sm backdrop-blur-md'
-          : 'bg-transparent'
+        scrolled ? 'border-b border-slate-200/80 bg-white/96 shadow-sm backdrop-blur-md' : 'bg-transparent'
       }`}
     >
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        {/* Logo */}
-        <a href="/" className="flex items-center gap-2.5" aria-label="LiveDock 홈">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-violet-600 shadow-sm">
-            <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m6.75 12H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-            </svg>
-          </div>
-          <span className="text-[17px] font-bold tracking-tight text-slate-900">LiveDock</span>
+        <a href="/" className="flex items-center gap-2.5" aria-label="DockLive">
+          <Image src="/docklive-logo.svg" alt="DockLive" width={150} height={44} priority className="h-9 w-auto" />
         </a>
 
-        {/* Desktop Nav */}
         <nav className="hidden items-center gap-0.5 md:flex" aria-label="주요 섹션">
           {NAV_LINKS.map(({ label, href }) => (
             <a
@@ -64,7 +55,6 @@ export function LandingHeader({ onScrollToWorkspace }: LandingHeaderProps) {
           ))}
         </nav>
 
-        {/* Right actions */}
         <div className="flex items-center gap-2">
           <button
             onClick={onScrollToWorkspace}
@@ -76,7 +66,6 @@ export function LandingHeader({ onScrollToWorkspace }: LandingHeaderProps) {
             </svg>
           </button>
 
-          {/* Mobile burger */}
           <button
             onClick={() => setMobileOpen((v) => !v)}
             className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 transition-colors hover:bg-slate-100 md:hidden"
@@ -96,7 +85,6 @@ export function LandingHeader({ onScrollToWorkspace }: LandingHeaderProps) {
         </div>
       </div>
 
-      {/* Mobile menu */}
       {mobileOpen && (
         <div className="border-t border-slate-100 bg-white/98 px-4 pb-4 pt-2 md:hidden">
           <nav className="space-y-0.5" aria-label="모바일 메뉴">

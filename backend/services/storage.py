@@ -14,13 +14,13 @@ _in_memory_cache: dict[str, dict] = {}
 _file_cache_dir = Path(__file__).resolve().parents[1] / ".livedock_storage"
 _redis_client = None
 _redis_initialized = False
-_supabase_initialized = False
-_supabase_available = False
+_insforge_initialized = False
+_insforge_available = False
 
-SUPABASE_ANALYSIS_TABLE = "analysis_results"
-SUPABASE_WORKFLOW_TABLE = "workflow_sessions"
-SUPABASE_DOCUMENT_TABLE = "documents"
-SUPABASE_EXPORT_TABLE = "exports"
+INSFORGE_ANALYSIS_TABLE = "analysis_results"
+INSFORGE_WORKFLOW_TABLE = "workflow_sessions"
+INSFORGE_DOCUMENT_TABLE = "documents"
+INSFORGE_EXPORT_TABLE = "exports"
 
 
 def _file_path_for_key(key: str) -> Path:
@@ -86,158 +86,186 @@ def _get_redis():
     return _redis_client
 
 
-def _supabase_configured() -> bool:
-    return bool(settings.SUPABASE_URL and settings.SUPABASE_SERVICE_ROLE_KEY)
+def _insforge_configured() -> bool:
+    return bool(settings.INSFORGE_BASE_URL and settings.INSFORGE_API_KEY)
 
 
-def _supabase_headers(content_type: str = "application/json") -> dict[str, str]:
-    return {
-        "apikey": settings.SUPABASE_SERVICE_ROLE_KEY,
-        "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
-        "Content-Type": content_type,
+def _insforge_headers(content_type: str | None = "application/json") -> dict[str, str]:
+    headers = {
+        "Authorization": f"Bearer {settings.INSFORGE_API_KEY}",
     }
+    if content_type:
+        headers["Content-Type"] = content_type
+    return headers
 
 
-def _supabase_timeout() -> float:
-    return float(getattr(settings, "SUPABASE_TIMEOUT_SECONDS", 10))
+def _insforge_timeout() -> float:
+    return float(getattr(settings, "INSFORGE_TIMEOUT_SECONDS", 10))
 
 
-def _check_supabase() -> bool:
-    global _supabase_initialized, _supabase_available
-    if _supabase_initialized:
-        return _supabase_available
-    _supabase_initialized = True
-    if not _supabase_configured():
-        _supabase_available = False
+def _insforge_url(path: str) -> str:
+    return f"{settings.INSFORGE_BASE_URL.rstrip('/')}{path}"
+
+
+def _encode_object_key(path: str) -> str:
+    return quote(path, safe="")
+
+
+def _check_insforge() -> bool:
+    global _insforge_initialized, _insforge_available
+    if _insforge_initialized:
+        return _insforge_available
+    _insforge_initialized = True
+    if not _insforge_configured():
+        _insforge_available = False
         return False
     try:
         import httpx
 
-        url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/{SUPABASE_ANALYSIS_TABLE}?select=id&limit=1"
-        response = httpx.get(url, headers=_supabase_headers(), timeout=_supabase_timeout())
+        url = _insforge_url(f"/api/database/records/{INSFORGE_ANALYSIS_TABLE}?select=id&limit=1")
+        response = httpx.get(url, headers=_insforge_headers(), timeout=_insforge_timeout())
         response.raise_for_status()
-        _supabase_available = True
-        logger.info("Supabase persistence connected")
+        _insforge_available = True
+        logger.info("InsForge persistence connected")
     except ImportError:
-        logger.info("httpx package is not installed; Supabase persistence disabled")
-        _supabase_available = False
+        logger.info("httpx package is not installed; InsForge persistence disabled")
+        _insforge_available = False
     except Exception as e:
-        logger.warning("Supabase persistence unavailable; using fallback cache: %s", e)
-        _supabase_available = False
-    return _supabase_available
+        logger.warning("InsForge persistence unavailable; using fallback cache: %s", e)
+        _insforge_available = False
+    return _insforge_available
 
 
-def _supabase_upsert(table: str, payload: dict[str, Any]) -> bool:
-    if not _check_supabase():
+def _insforge_upsert(table: str, payload: dict[str, Any]) -> bool:
+    if not _check_insforge():
         return False
     try:
         import httpx
 
-        url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/{table}?on_conflict=id"
-        headers = _supabase_headers()
+        url = _insforge_url(f"/api/database/records/{table}")
+        headers = _insforge_headers()
         headers["Prefer"] = "resolution=merge-duplicates,return=minimal"
-        response = httpx.post(url, headers=headers, json=payload, timeout=_supabase_timeout())
+        response = httpx.post(url, headers=headers, json=[payload], timeout=_insforge_timeout())
         response.raise_for_status()
         return True
     except Exception as e:
-        logger.warning("Supabase upsert failed for table=%s id=%s: %s", table, payload.get("id"), e)
+        logger.warning("InsForge upsert failed for table=%s id=%s: %s", table, payload.get("id"), e)
         return False
 
 
-def _supabase_insert(table: str, payload: dict[str, Any]) -> bool:
-    if not _check_supabase():
+def _insforge_insert(table: str, payload: dict[str, Any]) -> bool:
+    if not _check_insforge():
         return False
     try:
         import httpx
 
-        url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/{table}"
-        headers = _supabase_headers()
+        url = _insforge_url(f"/api/database/records/{table}")
+        headers = _insforge_headers()
         headers["Prefer"] = "return=minimal"
-        response = httpx.post(url, headers=headers, json=payload, timeout=_supabase_timeout())
+        response = httpx.post(url, headers=headers, json=[payload], timeout=_insforge_timeout())
         response.raise_for_status()
         return True
     except Exception as e:
-        logger.warning("Supabase insert failed for table=%s: %s", table, e)
+        logger.warning("InsForge insert failed for table=%s: %s", table, e)
         return False
 
 
-def _supabase_load_payload(table: str, item_id: str) -> Optional[dict]:
-    if not _check_supabase():
+def _insforge_load_payload(table: str, item_id: str) -> Optional[dict]:
+    if not _check_insforge():
         return None
     try:
         import httpx
 
         encoded_id = quote(item_id, safe="")
-        url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/{table}?id=eq.{encoded_id}&select=payload&limit=1"
-        response = httpx.get(url, headers=_supabase_headers(), timeout=_supabase_timeout())
+        url = _insforge_url(f"/api/database/records/{table}?id=eq.{encoded_id}&select=payload&limit=1")
+        response = httpx.get(url, headers=_insforge_headers(), timeout=_insforge_timeout())
         response.raise_for_status()
         rows = response.json()
         if rows:
             payload = rows[0].get("payload")
             return payload if isinstance(payload, dict) else None
     except Exception as e:
-        logger.warning("Supabase load failed for table=%s id=%s: %s", table, item_id, e)
+        logger.warning("InsForge load failed for table=%s id=%s: %s", table, item_id, e)
     return None
 
 
-def _supabase_select(url: str) -> list[dict[str, Any]]:
-    if not _check_supabase():
+def _insforge_select(path: str) -> list[dict[str, Any]]:
+    if not _check_insforge():
         return []
     try:
         import httpx
 
-        response = httpx.get(url, headers=_supabase_headers(), timeout=_supabase_timeout())
+        response = httpx.get(_insforge_url(path), headers=_insforge_headers(), timeout=_insforge_timeout())
         response.raise_for_status()
         rows = response.json()
         return rows if isinstance(rows, list) else []
     except Exception as e:
-        logger.warning("Supabase select failed for url=%s: %s", url, e)
+        logger.warning("InsForge select failed for path=%s: %s", path, e)
         return []
 
 
-def _supabase_upload(path: str, content: bytes, content_type: str) -> Optional[str]:
-    if not _check_supabase():
+def _insforge_upload(path: str, content: bytes, content_type: str) -> Optional[str]:
+    if not _check_insforge():
         return None
     try:
         import httpx
 
-        bucket = settings.SUPABASE_STORAGE_BUCKET
-        encoded_path = "/".join(quote(part, safe="") for part in path.split("/"))
-        url = f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/{bucket}/{encoded_path}"
-        headers = _supabase_headers(content_type)
-        headers["x-upsert"] = "true"
-        response = httpx.put(url, headers=headers, content=content, timeout=_supabase_timeout())
+        bucket = settings.INSFORGE_STORAGE_BUCKET
+        encoded_path = _encode_object_key(path)
+        url = _insforge_url(f"/api/storage/buckets/{bucket}/objects/{encoded_path}")
+        files = {"file": (Path(path).name, content, content_type)}
+        response = httpx.put(
+            url,
+            headers=_insforge_headers(content_type=None),
+            files=files,
+            timeout=_insforge_timeout(),
+        )
         response.raise_for_status()
         return path
     except Exception as e:
-        logger.warning("Supabase storage upload failed for path=%s: %s", path, e)
+        logger.warning("InsForge storage upload failed for path=%s: %s", path, e)
         return None
 
 
-def _supabase_download(bucket: str, path: str) -> Optional[bytes]:
-    if not _check_supabase():
+def _insforge_download(bucket: str, path: str) -> Optional[bytes]:
+    if not _check_insforge():
         return None
     try:
         import httpx
 
-        encoded_path = "/".join(quote(part, safe="") for part in path.split("/"))
-        url = f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/{bucket}/{encoded_path}"
-        response = httpx.get(url, headers=_supabase_headers(), timeout=_supabase_timeout())
+        encoded_path = _encode_object_key(path)
+        strategy_url = _insforge_url(f"/api/storage/buckets/{bucket}/objects/{encoded_path}/download-strategy")
+        strategy_response = httpx.post(
+            strategy_url,
+            headers=_insforge_headers(),
+            json={"expiresIn": 300},
+            timeout=_insforge_timeout(),
+        )
+        strategy_response.raise_for_status()
+        strategy = strategy_response.json()
+        download_url = strategy.get("url")
+        if not isinstance(download_url, str) or not download_url:
+            return None
+        headers = None
+        if download_url.startswith("/"):
+            download_url = _insforge_url(download_url)
+            headers = _insforge_headers(content_type=None)
+        response = httpx.get(download_url, headers=headers, timeout=_insforge_timeout())
         response.raise_for_status()
         return response.content
     except Exception as e:
-        logger.warning("Supabase storage download failed for path=%s: %s", path, e)
+        logger.warning("InsForge storage download failed for path=%s: %s", path, e)
         return None
 
 
-def _save_supabase_json(key: str, data: dict) -> bool:
+def _save_insforge_json(key: str, data: dict) -> bool:
     prefix, _, item_id = key.partition(":")
     if not item_id:
         return False
     now = _utc_now()
     if prefix == "result":
-        return _supabase_upsert(
-            SUPABASE_ANALYSIS_TABLE,
+        return _insforge_upsert(
+            INSFORGE_ANALYSIS_TABLE,
             {
                 "id": item_id,
                 "source_type": data.get("source_type"),
@@ -251,8 +279,8 @@ def _save_supabase_json(key: str, data: dict) -> bool:
         )
     if prefix == "workflow":
         analysis = data.get("analysis") if isinstance(data.get("analysis"), dict) else {}
-        return _supabase_upsert(
-            SUPABASE_WORKFLOW_TABLE,
+        return _insforge_upsert(
+            INSFORGE_WORKFLOW_TABLE,
             {
                 "id": item_id,
                 "analysis_id": analysis.get("id") or item_id,
@@ -264,21 +292,21 @@ def _save_supabase_json(key: str, data: dict) -> bool:
     return False
 
 
-def _load_supabase_json(key: str) -> Optional[dict]:
+def _load_insforge_json(key: str) -> Optional[dict]:
     prefix, _, item_id = key.partition(":")
     if not item_id:
         return None
     if prefix == "result":
-        return _supabase_load_payload(SUPABASE_ANALYSIS_TABLE, item_id)
+        return _insforge_load_payload(INSFORGE_ANALYSIS_TABLE, item_id)
     if prefix == "workflow":
-        return _supabase_load_payload(SUPABASE_WORKFLOW_TABLE, item_id)
+        return _insforge_load_payload(INSFORGE_WORKFLOW_TABLE, item_id)
     return None
 
 
 def _save_json(key: str, data: dict, ttl_seconds: int) -> None:
-    saved_to_supabase = _save_supabase_json(key, data)
-    if saved_to_supabase:
-        logger.info("Supabase saved: %s", key)
+    saved_to_insforge = _save_insforge_json(key, data)
+    if saved_to_insforge:
+        logger.info("InsForge saved: %s", key)
 
     r = _get_redis()
     if r is not None:
@@ -295,10 +323,10 @@ def _save_json(key: str, data: dict, ttl_seconds: int) -> None:
 
 
 def _load_json(key: str) -> Optional[dict]:
-    supabase_data = _load_supabase_json(key)
-    if supabase_data:
-        logger.info("Supabase loaded: %s", key)
-        return supabase_data
+    insforge_data = _load_insforge_json(key)
+    if insforge_data:
+        logger.info("InsForge loaded: %s", key)
+        return insforge_data
 
     r = _get_redis()
     if r is not None:
@@ -343,13 +371,13 @@ def save_source_file(
     content: bytes,
     content_type: str = "application/octet-stream",
 ) -> Optional[dict]:
-    """Persist an uploaded source file in Supabase Storage when configured."""
+    """Persist an uploaded source file in InsForge Storage when configured."""
     if not content:
         return None
     document_id = str(uuid4())
     safe_filename = _safe_storage_name(filename)
     storage_path = f"sources/{analysis_id}/{safe_filename}"
-    uploaded_path = _supabase_upload(storage_path, content, content_type)
+    uploaded_path = _insforge_upload(storage_path, content, content_type)
     if not uploaded_path:
         return None
 
@@ -360,11 +388,11 @@ def save_source_file(
         "filename": filename or safe_filename,
         "content_type": content_type,
         "size_bytes": len(content),
-        "storage_bucket": settings.SUPABASE_STORAGE_BUCKET,
+        "storage_bucket": settings.INSFORGE_STORAGE_BUCKET,
         "storage_path": uploaded_path,
         "created_at": _utc_now(),
     }
-    if _supabase_insert(SUPABASE_DOCUMENT_TABLE, row):
+    if _insforge_insert(INSFORGE_DOCUMENT_TABLE, row):
         return row
     return None
 
@@ -379,7 +407,7 @@ def save_export_file(
     error_message: str | None = None,
     validation_summary: dict[str, Any] | None = None,
 ) -> Optional[dict]:
-    """Persist a generated export in Supabase Storage when configured."""
+    """Persist a generated export in InsForge Storage when configured."""
     if not content:
         return None
     export_id = str(uuid4())
@@ -392,7 +420,7 @@ def save_export_file(
         "content_type": content_type,
         "export_type": export_type,
         "size_bytes": len(content),
-        "storage_bucket": settings.SUPABASE_STORAGE_BUCKET,
+        "storage_bucket": settings.INSFORGE_STORAGE_BUCKET,
         "storage_path": storage_path,
         "status": status,
         "error_message": error_message,
@@ -400,13 +428,13 @@ def save_export_file(
         "created_at": _utc_now(),
     }
 
-    uploaded_path = _supabase_upload(storage_path, content, content_type)
+    uploaded_path = _insforge_upload(storage_path, content, content_type)
     if uploaded_path:
         stored_row = {**row, "storage_path": uploaded_path}
-        if _supabase_insert(SUPABASE_EXPORT_TABLE, stored_row):
+        if _insforge_insert(INSFORGE_EXPORT_TABLE, stored_row):
             return row
         legacy_row = _legacy_export_row(stored_row)
-        if _supabase_insert(SUPABASE_EXPORT_TABLE, legacy_row):
+        if _insforge_insert(INSFORGE_EXPORT_TABLE, legacy_row):
             return row
 
     fallback_key = f"export:{workflow_id}:{export_id}"
@@ -427,25 +455,25 @@ def save_export_file(
 
 
 def list_export_files(workflow_id: str) -> list[dict[str, Any]]:
-    """List generated exports for a workflow from Supabase metadata."""
+    """List generated exports for a workflow from InsForge metadata."""
     if not workflow_id:
         return []
     encoded_workflow_id = quote(workflow_id, safe="")
     columns = "id,workflow_id,filename,content_type,export_type,size_bytes,created_at,status,error_message,validation_summary"
-    url = (
-        f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/{SUPABASE_EXPORT_TABLE}"
+    path = (
+        f"/api/database/records/{INSFORGE_EXPORT_TABLE}"
         f"?workflow_id=eq.{encoded_workflow_id}&select={columns}&order=created_at.desc"
     )
-    rows = _supabase_select(url)
+    rows = _insforge_select(path)
     if rows:
         return [_normalize_export_row(row) for row in rows]
 
     legacy_columns = "id,workflow_id,filename,content_type,export_type,size_bytes,created_at"
-    legacy_url = (
-        f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/{SUPABASE_EXPORT_TABLE}"
+    legacy_path = (
+        f"/api/database/records/{INSFORGE_EXPORT_TABLE}"
         f"?workflow_id=eq.{encoded_workflow_id}&select={legacy_columns}&order=created_at.desc"
     )
-    legacy_rows = _supabase_select(legacy_url)
+    legacy_rows = _insforge_select(legacy_path)
     if legacy_rows:
         return [_normalize_export_row(row) for row in legacy_rows]
 
@@ -455,32 +483,32 @@ def list_export_files(workflow_id: str) -> list[dict[str, Any]]:
 
 
 def load_export_file(workflow_id: str, export_id: str) -> Optional[dict[str, Any]]:
-    """Load a generated export and its bytes from Supabase Storage."""
+    """Load a generated export and its bytes from InsForge Storage."""
     if not workflow_id or not export_id:
         return None
     encoded_workflow_id = quote(workflow_id, safe="")
     encoded_export_id = quote(export_id, safe="")
     columns = "id,workflow_id,filename,content_type,export_type,size_bytes,created_at,storage_bucket,storage_path,status,error_message,validation_summary"
-    url = (
-        f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/{SUPABASE_EXPORT_TABLE}"
+    path = (
+        f"/api/database/records/{INSFORGE_EXPORT_TABLE}"
         f"?id=eq.{encoded_export_id}&workflow_id=eq.{encoded_workflow_id}&select={columns}&limit=1"
     )
-    rows = _supabase_select(url)
+    rows = _insforge_select(path)
     if rows:
         row = rows[0]
-        content = _supabase_download(row.get("storage_bucket") or settings.SUPABASE_STORAGE_BUCKET, row.get("storage_path", ""))
+        content = _insforge_download(row.get("storage_bucket") or settings.INSFORGE_STORAGE_BUCKET, row.get("storage_path", ""))
         if content is not None:
             return {**_normalize_export_row(row), "content": content}
 
     legacy_columns = "id,workflow_id,filename,content_type,export_type,size_bytes,created_at,storage_bucket,storage_path"
-    legacy_url = (
-        f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/{SUPABASE_EXPORT_TABLE}"
+    legacy_path = (
+        f"/api/database/records/{INSFORGE_EXPORT_TABLE}"
         f"?id=eq.{encoded_export_id}&workflow_id=eq.{encoded_workflow_id}&select={legacy_columns}&limit=1"
     )
-    legacy_rows = _supabase_select(legacy_url)
+    legacy_rows = _insforge_select(legacy_path)
     if legacy_rows:
         row = legacy_rows[0]
-        content = _supabase_download(row.get("storage_bucket") or settings.SUPABASE_STORAGE_BUCKET, row.get("storage_path", ""))
+        content = _insforge_download(row.get("storage_bucket") or settings.INSFORGE_STORAGE_BUCKET, row.get("storage_path", ""))
         if content is not None:
             return {**_normalize_export_row(row), "content": content}
 

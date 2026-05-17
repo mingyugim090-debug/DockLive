@@ -1,0 +1,13 @@
+<svg width="620" height="180" viewBox="0 0 620 180" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">DockLive logo</title>
+  <desc id="desc">A document icon with layered pages and the DockLive wordmark.</desc>
+  <path d="M54 30H112L152 70V150H54C41.8 150 32 140.2 32 128V52C32 39.8 41.8 30 54 30Z" fill="white" stroke="#8657C8" stroke-width="8" stroke-linejoin="round"/>
+  <path d="M112 30V70H152" stroke="#8657C8" stroke-width="8" stroke-linejoin="round"/>
+  <path d="M70 74H96" stroke="#CDB7EC" stroke-width="7" stroke-linecap="round"/>
+  <path d="M70 96H116" stroke="#CDB7EC" stroke-width="7" stroke-linecap="round"/>
+  <path d="M56 124C84 118 109 103 132 86L174 102C143 121 113 135 75 140L56 124Z" fill="#7D4DC3"/>
+  <path d="M74 142C112 137 143 124 176 104" stroke="#A783DD" stroke-width="8" stroke-linecap="round"/>
+  <path d="M84 158C122 153 148 139 176 119" stroke="#C5A9EA" stroke-width="8" stroke-linecap="round"/>
+  <text x="218" y="121" fill="#27272A" font-family="Comic Sans MS, Comic Sans, Trebuchet MS, Arial, sans-serif" font-size="72" font-weight="700" letter-spacing="0">Dock</text>
+  <text x="384" y="121" fill="#7E57C2" font-family="Comic Sans MS, Comic Sans, Trebuchet MS, Arial, sans-serif" font-size="72" font-weight="700" letter-spacing="0">Live</text>
+</svg>

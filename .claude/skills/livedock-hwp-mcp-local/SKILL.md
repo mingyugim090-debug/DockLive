@@ -18,7 +18,7 @@ Use only after user confirmation when:
 ## Do Not Use For
 
 - Production FastAPI export.
-- Render/Vercel/Supabase deployment paths.
+- Render/Vercel/InsForge deployment paths.
 - CI checks.
 - User-facing backend dependencies.
 

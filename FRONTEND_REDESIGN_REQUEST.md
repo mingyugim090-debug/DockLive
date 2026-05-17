@@ -165,7 +165,7 @@ Codex가 직접 외부 웹사이트를 탐색할 수 없다면, 아래 서비스
 - Linear
 - Stripe Dashboard
 - Vercel Dashboard
-- Supabase Dashboard
+- InsForge Dashboard
 - Retool
 - Airtable
 - Slack Admin

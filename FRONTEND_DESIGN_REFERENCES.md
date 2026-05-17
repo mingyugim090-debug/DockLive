@@ -80,7 +80,7 @@ Codex는 아래 레퍼런스를 그대로 복제하지 말고, 다음 요소만 
 6. Notion
 7. Linear
 8. Vercel
-9. Supabase
+9. InsForge
 10. Stripe Dashboard
 ```
 
@@ -341,7 +341,7 @@ Sidebar
 
 ---
 
-## 6.3 Supabase
+## 6.3 InsForge
 
 ### 참고 목적
 
@@ -358,7 +358,7 @@ Sidebar
 
 ### 현재 서비스에 적용할 수 있는 방향
 
-문서 자동화 Agent가 개발자/API 기능을 포함한다면 Supabase식 대시보드 구조가 적합하다.
+문서 자동화 Agent가 개발자/API 기능을 포함한다면 InsForge식 대시보드 구조가 적합하다.
 
 ---
 
@@ -501,7 +501,7 @@ Hero Section
 
 - Linear
 - Vercel Dashboard
-- Supabase Dashboard
+- InsForge Dashboard
 - Stripe Dashboard
 - Notion
 
@@ -684,7 +684,7 @@ Result Preview
 - Vercel
   - Use for landing page, high-quality product presentation, card layout, and dashboard style.
 
-- Supabase
+- InsForge
   - Use for developer-friendly dashboard, settings pages, table UI, and project-based navigation.
 
 - Stripe Dashboard
@@ -723,7 +723,7 @@ ForgeDocs + Spell + Documentero + Notion + ChatGPT
 ### 10.2 B2B SaaS 중심
 
 ```text
-PandaDoc + Linear + Stripe Dashboard + Vercel + Supabase
+PandaDoc + Linear + Stripe Dashboard + Vercel + InsForge
 ```
 
 적합한 경우:
@@ -771,12 +771,11 @@ ForgeDocs + Notion + ChatGPT + Claude + Cursor
 
 ```text
 Landing Page: PandaDoc + Vercel + Raycast
-Dashboard: Linear + Vercel + Supabase
+Dashboard: Linear + Vercel + InsForge
 Workspace: ForgeDocs + Spell + Notion + ChatGPT
 Template Page: PandaDoc + Documentero + Canva
 Result Page: Spell + Notion + ForgeDocs
-Settings / History: Stripe Dashboard + Supabase
+Settings / History: Stripe Dashboard + InsForge
 ```
 
 ---
-

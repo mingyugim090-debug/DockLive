@@ -41,7 +41,7 @@ export function ProblemSection() {
             지치셨나요?
           </h2>
           <p className="mt-4 text-base leading-7 text-slate-600">
-            LiveDock이 반복 작업을 대신 처리합니다.
+            DockLive가 반복 작업을 대신 처리합니다.
           </p>
         </div>
 

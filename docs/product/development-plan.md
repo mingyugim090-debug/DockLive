@@ -21,10 +21,10 @@
 - Show section start/done/error state.
 - Keep user confirmation before finalization.
 
-## Milestone 4 - Supabase Persistence
+## Milestone 4 - InsForge Persistence
 
 - Create tables for users, documents, analyses, workflows, draft sections, exports.
-- Store uploaded source files in Supabase Storage.
+- Store uploaded source files in InsForge Storage.
 - Store generated export metadata.
 - Keep Redis/in-memory only as fallback.
 
