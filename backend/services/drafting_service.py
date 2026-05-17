@@ -888,8 +888,12 @@ def _reference_hwpx_template_path() -> Path:
             )
 
     repo_root = Path(__file__).resolve().parents[2]
+    skill_dir = _hwpx_skill_dir()
     candidates.extend(
         [
+            skill_dir / "templates" / "reference.hwpx",
+            skill_dir / "templates" / "base.hwpx",
+            skill_dir / "templates" / "withus-sample-filled.hwpx",
             repo_root / "docs" / "examples" / "withus-hwpx" / "withus-sample-filled.hwpx",
             repo_root / "outputs" / "hwpx_download_smoke.hwpx",
         ]
