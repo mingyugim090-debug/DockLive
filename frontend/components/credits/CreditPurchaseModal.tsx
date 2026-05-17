@@ -78,7 +78,7 @@ export function CreditPurchaseModal({
         if (cancelled) return;
 
         const tossPayments = await loadTossPayments(clientKey);
-        const widgets = tossPayments.widgets({ customerKey: 'ANONYMOUS' });
+        const widgets = tossPayments.widgets({ customerKey: userId || `guest_${Date.now()}` });
 
         await widgets.setAmount({ currency: 'KRW', value: selectedPkg.amount });
         await widgets.renderPaymentMethods({
@@ -94,7 +94,8 @@ export function CreditPurchaseModal({
           widgetsRef.current = widgets as unknown as TossWidgets;
           setWidgetsReady(true);
         }
-      } catch {
+      } catch (err) {
+        console.error('[TossWidgets] load error:', err);
         if (!cancelled) setError('결제 수단을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
       }
     })();
@@ -194,14 +195,16 @@ export function CreditPurchaseModal({
                 </button>
               </div>
 
-              {/* Toss widget mount points */}
-              {!widgetsReady && (
-                <div className="flex h-40 items-center justify-center text-sm text-[#9CA3AF]">
-                  결제 수단 불러오는 중...
-                </div>
-              )}
-              <div id="toss-payment-method" className={widgetsReady ? '' : 'hidden'} />
-              <div id="toss-agreement" className={widgetsReady ? 'mt-3' : 'hidden'} />
+              {/* Toss widget mount points — must NOT be display:none when Toss renders into them */}
+              <div className="relative">
+                {!widgetsReady && !error && (
+                  <div className="absolute inset-0 flex min-h-[160px] items-center justify-center text-sm text-[#9CA3AF]">
+                    결제 수단 불러오는 중...
+                  </div>
+                )}
+                <div id="toss-payment-method" className={widgetsReady ? '' : 'invisible min-h-[160px]'} />
+                <div id="toss-agreement" className={widgetsReady ? 'mt-3' : 'invisible'} />
+              </div>
 
               {error && (
                 <p className="mt-3 rounded-[10px] bg-red-50 px-4 py-2 text-sm text-red-600">
