@@ -32,6 +32,7 @@ from services.drafting_service import (
     stream_draft_events,
     update_inputs,
 )
+from services.pdf_export_service import PDF_MEDIA_TYPE, convert_hwpx_bytes_to_pdf
 
 router = APIRouter()
 
@@ -236,6 +237,50 @@ async def export_hwpx(workflow_id: str):
         if isinstance(exc, AnalysisError):
             raise
         raise AnalysisError(f"HWPX export 실패: {exc}")
+
+
+@router.get("/{workflow_id}/export/pdf", response_model=ExportResponse)
+async def export_pdf(workflow_id: str):
+    workflow = _ensure_finalized(_load_workflow_or_404(workflow_id))
+    assert workflow.final_document is not None
+    try:
+        hwpx_filename, hwpx_content, hwpx_validation = export_markdown_to_hwpx_with_validation(
+            workflow.final_document.content_markdown,
+            workflow.final_document.title,
+        )
+        filename, pdf_content, pdf_summary = convert_hwpx_bytes_to_pdf(
+            hwpx_content,
+            workflow.final_document.title,
+            source_filename=hwpx_filename,
+        )
+        validation_summary = {
+            "hwpx_validation": hwpx_validation,
+            "pdf_validation": pdf_summary,
+        }
+        storage.save_export_file(
+            workflow.id,
+            filename,
+            pdf_content,
+            PDF_MEDIA_TYPE,
+            "pdf",
+            status="success",
+            validation_summary=validation_summary,
+        )
+        return ExportResponse(
+            success=True,
+            filename=filename,
+            content_type=PDF_MEDIA_TYPE,
+            content=hwpx_bytes_to_base64(pdf_content),
+            encoding="base64",
+            warnings=hwpx_validation.get("warnings", []) + pdf_summary.get("pdf_warnings", []),
+            validation_summary=validation_summary,
+        )
+    except Exception as exc:
+        status = _export_failure_status(exc)
+        _save_failed_export(workflow.id, "pdf", status, str(exc))
+        if isinstance(exc, AnalysisError):
+            raise
+        raise AnalysisError(f"PDF export 실패: {exc}")
 
 
 @router.post("/{workflow_id}/export/hwpx/placeholder-map", response_model=HwpxPlaceholderMapResponse)

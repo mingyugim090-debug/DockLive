@@ -9,6 +9,7 @@ import {
   downloadWorkflowExport,
   exportWorkflowHtml,
   exportWorkflowHwpx,
+  exportWorkflowPdf,
   exportWorkflowHwpxTemplate,
   finalizeWorkflow,
   generateDraft,
@@ -160,6 +161,9 @@ export default function ResultPage() {
           scripts_found: {},
           validation_available: false,
           template_clone_available: false,
+          pdf_export_available: false,
+          pdf_converter: null,
+          pdf_warnings: ['PDF export status unavailable.'],
           warnings: ['HWPX toolchain 상태를 확인하지 못했습니다. HTML export를 fallback으로 사용할 수 있습니다.'],
         }),
       );
@@ -384,6 +388,23 @@ export default function ResultPage() {
     } catch (err) {
       await refreshExports(workflow.id);
       setError(err instanceof Error ? `${err.message} HTML export를 fallback으로 사용할 수 있습니다.` : 'HWPX export에 실패했습니다.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleExportPdf = async () => {
+    if (!workflow) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const exported = await exportWorkflowPdf(workflow.id);
+      downloadExport(exported.filename, exported.content_type, exported.content, exported.encoding);
+      await refreshExports(workflow.id);
+      setNotice('PDF export를 생성했습니다.');
+    } catch (err) {
+      await refreshExports(workflow.id);
+      setError(err instanceof Error ? err.message : 'PDF export에 실패했습니다.');
     } finally {
       setBusy(false);
     }
@@ -701,6 +722,7 @@ export default function ResultPage() {
                   onTemplateMap={setTemplateMap}
                   onExportHtml={handleExportHtml}
                   onExportHwpx={handleExportHwpx}
+                  onExportPdf={handleExportPdf}
                   onExportTemplate={handleExportTemplate}
                   onCreatePlaceholderMap={handleCreatePlaceholderMap}
                   onCopyMarkdown={handleCopyMarkdown}

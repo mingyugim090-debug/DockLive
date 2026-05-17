@@ -17,6 +17,7 @@ export interface WorkflowTask {
 export interface GeneratedDocument {
   title: string;
   markdown: string;
+  workflowId?: string;
   previewBlocks: Array<{
     title: string;
     body: string;

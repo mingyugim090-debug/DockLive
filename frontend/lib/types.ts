@@ -219,6 +219,9 @@ export interface HwpxStatusResponse {
   scripts_found: Record<string, boolean>;
   validation_available: boolean;
   template_clone_available: boolean;
+  pdf_export_available: boolean;
+  pdf_converter?: string | null;
+  pdf_warnings: string[];
   warnings: string[];
 }
 

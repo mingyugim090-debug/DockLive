@@ -832,6 +832,7 @@ export function ExportPanel({
   onTemplateMap,
   onExportHtml,
   onExportHwpx,
+  onExportPdf,
   onExportTemplate,
   onCreatePlaceholderMap,
   onCopyMarkdown,
@@ -851,6 +852,7 @@ export function ExportPanel({
   onTemplateMap: (value: string) => void;
   onExportHtml: () => void;
   onExportHwpx: () => void;
+  onExportPdf: () => void;
   onExportTemplate: () => void;
   onCreatePlaceholderMap: () => void;
   onCopyMarkdown: () => void;
@@ -863,8 +865,10 @@ export function ExportPanel({
   busy: boolean;
 }) {
   const hwpxReady = Boolean(hwpxStatus?.enabled && hwpxStatus.validation_available);
+  const pdfReady = Boolean(hwpxReady && hwpxStatus?.pdf_export_available);
   const templateCloneReady = Boolean(hwpxReady && hwpxStatus?.template_clone_available);
   const statusWarnings = hwpxStatus?.warnings ?? [];
+  const pdfWarnings = hwpxStatus?.pdf_warnings ?? [];
 
   return (
     <div className="space-y-5">
@@ -880,11 +884,25 @@ export function ExportPanel({
           </div>
         </div>
         {hwpxStatus?.skill_dir ? <p className="mt-3 break-all text-xs text-text3">toolchain: {hwpxStatus.skill_dir}</p> : null}
+        <p className="mt-2 text-xs font-semibold text-text3">
+          PDF: {hwpxStatus ? (pdfReady ? 'HWPX to PDF converter ready' : 'HWPX to PDF converter unavailable') : 'checking'}
+        </p>
         {statusWarnings.length ? (
           <div className="mt-3">
             <NoticeBanner tone="warning" title="HWPX export 전 확인">
               <ul className="space-y-1">
                 {statusWarnings.map((item) => (
+                  <li key={item}>- {item}</li>
+                ))}
+              </ul>
+            </NoticeBanner>
+          </div>
+        ) : null}
+        {pdfWarnings.length ? (
+          <div className="mt-3">
+            <NoticeBanner tone={pdfReady ? 'info' : 'warning'} title="PDF export 확인">
+              <ul className="space-y-1">
+                {pdfWarnings.map((item) => (
                   <li key={item}>- {item}</li>
                 ))}
               </ul>
@@ -902,6 +920,7 @@ export function ExportPanel({
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="secondary" onClick={onExportHtml} disabled={busy}>HTML export</Button>
             <Button type="button" onClick={onExportHwpx} disabled={busy || !hwpxReady}>HWPX export</Button>
+            <Button type="button" variant="secondary" onClick={onExportPdf} disabled={busy || !pdfReady}>PDF export</Button>
             <Button type="button" variant="secondary" onClick={onCreatePlaceholderMap} disabled={busy}>Placeholder map</Button>
             <Button type="button" variant="ghost" onClick={onCopyMarkdown}>Markdown 복사</Button>
           </div>

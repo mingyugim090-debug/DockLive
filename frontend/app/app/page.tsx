@@ -113,6 +113,7 @@ export default function WorkspacePage() {
           onRegenerate={workflow.regenerate}
           onReset={workflow.resetWorkflow}
           onDownloadHwpx={workflow.downloadHwpxResult}
+          onDownloadPdf={workflow.downloadPdfResult}
           onDownloadMarkdown={workflow.downloadMarkdown}
           downloadError={workflow.downloadError}
           documentHref={workflow.savedDocumentId ? `/app/documents/${workflow.savedDocumentId}` : '/app/documents'}

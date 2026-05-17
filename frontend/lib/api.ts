@@ -165,6 +165,12 @@ export async function exportWorkflowHwpx(id: string): Promise<ExportResponse> {
   return res.json();
 }
 
+export async function exportWorkflowPdf(id: string): Promise<ExportResponse> {
+  const res = await fetch(`${API_URL}/api/workflow/${id}/export/pdf`);
+  if (!res.ok) throw await readError(res, `PDF export failed: ${res.status}`);
+  return res.json();
+}
+
 export async function createWorkflowHwpxPlaceholderMap(
   id: string,
   templateId = 'basic_application_v1',
@@ -241,6 +247,23 @@ export async function exportMarkdownToHwpx(markdown: string, title: string): Pro
     body: JSON.stringify({ markdown, title }),
   });
   if (!res.ok) throw await readError(res, `Markdown HWPX export 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function exportHwpxToPdf(content: string, filename: string, title: string): Promise<ExportResponse> {
+  const res = await fetch(`${API_URL}/api/hwpx/to-pdf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content, filename, title }),
+  });
+  if (!res.ok) throw await readError(res, `HWPX PDF export failed: ${res.status}`);
+  return res.json();
+}
+
+export async function exportPersistedHwpxToPdf(downloadId: string, filename: string): Promise<ExportResponse> {
+  const params = new URLSearchParams({ filename });
+  const res = await fetch(`${API_URL}/api/hwpx/download/${downloadId}/pdf?${params.toString()}`);
+  if (!res.ok) throw await readError(res, `HWPX PDF export failed: ${res.status}`);
   return res.json();
 }
 

@@ -9,21 +9,29 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from core.errors import AnalysisError
-from models.schemas import HwpxComposeResponse, HwpxConvertResponse, HwpxStatusResponse
+from models.schemas import ExportResponse, HwpxComposeResponse, HwpxConvertResponse, HwpxStatusResponse
 from services import storage
 from services.document_ingestion import convert_hwp_to_hwpx
 from services.drafting_service import export_markdown_to_hwpx_with_validation, get_hwpx_toolchain_status, hwpx_bytes_to_base64
 from services.hwpx_compose_service import compose_hwpx
+from services.pdf_export_service import PDF_MEDIA_TYPE, convert_hwpx_bytes_to_pdf
 
 router = APIRouter()
 
 EXPORT_ROOT = Path(__file__).resolve().parents[2] / "outputs" / "hwpx_exports"
+PDF_EXPORT_ROOT = Path(__file__).resolve().parents[2] / "outputs" / "pdf_exports"
 HWPX_MEDIA_TYPE = "application/vnd.hancom.hwpx"
 
 
 class MarkdownHwpxRequest(BaseModel):
     title: str = "DockLive 결과 문서"
     markdown: str
+
+
+class HwpxPdfRequest(BaseModel):
+    filename: str = "livedock_hwpx_export.hwpx"
+    content: str
+    title: str = "livedock_pdf_export"
 
 
 @router.get("/hwpx/status", response_model=HwpxStatusResponse)
@@ -118,6 +126,61 @@ async def convert_hwp_document(file: UploadFile = File(...)):
     return HwpxConvertResponse(**result)
 
 
+@router.post("/hwpx/to-pdf", response_model=ExportResponse)
+async def convert_hwpx_payload_to_pdf(payload: HwpxPdfRequest):
+    try:
+        hwpx_content = base64.b64decode(payload.content)
+    except Exception as exc:
+        raise AnalysisError("PDF로 변환할 HWPX content는 base64여야 합니다.") from exc
+
+    filename, pdf_content, validation_summary = convert_hwpx_bytes_to_pdf(
+        hwpx_content,
+        payload.title or Path(payload.filename).stem,
+        source_filename=payload.filename,
+    )
+    storage.save_export_file("standalone", filename, pdf_content, PDF_MEDIA_TYPE, "hwpx_to_pdf")
+    download_id = _persist_pdf_export(filename, pdf_content)
+    validation_summary["download_id"] = download_id
+    return ExportResponse(
+        success=True,
+        filename=filename,
+        content_type=PDF_MEDIA_TYPE,
+        content=hwpx_bytes_to_base64(pdf_content),
+        encoding="base64",
+        warnings=validation_summary.get("pdf_warnings", []),
+        validation_summary=validation_summary,
+    )
+
+
+@router.get("/hwpx/download/{download_id}/pdf", response_model=ExportResponse)
+async def convert_persisted_hwpx_to_pdf(download_id: str, filename: str = "livedock_hwpx_export.hwpx"):
+    if not re.fullmatch(r"[a-f0-9]{32}", download_id):
+        raise AnalysisError("올바르지 않은 HWPX 다운로드 ID입니다.")
+
+    path = EXPORT_ROOT / f"{download_id}.hwpx"
+    if not path.exists():
+        raise AnalysisError("PDF로 변환할 HWPX 파일을 찾을 수 없습니다. 다시 생성해 주세요.")
+
+    title = Path(filename).stem or path.stem
+    pdf_filename, pdf_content, validation_summary = convert_hwpx_bytes_to_pdf(
+        path.read_bytes(),
+        title,
+        source_filename=_safe_download_filename(filename),
+    )
+    storage.save_export_file("standalone", pdf_filename, pdf_content, PDF_MEDIA_TYPE, "hwpx_to_pdf")
+    pdf_download_id = _persist_pdf_export(pdf_filename, pdf_content)
+    validation_summary["download_id"] = pdf_download_id
+    return ExportResponse(
+        success=True,
+        filename=pdf_filename,
+        content_type=PDF_MEDIA_TYPE,
+        content=hwpx_bytes_to_base64(pdf_content),
+        encoding="base64",
+        warnings=validation_summary.get("pdf_warnings", []),
+        validation_summary=validation_summary,
+    )
+
+
 @router.get("/hwpx/download/{download_id}")
 async def download_hwpx_file(download_id: str, filename: str = "livedock_hwpx_export.hwpx"):
     if not re.fullmatch(r"[a-f0-9]{32}", download_id):
@@ -141,6 +204,13 @@ def _persist_hwpx_export(result: dict) -> str:
     download_id = uuid.uuid4().hex
     EXPORT_ROOT.mkdir(parents=True, exist_ok=True)
     (EXPORT_ROOT / f"{download_id}.hwpx").write_bytes(base64.b64decode(result["content"]))
+    return download_id
+
+
+def _persist_pdf_export(filename: str, content: bytes) -> str:
+    download_id = uuid.uuid4().hex
+    PDF_EXPORT_ROOT.mkdir(parents=True, exist_ok=True)
+    (PDF_EXPORT_ROOT / f"{download_id}.pdf").write_bytes(content)
     return download_id
 
 

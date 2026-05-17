@@ -237,6 +237,9 @@ class HwpxStatusResponse(BaseModel):
     scripts_found: dict[str, bool] = Field(default_factory=dict)
     validation_available: bool = False
     template_clone_available: bool = False
+    pdf_export_available: bool = False
+    pdf_converter: Optional[str] = None
+    pdf_warnings: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 
 

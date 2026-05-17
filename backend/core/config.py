@@ -29,6 +29,9 @@ if BaseSettings:
         HWPX_SKILL_DIR: str = ""
         HWPX_TEMPLATE_DIR: str = ""
         HWPX_EXPORT_ENABLED: bool = True
+        HWPX_PDF_EXPORT_ENABLED: bool = True
+        HWPX_PDF_PYTHON_PATH: str = ""
+        HWPX_PDF_TIMEOUT_SECONDS: int = 90
         MAX_DRAFT_INPUT_LENGTH: int = 60_000
         WORKFLOW_TTL_SECONDS: int = 7 * 24 * 3600
 
@@ -59,6 +62,9 @@ else:
         HWPX_SKILL_DIR: str = os.getenv("HWPX_SKILL_DIR", "")
         HWPX_TEMPLATE_DIR: str = os.getenv("HWPX_TEMPLATE_DIR", "")
         HWPX_EXPORT_ENABLED: bool = os.getenv("HWPX_EXPORT_ENABLED", "true").lower() == "true"
+        HWPX_PDF_EXPORT_ENABLED: bool = os.getenv("HWPX_PDF_EXPORT_ENABLED", "true").lower() == "true"
+        HWPX_PDF_PYTHON_PATH: str = os.getenv("HWPX_PDF_PYTHON_PATH", "")
+        HWPX_PDF_TIMEOUT_SECONDS: int = int(os.getenv("HWPX_PDF_TIMEOUT_SECONDS", "90"))
         MAX_DRAFT_INPUT_LENGTH: int = int(os.getenv("MAX_DRAFT_INPUT_LENGTH", "60000"))
         WORKFLOW_TTL_SECONDS: int = int(os.getenv("WORKFLOW_TTL_SECONDS", str(7 * 24 * 3600)))
 

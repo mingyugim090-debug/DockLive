@@ -556,6 +556,8 @@ def _require_hwpx_scripts(*names: str) -> dict[str, Path]:
 
 def get_hwpx_toolchain_status() -> dict[str, Any]:
     """Return deployment-safe HWPX toolchain readiness for UI and smoke checks."""
+    from services.pdf_export_service import get_pdf_export_status
+
     skill_dir = _hwpx_skill_dir()
     script_names = [
         "md2hwpx.py",
@@ -586,12 +588,14 @@ def get_hwpx_toolchain_status() -> dict[str, Any]:
     if settings.HWPX_EXPORT_ENABLED and not template_clone_available:
         warnings.append("템플릿 클로닝 검증 script가 없어 공식 양식 채우기 export가 제한됩니다.")
 
+    pdf_status = get_pdf_export_status()
     return {
         "enabled": bool(settings.HWPX_EXPORT_ENABLED),
         "skill_dir": str(skill_dir),
         "scripts_found": scripts_found,
         "validation_available": validation_available,
         "template_clone_available": template_clone_available,
+        **pdf_status,
         "warnings": list(dict.fromkeys(warnings)),
     }
 
