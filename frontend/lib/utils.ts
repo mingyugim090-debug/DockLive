@@ -1,5 +1,9 @@
 import type { DayStatus } from './types';
 
+export function cn(...classes: (string | undefined | null | false)[]) {
+  return classes.filter(Boolean).join(' ');
+}
+
 export function calculateDDay(targetDate: string): number {
   const today = new Date();
   today.setHours(0, 0, 0, 0);

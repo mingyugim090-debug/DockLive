@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { ButtonLink } from '@/components/ui/Button';
+import { Folder } from '@/components/ui/Folder';
 
 /* ── step content components ─────────────────────────────────────── */
 
@@ -386,6 +387,34 @@ export function HeroSection() {
           <WorkflowScene3D />
         </motion.div>
       </div>
+
+      {/* Document types showcase */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.45 }}
+        className="mx-auto mt-14 max-w-7xl"
+      >
+        <div className="rounded-[32px] border border-[#ECECF1] bg-white/70 px-8 py-8 shadow-panel backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-7">
+            <div className="flex flex-wrap items-end justify-center gap-6 sm:gap-10">
+              <Folder color="blue" size="md" label="청년창업" />
+              <Folder color="yellow" size="md" label="R&D 과제" />
+              <Folder color="orange" size="md" label="정부 지원" />
+              <Folder color="grey" size="md" label="공모전" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-semibold text-[#273044]">공모전부터 정부 지원사업까지</p>
+              <p className="mt-1 text-sm leading-6 text-[#6B7280]">
+                PDF · HWPX · DOCX 형식의 어떤 공모 문서든 업로드하면 AI가 5분 안에 분석하고 초안을 만들어 드립니다.
+              </p>
+            </div>
+            <ButtonLink href="/auth?next=/app" className="px-7 py-2.5 text-sm">
+              지금 무료로 시작하기
+            </ButtonLink>
+          </div>
+        </div>
+      </motion.div>
     </section>
   );
 }
