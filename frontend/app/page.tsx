@@ -2,9 +2,8 @@ import Image from 'next/image';
 import { FeatureSection } from '@/components/landing/FeatureSection';
 import { FinalCTASection } from '@/components/landing/FinalCTASection';
 import { HeroSection } from '@/components/landing/HeroSection';
-import { ProblemSection } from '@/components/landing/ProblemSection';
-import { SolutionSection } from '@/components/landing/SolutionSection';
-import { WorkflowSection } from '@/components/landing/WorkflowSection';
+import { PainSection } from '@/components/landing/PainSection';
+import { SocialProofSection } from '@/components/landing/SocialProofSection';
 import { ButtonLink } from '@/components/ui/Button';
 
 export default function HomePage() {
@@ -17,7 +16,6 @@ export default function HomePage() {
           </a>
           <nav className="hidden items-center gap-6 text-sm font-semibold text-[#6B7280] md:flex">
             <a href="#features" className="hover:text-[#273044]">기능</a>
-            <a href="#workflow" className="hover:text-[#273044]">사용 흐름</a>
             <a href="/auth?next=/app" className="hover:text-[#273044]">워크스페이스</a>
           </nav>
           <ButtonLink href="/auth?next=/app" className="px-4 py-2">Google로 시작하기</ButtonLink>
@@ -25,12 +23,9 @@ export default function HomePage() {
       </header>
 
       <HeroSection />
-      <ProblemSection />
-      <SolutionSection />
+      <PainSection />
       <FeatureSection />
-      <div id="workflow">
-        <WorkflowSection />
-      </div>
+      <SocialProofSection />
       <FinalCTASection />
     </main>
   );
