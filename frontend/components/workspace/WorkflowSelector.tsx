@@ -18,6 +18,9 @@ export function WorkflowSelector({
       <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {workflowTasks.map((task) => {
           const selected = selectedTaskId === task.id;
+          const hwpxFit = ['custom', 'report', 'format'].includes(task.id)
+            ? 'HWPX 양식 채우기에 적합'
+            : 'HWPX 양식 채우기보다는 별도 결과 문서에 적합';
           return (
             <button
               key={task.id}
@@ -39,6 +42,9 @@ export function WorkflowSelector({
               </p>
               <p className="mt-2 text-xs font-semibold leading-5 text-[#8A91A0]">
                 추천 문서: {task.recommendedInput}
+              </p>
+              <p className="mt-2 rounded-[14px] bg-[#F4F7FF] px-3 py-2 text-xs font-bold leading-5 text-[#5263E8]">
+                {hwpxFit}
               </p>
             </button>
           );

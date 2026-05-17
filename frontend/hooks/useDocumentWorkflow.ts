@@ -9,9 +9,10 @@ import {
   processingSteps,
   type GeneratedDocument,
   type OutputFormat,
+  type WorkflowTask,
   type WorkflowTaskId,
 } from '@/data/workspaceTasks';
-import { exportMarkdownToHwpx } from '@/lib/api';
+import { composeHwpxDocument, exportMarkdownToHwpx } from '@/lib/api';
 import { buildMarkdownResult, downloadMarkdownResult } from '@/lib/workflow/downloadMarkdown';
 import {
   consumePendingTemplate,
@@ -22,6 +23,86 @@ import {
 } from '@/lib/workflow/workflowStore';
 
 export type WorkflowStep = 'upload' | 'task' | 'instructions' | 'review' | 'processing' | 'result';
+
+function isHwpxTemplateFile(file: File | null): boolean {
+  if (!file) return false;
+  return ['.hwp', '.hwpx'].includes(getFileExtension(file.name));
+}
+
+function baseTitleFromFile(file: File): string {
+  return file.name.replace(/\.[^.]+$/, '');
+}
+
+function buildComposeRequest(task: WorkflowTask, instructions: string): string {
+  const trimmed = instructions.trim();
+  return [
+    `작업 유형: ${task.name}`,
+    '생성 목표: 업로드한 HWPX 신청서 양식의 표와 서식을 보존하면서 각 칸에 들어갈 제출용 초안을 작성합니다.',
+    '작성 기준: 학교 제출용으로 단정하고 공식적인 문체를 사용하고, 서비스 설명이나 MVP 테스트 문구는 본문에 쓰지 않습니다.',
+    '개인정보, 실제 날짜, 금액, 기관명처럼 확인되지 않은 정보는 임의로 확정하지 말고 확인 필요 항목으로 분리합니다.',
+    `사용자 지시사항: ${trimmed || task.instructionHint}`,
+  ].join('\n');
+}
+
+function composeToGeneratedDocument(
+  file: File,
+  task: WorkflowTask,
+  instructions: string,
+  composed: Awaited<ReturnType<typeof composeHwpxDocument>>,
+): GeneratedDocument {
+  const fields = composed.generated_fields ?? {};
+  const title = fields.document_title || composed.filename.replace(/\.hwpx$/i, '') || `${baseTitleFromFile(file)} 자동작성 결과`;
+  const confirmationItems = composed.confirmation_required ?? [];
+  const markdown = [
+    `# ${title}`,
+    '',
+    '## 동아리 소개 및 신청동기',
+    fields.motivation || '확인 필요',
+    '',
+    '## 동아리목표',
+    fields.goals || '확인 필요',
+    '',
+    '## 운영방법',
+    fields.operation_plan || '확인 필요',
+    '',
+    '## 지원금 사용계획',
+    fields.budget_plan || '확인 필요',
+    fields.budget_items || '',
+    '',
+    '## 월별 활동계획',
+    `- 학습내용: ${fields.monthly_plan || '확인 필요'}`,
+    `- 학습방법: ${fields.monthly_method || '확인 필요'}`,
+    '',
+    '## 제출 전 확인 필요',
+    ...(confirmationItems.length ? confirmationItems.map((item) => `- ${item}`) : ['- 개인정보와 실제 제출 기준을 확인해 주세요.']),
+  ].filter(Boolean).join('\n');
+
+  return {
+    title,
+    markdown,
+    previewBlocks: [
+      {
+        title: '양식 보존 생성',
+        body: `${composed.template_id} 양식으로 인식했고, 원본 HWPX 표와 서식을 보존한 상태로 필드별 내용을 채웠습니다.`,
+      },
+      {
+        title: '핵심 작성 내용',
+        body: fields.motivation || '동아리 소개와 신청동기 필드를 생성했습니다.',
+        items: [fields.goals, fields.operation_plan, fields.budget_plan]
+          .filter((value): value is string => Boolean(value))
+          .map((value) => value.slice(0, 120)),
+      },
+      {
+        title: '검증 결과',
+        body: composed.verification?.validation_passed
+          ? 'HWPX 구조 검증을 통과했습니다. 제출 전 확인 필요 항목만 검토하면 됩니다.'
+          : 'HWPX 구조 검증 결과를 확인해야 합니다.',
+        items: confirmationItems,
+      },
+    ],
+    hwpxCompose: composed,
+  };
+}
 
 export function useDocumentWorkflow() {
   const [currentStep, setCurrentStep] = useState<WorkflowStep>('upload');
@@ -52,23 +133,45 @@ export function useDocumentWorkflow() {
 
         if (next >= 100) {
           window.clearInterval(timer);
-          window.setTimeout(() => {
-            const generated = createMockGeneratedDocument(selectedTaskId, uploadedFile, instructions, {
-              processingMode: settings.processingMode,
-              templateName: selectedTemplate?.templateName,
-            });
-            setResult(generated);
-            const saved = saveCompletedWorkflow({
-              file: uploadedFile,
-              taskId: selectedTaskId,
-              instructions,
-              result: generated,
-              outputFormat,
-              templateName: selectedTemplate?.templateName,
-            });
-            setSavedDocumentId(saved.id);
-            setIsProcessing(false);
-            setCurrentStep('result');
+          window.setTimeout(async () => {
+            try {
+              const task = getTaskById(selectedTaskId);
+              let generated = createMockGeneratedDocument(selectedTaskId, uploadedFile, instructions, {
+                processingMode: settings.processingMode,
+                templateName: selectedTemplate?.templateName,
+              });
+
+              if (outputFormat === 'HWPX' && isHwpxTemplateFile(uploadedFile)) {
+                const composed = await composeHwpxDocument(
+                  uploadedFile,
+                  buildComposeRequest(task, instructions),
+                  '',
+                  baseTitleFromFile(uploadedFile),
+                );
+                generated = composeToGeneratedDocument(uploadedFile, task, instructions, composed);
+              }
+
+              setResult(generated);
+              const saved = saveCompletedWorkflow({
+                file: uploadedFile,
+                taskId: selectedTaskId,
+                instructions,
+                result: generated,
+                outputFormat,
+                templateName: selectedTemplate?.templateName,
+              });
+              setSavedDocumentId(saved.id);
+              setIsProcessing(false);
+              setCurrentStep('result');
+            } catch (err) {
+              setIsProcessing(false);
+              setError(
+                err instanceof Error
+                  ? `${err.message} HWPX 양식 자동작성 서버를 확인해 주세요. 손상된 파일은 다운로드하지 않습니다.`
+                  : 'HWPX 양식 자동작성에 실패했습니다. 손상된 파일은 다운로드하지 않습니다.',
+              );
+              setCurrentStep('review');
+            }
           }, 350);
         }
 
@@ -174,7 +277,6 @@ export function useDocumentWorkflow() {
     ].join('');
 
     setDownloadError(null);
-    setSavedDocumentId(null);
     const markdown = buildMarkdownResult({
       result,
       task: selectedTask,
@@ -183,7 +285,7 @@ export function useDocumentWorkflow() {
     });
 
     try {
-      const exported = await exportMarkdownToHwpx(markdown, result.title);
+      const exported = result.hwpxCompose ?? await exportMarkdownToHwpx(markdown, result.title);
       const bytes = Uint8Array.from(atob(exported.content), (char) => char.charCodeAt(0));
       const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
       const blob = new Blob([arrayBuffer], { type: exported.content_type || 'application/vnd.hancom.hwpx' });

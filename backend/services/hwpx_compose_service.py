@@ -99,6 +99,7 @@ def compose_hwpx(
             generated = generate_withus_fields(request_text, applicant_context, title)
             composed_markdown = _render_withus_markdown(generated)
             warnings: list[str] = []
+            _copy_known_application_form(source_path, output_path, generated)
         else:
             generated = generate_generic_fields(request_text, applicant_context, title, source_path)
             composed_markdown = _render_generic_markdown(generated)
@@ -106,8 +107,7 @@ def compose_hwpx(
                 "알 수 없는 HWPX 양식입니다. 원본 양식 구조는 보존하고 자동작성 내용을 새 섹션으로 추가했습니다. "
                 "정확한 칸 매핑이 필요한 공식 양식은 다음 단계에서 템플릿 매핑을 추가해 주세요."
             ]
-
-        _copy_hwpx_with_appended_section(source_path, output_path, composed_markdown)
+            _copy_hwpx_with_appended_section(source_path, output_path, composed_markdown)
 
         python_bin = sys.executable or "python"
         _run_required([python_bin, str(scripts["fix_namespaces.py"]), str(output_path)], "HWPX namespace 보정")
@@ -360,6 +360,82 @@ def _render_generic_markdown(fields: dict[str, str]) -> str:
     )
 
 
+def _copy_known_application_form(source_path: Path, output_path: Path, fields: dict[str, str]) -> None:
+    """Preserve a known club/application HWPX form and replace field-level text."""
+    title = _compact(fields.get("document_title") or "동아리 신청서 자동작성 초안", 80)
+    generated_note = "사용자 요청을 바탕으로 학교 제출용 신청서 문체에 맞춰 자동작성한 초안입니다."
+    confirmation = "본 문서는 자동작성 초안입니다. 제출 전 이름, 소속, 연락처, 지도교수, 실제 일정과 금액을 확인해 주세요."
+    submission_date = fields.get("submission_date") or _today_korean()
+    signature = fields.get("representative_signature") or "동아리 대표 : 확인 필요 (서명 또는 인)"
+
+    replacements = {
+        2: title,
+        3: generated_note,
+        26: _compact(fields.get("motivation", ""), 620),
+        29: _compact(fields.get("goals", ""), 520),
+        30: _compact(fields.get("competition_plan", ""), 520),
+        34: _compact(fields.get("operation_plan", ""), 360),
+        36: _compact(fields.get("budget_plan", ""), 300),
+        37: _compact(fields.get("budget_items", ""), 180),
+        43: _compact(fields.get("monthly_plan", ""), 250),
+        45: _compact(fields.get("monthly_method", ""), 230),
+        47: confirmation,
+        48: submission_date,
+        49: signature,
+    }
+    replacements = {key: value for key, value in replacements.items() if value}
+    preview_text = _render_withus_markdown(fields)
+    modified = _iso_now()
+
+    with zipfile.ZipFile(source_path, "r") as zin:
+        with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zout:
+            for item in zin.infolist():
+                data = zin.read(item.filename)
+                if item.filename == "Contents/section0.xml":
+                    text = data.decode("utf-8", errors="replace")
+                    data = _replace_nonempty_hwpx_texts(text, replacements).encode("utf-8")
+                elif item.filename == "Contents/content.hpf":
+                    text = data.decode("utf-8", errors="replace")
+                    text = re.sub(
+                        r"(<opf:title>).*?(</opf:title>)",
+                        lambda match: f"{match.group(1)}{escape(title)}{match.group(2)}",
+                        text,
+                        flags=re.DOTALL,
+                    )
+                    text = re.sub(
+                        r'(<opf:meta name="ModifiedDate" content="text">).*?(</opf:meta>)',
+                        lambda match: f"{match.group(1)}{modified}{match.group(2)}",
+                        text,
+                        flags=re.DOTALL,
+                    )
+                    data = text.encode("utf-8")
+                elif item.filename == "Preview/PrvText.txt":
+                    data = _compact(preview_text, 4000).encode("utf-8")
+
+                if item.filename == "mimetype":
+                    zout.writestr(item, data, compress_type=zipfile.ZIP_STORED)
+                else:
+                    zout.writestr(item, data)
+
+
+def _replace_nonempty_hwpx_texts(xml_text: str, replacements: dict[int, str]) -> str:
+    nonempty_index = 0
+
+    def replace(match: re.Match[str]) -> str:
+        nonlocal nonempty_index
+        raw = match.group(2)
+        clean = re.sub(r"<[^>]+>", "", raw).strip()
+        if not clean:
+            return match.group(0)
+        nonempty_index += 1
+        value = replacements.get(nonempty_index)
+        if value is None:
+            return match.group(0)
+        return f"{match.group(1)}{escape(value)}{match.group(3)}"
+
+    return re.sub(r"(<hp:t\b(?![^>]*/>)[^>]*>)(.*?)(</hp:t>)", replace, xml_text, flags=re.DOTALL)
+
+
 def _copy_hwpx_with_appended_section(source_path: Path, output_path: Path, markdown: str) -> None:
     paragraphs = _markdown_to_hwpx_paragraphs(markdown)
     with zipfile.ZipFile(source_path, "r") as zin:
@@ -569,6 +645,19 @@ def _guess_title(source_excerpt: str) -> str:
     return ""
 
 
+def _today_korean() -> str:
+    from datetime import datetime
+
+    now = datetime.now()
+    return f"{now.year} 년  {now.month} 월  {now.day} 일"
+
+
+def _iso_now() -> str:
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def _compact(text: str, limit: int) -> str:
     value = re.sub(r"\s+", " ", text).strip()
     return value[:limit].rstrip()
@@ -578,3 +667,227 @@ def _compose_temp_root() -> Path:
     root = Path(__file__).resolve().parents[2] / "outputs" / "tmp"
     root.mkdir(parents=True, exist_ok=True)
     return root
+
+
+# Quality-focused overrides for the Agent MVP HWPX compose workflow.
+def detect_template(hwpx_path: Path) -> str:
+    texts = _extract_texts_from_zip(hwpx_path)
+    joined = "\n".join(texts)
+    marker_groups = [
+        ["참여 신청서", "동아리 정보", "동아리 소개", "활동계획서"],
+        ["동아리목표", "운영방법", "지원금 사용계획", "활동계획"],
+    ]
+    if all(any(marker in joined for marker in group) for group in marker_groups):
+        return WITHUS_TEMPLATE_ID
+    return GENERIC_TEMPLATE_ID
+
+
+def generate_withus_fields(request_text: str, applicant_context: str = "", title: str = "") -> dict[str, str]:
+    if should_use_mock_ai():
+        return _mock_withus_fields(request_text, applicant_context, title)
+
+    system_prompt = (
+        "당신은 한국 대학 동아리/공모전/연구동아리 HWPX 신청서를 작성하는 문서 자동화 AI입니다. "
+        "원본 양식의 각 칸에 들어갈 한국어 문장만 JSON으로 작성하세요. "
+        "서비스 설명, MVP, mock, 업로드, 다운로드, AI Agent 같은 내부 구현 표현은 절대 쓰지 마세요. "
+        "문체는 학교 제출용으로 단정하고 공식적이어야 하며, 과장하지 말고 확인되지 않은 개인정보·금액·일정은 지어내지 마세요. "
+        "개인정보성 필드는 사용자가 제공하지 않았으면 빈 문자열로 두고, 확인이 필요한 사실은 confirmation_required에만 적으세요."
+    )
+    user_payload = {
+        "request_text": request_text,
+        "applicant_context": applicant_context,
+        "title": title,
+        "target_fields": [
+            "document_title",
+            "team_or_club_name",
+            "applicant_name",
+            "university",
+            "college",
+            "department",
+            "student_id",
+            "email",
+            "phone",
+            "advisor_college",
+            "advisor_department",
+            "advisor_id",
+            "advisor_name",
+            "motivation",
+            "goals",
+            "competition_plan",
+            "operation_plan",
+            "budget_plan",
+            "budget_items",
+            "monthly_plan",
+            "monthly_method",
+            "follow_up_plan",
+            "submission_date",
+            "representative_signature",
+        ],
+        "style_rules": [
+            "motivation은 동아리 소개와 신청동기를 합쳐 3~4문장으로 작성",
+            "goals는 활동 목표를 2~3문장으로 작성",
+            "competition_plan은 참여 예정 활동이나 대회 계획을 1~2문장으로 작성",
+            "operation_plan은 운영 방식과 안전 관리, 역할 분담을 2~3문장으로 작성",
+            "budget_plan은 실제 금액을 모르면 항목 중심으로 작성",
+            "monthly_plan과 monthly_method는 표 안에 들어갈 짧은 문장으로 작성",
+        ],
+    }
+    user_prompt = (
+        "아래 정보를 바탕으로 신청서 양식의 칸별 내용을 JSON으로 작성하세요.\n"
+        "응답 형식은 {\"fields\": {...}, \"confirmation_required\": [\"...\"]} 입니다.\n\n"
+        + json.dumps(user_payload, ensure_ascii=False)
+    )
+    data = call_json("draft", system_prompt, user_prompt, max_tokens=4096)
+    raw_fields = data.get("fields", data)
+    if not isinstance(raw_fields, dict):
+        raise AnalysisError(f"{provider_name()}가 HWPX 필드 JSON을 반환하지 않았습니다.")
+    fields = _normalize_withus_fields(raw_fields, request_text, applicant_context, title)
+    confirmations = data.get("confirmation_required", [])
+    if isinstance(confirmations, list):
+        fields["_confirmation_required"] = "\n".join(str(item).strip() for item in confirmations if str(item).strip())
+    return fields
+
+
+def _normalize_withus_fields(raw: dict, request_text: str, applicant_context: str, title: str) -> dict[str, str]:
+    fields = dict(WITHUS_FIELD_DEFAULTS)
+    for key in fields:
+        value = raw.get(key)
+        if value is not None:
+            fields[key] = _compact(str(value), 900)
+
+    inferred_title = title.strip() or _infer_document_title(request_text) or "동아리 신청서 자동작성 초안"
+    fields["document_title"] = _compact(fields.get("document_title") or inferred_title, 90)
+    fields["team_or_club_name"] = _compact(fields.get("team_or_club_name") or _infer_club_name(request_text) or "확인 필요", 40)
+
+    if not fields.get("motivation"):
+        fields["motivation"] = _quality_application_copy(request_text)["motivation"]
+    if not fields.get("goals"):
+        fields["goals"] = _quality_application_copy(request_text)["goals"]
+    if not fields.get("competition_plan"):
+        fields["competition_plan"] = _quality_application_copy(request_text)["competition_plan"]
+    if not fields.get("operation_plan"):
+        fields["operation_plan"] = _quality_application_copy(request_text)["operation_plan"]
+    if not fields.get("budget_plan"):
+        fields["budget_plan"] = _quality_application_copy(request_text)["budget_plan"]
+    if not fields.get("budget_items"):
+        fields["budget_items"] = _quality_application_copy(request_text)["budget_items"]
+    if not fields.get("monthly_plan"):
+        fields["monthly_plan"] = _quality_application_copy(request_text)["monthly_plan"]
+    if not fields.get("monthly_method"):
+        fields["monthly_method"] = _quality_application_copy(request_text)["monthly_method"]
+    if not fields.get("follow_up_plan"):
+        fields["follow_up_plan"] = "활동 결과를 정리하고 다음 학기 운영 계획과 개선 사항을 검토합니다."
+    if not fields.get("submission_date"):
+        fields["submission_date"] = _today_korean()
+    if not fields.get("representative_signature"):
+        applicant = fields.get("applicant_name") or "확인 필요"
+        fields["representative_signature"] = f"동아리 대표 : {applicant} (서명 또는 인)"
+
+    for private_key in (
+        "applicant_name",
+        "university",
+        "college",
+        "department",
+        "student_id",
+        "email",
+        "phone",
+        "advisor_college",
+        "advisor_department",
+        "advisor_id",
+        "advisor_name",
+    ):
+        if raw.get(private_key) is None:
+            fields[private_key] = ""
+    return fields
+
+
+def _mock_withus_fields(request_text: str, applicant_context: str, title: str) -> dict[str, str]:
+    copy = _quality_application_copy(request_text)
+    fields = dict(WITHUS_FIELD_DEFAULTS)
+    fields.update(
+        {
+            "document_title": title.strip() or _infer_document_title(request_text) or "축구 동아리 신청서 자동작성 초안",
+            "team_or_club_name": _infer_club_name(request_text) or "축구 동아리",
+            "applicant_name": "",
+            "university": "",
+            "college": "",
+            "department": "",
+            "student_id": "",
+            "email": "",
+            "phone": "",
+            "advisor_college": "",
+            "advisor_department": "",
+            "advisor_id": "",
+            "advisor_name": "",
+            "motivation": copy["motivation"],
+            "goals": copy["goals"],
+            "competition_plan": copy["competition_plan"],
+            "operation_plan": copy["operation_plan"],
+            "budget_plan": copy["budget_plan"],
+            "budget_items": copy["budget_items"],
+            "monthly_plan": copy["monthly_plan"],
+            "monthly_method": copy["monthly_method"],
+            "follow_up_plan": "활동 종료 후 훈련 참여도, 경기 운영 기록, 부원 만족도를 정리해 다음 학기 운영 개선안에 반영합니다.",
+            "submission_date": _today_korean(),
+            "representative_signature": "동아리 대표 : 확인 필요 (서명 또는 인)",
+            "_confirmation_required": "대표자 이름, 학번, 연락처, 지도교수 정보\n실제 활동 일정과 지원금 사용 가능 항목",
+        }
+    )
+    return _normalize_withus_fields(fields, request_text, applicant_context, title)
+
+
+def _quality_application_copy(request_text: str) -> dict[str, str]:
+    lowered = request_text.lower()
+    is_soccer = any(token in lowered for token in ("축구", "football", "풋살", "soccer"))
+    if is_soccer:
+        return {
+            "motivation": (
+                "본 동아리는 축구 활동을 통해 학생들의 체력 증진과 협동심 함양을 목표로 하는 자율 활동 모임입니다. "
+                "정기적인 훈련과 경기 참여를 통해 구성원들이 책임감 있게 역할을 수행하고, 건강한 교내 스포츠 문화를 형성하고자 합니다. "
+                "또한 전공과 학년이 다른 학생들이 운동을 매개로 교류할 수 있는 장을 마련하여 학교 공동체 활성화에 기여하고자 합니다."
+            ),
+            "goals": (
+                "기초 체력과 축구 기본기를 꾸준히 향상시키고, 포지션별 역할 이해와 팀 전술 수행 능력을 높이는 것을 목표로 합니다. "
+                "정기 훈련, 자체 경기, 교내 친선전을 단계적으로 운영하여 참여 학생들이 협동심과 스포츠맨십을 체득하도록 하겠습니다."
+            ),
+            "competition_plan": (
+                "교내 체육대회와 학과 간 친선 경기 참여를 우선 검토하고, 부원 구성과 훈련 수준에 따라 지역 또는 대학생 축구 대회 참가를 준비하겠습니다. "
+                "대회 참가 여부와 일정은 실제 모집 공고와 학교 승인 절차를 확인한 뒤 확정하겠습니다."
+            ),
+            "operation_plan": (
+                "주 1회 정기 훈련을 기본으로 하며, 훈련 전 준비운동과 안전 수칙 안내를 의무화합니다. "
+                "주장, 기록 담당, 장비 담당을 지정해 출석과 장비 관리를 체계화하고, 월 1회 경기 리뷰를 통해 개선점을 공유하겠습니다."
+            ),
+            "budget_plan": (
+                "지원금은 훈련 장비 보강, 경기 운영 물품, 응급 안전용품, 대회 참가 준비에 우선 사용하겠습니다. "
+                "구체적인 금액은 학교 지원 기준과 실제 구매 가능 항목을 확인한 뒤 집행하겠습니다."
+            ),
+            "budget_items": "예상 항목: 축구공, 팀 조끼, 라바콘, 구급용품, 경기 기록지, 대회 참가 준비 물품",
+            "monthly_plan": "신입 부원 모집, 기초 체력 점검, 패스·슈팅 기본기 훈련, 포지션별 전술 훈련, 교내 친선전 준비",
+            "monthly_method": "정기 훈련, 조별 전술 연습, 자체 경기, 경기 후 피드백 회의, 안전 수칙 점검",
+        }
+    return {
+        "motivation": (
+            "본 동아리는 구성원들이 공동의 관심사를 바탕으로 학습과 실천을 함께 이어가기 위해 운영됩니다. "
+            "정기적인 모임과 역할 분담을 통해 활동의 지속성을 높이고, 결과물을 학교 공동체 안에서 공유하는 것을 목표로 합니다."
+        ),
+        "goals": "정기 활동을 통해 구성원의 역량을 높이고, 활동 결과를 구체적인 산출물로 정리하는 것을 목표로 합니다.",
+        "competition_plan": "참여 예정 프로그램과 외부 활동은 실제 공고와 학교 승인 절차를 확인한 뒤 확정하겠습니다.",
+        "operation_plan": "주기적인 회의와 역할 분담을 통해 활동을 운영하고, 활동 결과를 기록해 다음 계획에 반영하겠습니다.",
+        "budget_plan": "지원금은 활동 운영, 자료 준비, 결과물 제작 등 동아리 목적에 직접 필요한 항목에 사용하겠습니다.",
+        "budget_items": "예상 항목: 회의 운영비, 자료 준비비, 활동 물품, 결과물 제작비",
+        "monthly_plan": "구성원 모집, 활동 주제 확정, 자료 조사, 실행 활동, 결과 정리",
+        "monthly_method": "정기 회의, 역할별 조사, 활동 기록, 결과 공유, 피드백 반영",
+    }
+
+
+def _infer_document_title(text: str) -> str:
+    if "축구" in text:
+        return "축구 동아리 신청서 자동작성 초안"
+    return ""
+
+
+def _infer_club_name(text: str) -> str:
+    if "축구" in text:
+        return "축구 동아리"
+    return ""

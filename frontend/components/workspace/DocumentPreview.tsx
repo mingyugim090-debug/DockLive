@@ -47,6 +47,26 @@ export function DocumentPreview({
         </div>
       ) : null}
 
+      {result.hwpxCompose ? (
+        <div className="mt-5 grid gap-3 rounded-[22px] border border-emerald-100 bg-emerald-50 p-4 text-sm leading-6 text-emerald-900 lg:grid-cols-3">
+          <div>
+            <p className="font-bold">양식 인식</p>
+            <p className="mt-1">{result.hwpxCompose.template_id}</p>
+          </div>
+          <div>
+            <p className="font-bold">HWPX 검증</p>
+            <p className="mt-1">
+              {result.hwpxCompose.verification?.validation_passed ? '구조 검증 통과' : '검증 확인 필요'}
+              {result.hwpxCompose.verification?.structure_status ? ` · ${result.hwpxCompose.verification.structure_status}` : ''}
+            </p>
+          </div>
+          <div>
+            <p className="font-bold">확인 필요</p>
+            <p className="mt-1">{result.hwpxCompose.confirmation_required?.length || 0}개 항목</p>
+          </div>
+        </div>
+      ) : null}
+
       <div className="mt-6 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
         <div className="space-y-3">
           {result.previewBlocks.map((block) => (
@@ -68,6 +88,23 @@ export function DocumentPreview({
           </div>
         </div>
       </div>
+
+      {result.hwpxCompose?.generated_fields ? (
+        <div className="mt-5 rounded-[24px] border border-[#ECECF1] bg-[#FBFBFD] p-5">
+          <h3 className="font-bold text-[#273044]">AI 생성 필드</h3>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {Object.entries(result.hwpxCompose.generated_fields)
+              .filter(([key, value]) => value && !key.startsWith('_'))
+              .slice(0, 10)
+              .map(([key, value]) => (
+                <div key={key} className="rounded-[18px] border border-[#ECECF1] bg-white p-4">
+                  <p className="text-xs font-bold uppercase text-[#5263E8]">{key}</p>
+                  <p className="mt-2 line-clamp-4 text-sm leading-6 text-[#6B7280]">{value}</p>
+                </div>
+              ))}
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
