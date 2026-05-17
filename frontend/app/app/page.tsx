@@ -10,9 +10,30 @@ import { StepProgress } from '@/components/workspace/StepProgress';
 import { WorkflowSelector } from '@/components/workspace/WorkflowSelector';
 import { formatFileSize } from '@/data/workspaceTasks';
 import { useDocumentWorkflow } from '@/hooks/useDocumentWorkflow';
+import { useCreditContext } from '@/lib/creditContext';
 
 export default function WorkspacePage() {
   const workflow = useDocumentWorkflow();
+  const { credits, deductCredit, openPurchaseModal } = useCreditContext();
+
+  const handleStartGeneration = async () => {
+    // Check credits before starting
+    if (credits !== null && credits <= 0) {
+      openPurchaseModal();
+      return;
+    }
+    try {
+      await deductCredit();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.includes('insufficient') || msg.includes('P0001')) {
+        openPurchaseModal();
+        return;
+      }
+      // Non-credit error: proceed anyway (backend will validate)
+    }
+    workflow.startGeneration();
+  };
 
   return (
     <div className="space-y-6">
@@ -32,6 +53,15 @@ export default function WorkspacePage() {
               <p><span className="font-bold text-[#273044]">작업:</span> {workflow.selectedTask?.name ?? '아직 선택 안 함'}</p>
               <p><span className="font-bold text-[#273044]">템플릿:</span> {workflow.selectedTemplate?.templateName ?? '선택 안 함'}</p>
               <p><span className="font-bold text-[#273044]">출력:</span> {workflow.outputFormat}</p>
+              <p>
+                <span className="font-bold text-[#273044]">크레딧:</span>{' '}
+                {credits !== null ? (
+                  <span className={credits <= 0 ? 'font-semibold text-red-500' : credits <= 2 ? 'font-semibold text-yellow-600' : 'text-[#6B7280]'}>
+                    {credits}개 남음
+                    {credits <= 0 ? ' — 충전 필요' : credits <= 2 ? ' — 부족함' : ''}
+                  </span>
+                ) : '확인 중…'}
+              </p>
             </div>
           </div>
         </div>
@@ -68,7 +98,7 @@ export default function WorkspacePage() {
           outputFormat={workflow.outputFormat}
           templateName={workflow.selectedTemplate?.templateName}
           onBack={() => workflow.setCurrentStep('instructions')}
-          onStart={workflow.startGeneration}
+          onStart={handleStartGeneration}
         />
       ) : null}
 

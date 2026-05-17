@@ -2,6 +2,8 @@
 
 import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { CreditPurchaseModal } from '@/components/credits/CreditPurchaseModal';
+import { CreditProvider, useCreditContext } from '@/lib/creditContext';
 import { loadSavedTheme } from '@/lib/theme';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
@@ -15,22 +17,51 @@ const titles: Array<[string, string]> = [
   ['/app', '문서 자동화 워크스페이스'],
 ];
 
-export function AppLayout({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
+function AppLayoutInner({ children, title }: { children: ReactNode; title: string }) {
   const [open, setOpen] = useState(false);
-  const title = useMemo(() => titles.find(([path]) => pathname === path || (path !== '/app' && pathname.startsWith(path)))?.[1] ?? '문서 자동화 워크스페이스', [pathname]);
-
-  useEffect(() => {
-    loadSavedTheme();
-  }, []);
+  const { isPurchaseModalOpen, closePurchaseModal, user } = useCreditContext();
 
   return (
     <div className="min-h-screen bg-[var(--theme-bg)] text-[var(--theme-text)] transition-colors duration-300 lg:grid lg:grid-cols-[280px_1fr]">
       <Sidebar open={open} onClose={() => setOpen(false)} />
       <div className="min-w-0">
         <Header title={title} onMenu={() => setOpen(true)} />
-        <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
+        <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          {children}
+        </main>
       </div>
+      {isPurchaseModalOpen && (
+        <CreditPurchaseModal
+          onClose={closePurchaseModal}
+          userId={user?.id ?? ''}
+          userEmail={user?.email ?? undefined}
+          userName={
+            user?.profile?.name ??
+            (typeof user?.metadata?.name === 'string' ? user.metadata.name : undefined)
+          }
+        />
+      )}
     </div>
+  );
+}
+
+export function AppLayout({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const title = useMemo(
+    () =>
+      titles.find(
+        ([path]) => pathname === path || (path !== '/app' && pathname.startsWith(path)),
+      )?.[1] ?? '문서 자동화 워크스페이스',
+    [pathname],
+  );
+
+  useEffect(() => {
+    loadSavedTheme();
+  }, []);
+
+  return (
+    <CreditProvider>
+      <AppLayoutInner title={title}>{children}</AppLayoutInner>
+    </CreditProvider>
   );
 }

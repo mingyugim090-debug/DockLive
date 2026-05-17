@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "tosspayments-integration-guide": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@tosspayments/integration-guide-mcp@latest"
+      ]
+    },
+    "insforge": {
+      "command": "cmd",
+      "args": [
+        "/c",
+        "npx",
+        "-y",
+        "@insforge/mcp@latest"
+      ],
+      "env": {
+        "API_KEY": "ik_c18b3c8666da0bafe92a26a634c9de45",
+        "API_BASE_URL": "https://jtcz6q5t.us-east.insforge.app"
+      }
+    }
+  }
+}

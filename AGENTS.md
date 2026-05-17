@@ -1,120 +1,133 @@
-# LiveDock Agent Guide
+---
+description: Instructions building apps with MCP
+globs: *
+alwaysApply: true
+---
 
-## Product Direction
+# InsForge SDK Documentation - Overview
 
-LiveDock is a document automation AI service for public notices such as competitions, government announcements, grants, scholarships, research programs, and startup support programs.
+## What is InsForge?
 
-The current priority is the **Agent MVP**, not the community product. Community features are a long-term expansion and must not distract from the document automation workflow unless explicitly requested.
+Backend-as-a-service (BaaS) platform providing:
 
-The highest-priority workflow is:
+- **Database**: PostgreSQL with PostgREST API
+- **Authentication**: Email/password + OAuth (Google, GitHub)
+- **Storage**: File upload/download
+- **AI**: OpenRouter key provisioning and model catalog for direct OpenAI-compatible integrations
+- **Functions**: Serverless function deployment
+- **Realtime**: WebSocket pub/sub (database + client events)
 
-1. Collect or receive an announcement document from PDF, URL, pasted text, or demo fixture.
-2. Analyze the announcement and extract key requirements with source evidence.
-3. Identify required user-provided materials.
-4. Ask only for missing information needed to draft accurately.
-5. Generate section-level drafts.
-6. Ask the user to confirm or revise important claims.
-7. Complete the final application/submission document.
-8. Export to editable formats, with HWPX as the target Korean document format.
+## Installation
 
-The long-term direction is a student-focused community for discovering and participating in competitions and public opportunities. Defer feed, team recruiting, profile, recommendation, and community features until the Agent MVP is reliable.
+The following is a step-by-step guide to installing and using the InsForge TypeScript SDK for Web applications. If you are building other types of applications, please refer to:
+- [Swift SDK documentation](/sdks/swift/overview) for iOS, macOS, tvOS, and watchOS applications.
+- [Kotlin SDK documentation](/sdks/kotlin/overview) for Android applications.
+- [REST API documentation](/sdks/rest/overview) for direct HTTP API access.
 
-## Project Structure
+### 🚨 CRITICAL: Follow these steps in order
 
-- `frontend`: Next.js 14, React, Tailwind, TypeScript.
-- `backend`: FastAPI, parsing, OpenAI analysis/drafting, workflow APIs, export APIs.
-- `docs`: product plans, architecture, Agent harness, evals, development docs, and project assets.
-- Root deployment/config files include `render.yaml`.
+### Step 1: Download Template
 
-Avoid touching generated or dependency directories:
+Use the `download-template` MCP tool to create a new project with your backend URL and anon key pre-configured.
 
-- `frontend/node_modules`
-- `frontend/.next`
-- `backend/venv`
-- `__pycache__`
-
-## Development Rules
-
-- Read the existing implementation before changing code.
-- Prefer existing project patterns over new abstractions.
-- Keep changes scoped to the requested feature or bug.
-- Do not edit `.env` or `.env.local` unless explicitly requested.
-- When adding environment variables, update `.env.example`.
-- Preserve user work and do not revert unrelated changes.
-- Use structured schemas and parsers for document data whenever practical.
-- Treat Korean copy, prompts, and labels carefully.
-- If a file contains mojibake or broken Korean text, repair the touched area instead of spreading it.
-
-## Agent MVP Principles
-
-Announcement analysis should extract, when available:
-
-- Title and source
-- Hosting or managing organization
-- Program/category type
-- Application period and deadlines
-- Eligibility requirements
-- Required and optional documents
-- File format requirements
-- Submission method
-- Evaluation criteria
-- Benefits, prize, grant amount, or support details
-- Required application form sections
-- Important cautions or disqualification rules
-- Uncertain fields requiring confirmation
-- Source evidence for important extracted facts
-
-Do not silently invent critical facts such as deadlines, eligibility, budget amounts, organization names, required files, or submission methods. If the source document is ambiguous, mark the field as uncertain and ask for confirmation.
-
-Draft generation must be staged:
-
-1. Use the announcement analysis as constraints.
-2. Use only user-provided information and extracted facts as source material.
-3. Generate drafts by section, not as one opaque final blob.
-4. Preserve `confirmation_required` for claims that need user review.
-5. Require user confirmation before finalizing submission-ready content.
-
-## HWPX Export Principles
-
-HWPX is the target final Korean document format. Follow the installed `hwpx` skill and the `jkf87/hwpx-skill` workflow:
-
-- HWPX is a ZIP package with XML parts.
-- Run namespace fixing after every generated HWPX.
-- Validate the generated HWPX before treating it as ready.
-- If a user provides a `.hwp`, convert it to `.hwpx` before further processing.
-- If a user provides a complex `.hwpx` form, prefer form cloning/replacement over rebuilding XML from scratch.
-- Preserve tables, images, styles, and run structure when filling official forms.
-
-HTML export is a fallback for editable text. It is not a substitute for verified HWPX export.
-
-## Frontend Guidelines
-
-- Build the actual document workflow, not a marketing landing page.
-- Prioritize upload, analysis results, checklists, input collection, drafts, confirmation, and export.
-- Keep UI dense enough for repeated document work while friendly for students.
-- Make mobile and desktop layouts usable.
-- Use existing Tailwind and component conventions.
-- Prioritize clarity, progress state, error recovery, and next actions.
-
-## Backend Guidelines
-
-- Keep API behavior explicit and typed with Pydantic schemas.
-- Keep parsing, analysis, drafting, storage, and export concerns separated.
-- Prefer deterministic post-processing for AI outputs.
-- Validate AI JSON before returning it to the frontend.
-- Store enough metadata for users to resume analysis and drafting.
-- Handle large files, unsupported formats, parse failures, OpenAI failures, and HWPX export failures with clear errors.
-
-## Verification
-
-When frontend code changes, run from `frontend` when feasible:
+### Step 2: Install SDK
 
 ```bash
-npm run build
+npm install @insforge/sdk@latest
 ```
 
-When backend code changes, run a relevant import/startup/schema validation check.
+### Step 3: Create SDK Client
 
-When API contracts change, update both backend schemas and frontend types.
+You must create a client instance using `createClient()` with your base URL and anon key:
 
-When document parsing, AI analysis, prompt behavior, or HWPX export changes, test with representative public notice fixtures and summarize observed output.
+```javascript
+import { createClient } from '@insforge/sdk';
+
+const client = createClient({
+  baseUrl: 'https://your-app.region.insforge.app',  // Your InsForge backend URL
+  anonKey: 'your-anon-key-here'       // Get this from backend metadata
+});
+
+```
+
+**API BASE URL**: Your API base URL is `https://your-app.region.insforge.app`.
+
+## Getting Detailed Documentation
+
+### 🚨 CRITICAL: Always Fetch Documentation Before Writing Code
+
+InsForge provides official SDKs and REST APIs, use them to interact with InsForge services from your application code.
+
+- [TypeScript SDK](/sdks/typescript/overview) - JavaScript/TypeScript
+- [Swift SDK](/sdks/swift/overview) - iOS, macOS, tvOS, and watchOS
+- [Kotlin SDK](/sdks/kotlin/overview) - Android and Kotlin Multiplatform
+- [REST API](/sdks/rest/overview) - Direct HTTP API access
+
+Before writing or editing any InsForge integration code, you **MUST** call the `fetch-docs` or `fetch-sdk-docs` MCP tool to get the latest SDK documentation. This ensures you have accurate, up-to-date implementation patterns.
+
+### Use the InsForge `fetch-docs` MCP tool to get specific SDK documentation:
+
+Available documentation types:
+
+- `"instructions"` - Essential backend setup (START HERE)
+- `"real-time"` - Real-time pub/sub (database + client events) via WebSockets
+- `"db-sdk-typescript"` - Database operations with TypeScript SDK
+- **Authentication** - Choose based on implementation:
+  - `"auth-sdk-typescript"` - TypeScript SDK methods for custom auth flows
+  - `"auth-components-react"` - Pre-built auth UI for React+Vite (singlepage App)
+  - `"auth-components-react-router"` - Pre-built auth UI for React(Vite+React Router) (Multipage App)
+  - `"auth-components-nextjs"` - Pre-built auth UI for Nextjs (SSR App)
+- `"storage-sdk"` - File storage operations
+- `"functions-sdk"` - Serverless functions invocation
+- `"ai-integration-sdk"` - AI integration with the provisioned OpenRouter key and OpenAI SDK
+- `"real-time"` - Real-time pub/sub (database + client events) via WebSockets
+- `"deployment"` - Deploy frontend applications via MCP tool
+
+These documentations are mostly for TypeScript SDK. For other languages, you can also use `fetch-sdk-docs` mcp tool to get specific documentation.
+
+### Use the InsForge `fetch-sdk-docs` MCP tool to get specific SDK documentation
+
+You can fetch sdk documentation using the `fetch-sdk-docs` MCP tool with specific feature type and language.
+
+Available feature types:
+- db - Database operations
+- storage - File storage operations
+- functions - Serverless functions invocation
+- auth - User authentication
+- ai - AI integration with the provisioned OpenRouter key and OpenAI SDK
+- realtime - Real-time pub/sub (database + client events) via WebSockets
+
+Available languages:
+- typescript - JavaScript/TypeScript SDK
+- swift - Swift SDK (for iOS, macOS, tvOS, and watchOS)
+- kotlin - Kotlin SDK (for Android and JVM applications)
+- rest-api - REST API
+
+## When to Use SDK vs MCP Tools
+
+### Always SDK for Application Logic:
+
+- Authentication (register, login, logout, profiles)
+- Database CRUD (select, insert, update, delete)
+- Storage operations (upload, download files)
+- AI integration via the provisioned OpenRouter key with the OpenAI SDK or OpenRouter HTTP API
+- Serverless function invocation
+
+### Use MCP Tools for Infrastructure:
+
+- Project scaffolding (`download-template`) - Download starter templates with InsForge integration
+- Backend setup and metadata (`get-backend-metadata`)
+- Database schema management (`run-raw-sql`, `get-table-schema`)
+- Storage bucket creation (`create-bucket`, `list-buckets`, `delete-bucket`)
+- Serverless function deployment (`create-function`, `update-function`, `delete-function`)
+- Frontend deployment (`create-deployment`) - Deploy frontend apps to InsForge hosting
+
+## Important Notes
+
+- For auth: use `auth-sdk` for custom UI, or framework-specific components for pre-built UI
+- SDK returns `{data, error}` structure for all operations
+- Database inserts require array format: `[{...}]`
+- Serverless functions have single endpoint (no subpaths)
+- Storage: Upload files to buckets, store URLs in database
+- AI integrations should call OpenRouter directly with `baseURL: "https://openrouter.ai/api/v1"` and a server-side `OPENROUTER_API_KEY`
+- **EXTRA IMPORTANT**: Use Tailwind CSS 3.4 (do not upgrade to v4). Lock these dependencies in `package.json`
