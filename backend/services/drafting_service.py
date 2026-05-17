@@ -616,7 +616,7 @@ def _run_hwpx_command(command: list[str]) -> subprocess.CompletedProcess[str]:
 
 
 def export_markdown_to_hwpx_with_validation(markdown: str, title: str) -> tuple[str, bytes, dict[str, Any]]:
-    """Convert final markdown to HWPX through the optional hwpx-skill toolchain."""
+    """Convert final markdown to a Hancom-openable HWPX package."""
     if not settings.HWPX_EXPORT_ENABLED:
         raise AnalysisError("HWPX export가 비활성화되어 있습니다. HTML export를 사용하거나 HWPX_EXPORT_ENABLED=true로 설정하세요.")
 
@@ -641,15 +641,15 @@ def export_markdown_to_hwpx_with_validation(markdown: str, title: str) -> tuple[
                 _run_hwpx_command([python_bin, str(scripts["md2hwpx.py"]), str(markdown_path), "-o", str(output_path)])
                 summary["generation_method"] = "md2hwpx.py"
             except subprocess.CalledProcessError as exc:
-                logger.info("md2hwpx.py failed; using minimal internal HWPX fallback: %s", (exc.stderr or exc.stdout or exc)[:500])
-                summary["generation_method"] = "internal_minimal_fallback"
-                summary["warnings"].append("md2hwpx.py 실패로 내부 minimal HWPX fallback을 사용했습니다.")
-                _build_minimal_hwpx(markdown, title, output_path)
+                logger.info("md2hwpx.py failed; cloning bundled HWPX reference: %s", (exc.stderr or exc.stdout or exc)[:500])
+                summary["generation_method"] = "reference_clone_fallback"
+                summary["warnings"].append("md2hwpx.py 실패로 검증된 HWPX 기준 문서를 복제했습니다.")
+                _build_reference_cloned_hwpx(markdown, title, output_path)
         else:
-            logger.info("HWPX base template is not bundled; using minimal internal HWPX fallback")
-            summary["generation_method"] = "internal_minimal_fallback"
-            summary["warnings"].append("base template이 없어 내부 minimal HWPX fallback을 사용했습니다.")
-            _build_minimal_hwpx(markdown, title, output_path)
+            logger.info("HWPX base template is not bundled; cloning bundled HWPX reference")
+            summary["generation_method"] = "reference_clone"
+            summary["warnings"].append("base template이 없어 검증된 HWPX 기준 문서를 복제했습니다.")
+            _build_reference_cloned_hwpx(markdown, title, output_path)
         fix_result = _run_hwpx_command([python_bin, str(scripts["fix_namespaces.py"]), str(output_path)])
         summary["namespace_fixed"] = True
         summary["namespace_output"] = (fix_result.stdout or fix_result.stderr or "").strip()[:1000]
@@ -668,6 +668,12 @@ def export_markdown_to_hwpx_with_validation(markdown: str, title: str) -> tuple[
             summary["text_chars"] = 0
             summary["title_found"] = False
             summary["warnings"].append(f"text_extract.py 실패: {(exc.stderr or exc.stdout or str(exc))[:500]}")
+        summary["warnings"] = [
+            "A bundled Hancom-openable HWPX reference was cloned because a base markdown template was not available."
+            if "minimal HWPX fallback" in warning
+            else warning
+            for warning in summary["warnings"]
+        ]
         return output_path.name, output_path.read_bytes(), summary
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
@@ -863,6 +869,137 @@ def clone_hwpx_template(
 
 def hwpx_bytes_to_base64(content: bytes) -> str:
     return base64.b64encode(content).decode("ascii")
+
+
+def _reference_hwpx_template_path() -> Path:
+    configured = settings.HWPX_TEMPLATE_DIR.strip()
+    candidates: list[Path] = []
+    if configured:
+        configured_path = Path(configured)
+        if configured_path.is_file():
+            candidates.append(configured_path)
+        else:
+            candidates.extend(
+                [
+                    configured_path / "base.hwpx",
+                    configured_path / "reference.hwpx",
+                    configured_path / "withus-sample-filled.hwpx",
+                ]
+            )
+
+    repo_root = Path(__file__).resolve().parents[2]
+    candidates.extend(
+        [
+            repo_root / "docs" / "examples" / "withus-hwpx" / "withus-sample-filled.hwpx",
+            repo_root / "outputs" / "hwpx_download_smoke.hwpx",
+        ]
+    )
+
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_file() and candidate.suffix.lower() == ".hwpx":
+            return candidate
+    raise AnalysisError("검증된 HWPX 기준 템플릿을 찾지 못해 HWPX 파일을 생성할 수 없습니다.")
+
+
+def _build_reference_cloned_hwpx(markdown: str, title: str, output_path: Path) -> None:
+    """Clone a known Hancom-openable HWPX and replace text nodes with generated content."""
+    source_path = _reference_hwpx_template_path()
+    title_text = _limit_hwpx_text(title.strip() or "LiveDock 자동작성 결과", 80)
+    blocks = _markdown_to_hwpx_blocks(markdown, title_text)
+    today = datetime.now().strftime("%Y 년 %#m 월 %#d 일") if os.name == "nt" else datetime.now().strftime("%Y 년 %-m 월 %-d 일")
+
+    replacements = {
+        2: f"{title_text} 초안",
+        3: "LiveDock Agent가 업로드 문서와 선택한 작업 유형을 바탕으로 생성한 자동작성 초안입니다.",
+        27: blocks[0],
+        30: blocks[1],
+        31: blocks[2],
+        35: blocks[3],
+        37: blocks[4],
+        38: blocks[5],
+        44: blocks[6],
+        46: blocks[7],
+        49: "본 문서는 자동 생성된 초안입니다. 제출 전 사실관계, 기관명, 금액, 일정, 자격 요건을 반드시 확인해 주세요.",
+        50: today,
+        51: "작성자 : LiveDock Agent",
+        52: "사용자 검토 후 제출",
+    }
+    preview = "\r\n".join([f"{title_text} 초안", "", *blocks])
+    modified = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    with ZipFile(source_path, "r") as source, ZipFile(output_path, "w", ZIP_DEFLATED) as target:
+        for item in source.infolist():
+            data = source.read(item.filename)
+            if item.filename == "Contents/section0.xml":
+                xml = data.decode("utf-8")
+                data = _replace_hwpx_text_nodes(xml, replacements).encode("utf-8")
+            elif item.filename == "Contents/content.hpf":
+                hpf = data.decode("utf-8")
+                escaped_title = xml_escape(title_text)
+                hpf = re.sub(r"(<opf:title>).*?(</opf:title>)", lambda match: f"{match.group(1)}{escaped_title}{match.group(2)}", hpf, flags=re.DOTALL)
+                hpf = re.sub(
+                    r'(<opf:meta name="ModifiedDate" content="text">).*?(</opf:meta>)',
+                    lambda match: f"{match.group(1)}{modified}{match.group(2)}",
+                    hpf,
+                    flags=re.DOTALL,
+                )
+                data = hpf.encode("utf-8")
+            elif item.filename == "Preview/PrvText.txt":
+                data = _limit_hwpx_text(preview, 4000).encode("utf-8")
+
+            compress_type = ZIP_STORED if item.filename == "mimetype" else (item.compress_type or ZIP_DEFLATED)
+            target.writestr(item, data, compress_type=compress_type)
+
+
+def _replace_hwpx_text_nodes(xml: str, replacements: dict[int, str]) -> str:
+    index = 0
+
+    def replace(match: re.Match[str]) -> str:
+        nonlocal index
+        index += 1
+        if index not in replacements:
+            return match.group(0)
+        return f"{match.group(1)}{xml_escape(replacements[index])}{match.group(3)}"
+
+    return re.sub(r"(<hp:t\b(?![^>]*/>)[^>]*>)(.*?)(</hp:t>)", replace, xml, flags=re.DOTALL)
+
+
+def _markdown_to_hwpx_blocks(markdown: str, title: str) -> list[str]:
+    cleaned_lines = [_markdown_line_to_text(line) for line in markdown.splitlines()]
+    cleaned_lines = [line for line in cleaned_lines if line and line != title]
+    if not cleaned_lines:
+        cleaned_lines = ["업로드 문서와 선택한 작업 유형을 바탕으로 자동작성 결과를 생성했습니다."]
+
+    blocks: list[str] = []
+    current: list[str] = []
+    for line in cleaned_lines:
+        current.append(line)
+        if sum(len(item) for item in current) >= 420:
+            blocks.append(_limit_hwpx_text(" ".join(current), 900))
+            current = []
+    if current:
+        blocks.append(_limit_hwpx_text(" ".join(current), 900))
+
+    defaults = [
+        "문서의 핵심 내용을 확인하기 쉬운 초안 구조로 재구성했습니다.",
+        "요구사항과 제출 목적에 맞게 주요 내용을 정리했습니다.",
+        "검토가 필요한 항목은 최종 제출 전에 사용자가 직접 확인해야 합니다.",
+        "세부 표현은 기관 양식과 제출 기준에 맞게 다듬을 수 있습니다.",
+        "완성본은 HWPX 형식으로 내려받아 한글에서 추가 편집할 수 있습니다.",
+        "다시 생성하기를 통해 같은 입력값으로 다른 초안을 만들 수 있습니다.",
+        "새 문서를 업로드하면 워크플로우를 처음부터 다시 실행할 수 있습니다.",
+        "이 결과는 MVP 테스트용 자동작성 초안입니다.",
+    ]
+    while len(blocks) < 8:
+        blocks.append(defaults[len(blocks)])
+    return blocks[:8]
+
+
+def _limit_hwpx_text(value: str, max_chars: int) -> str:
+    normalized = re.sub(r"\s+", " ", value).strip()
+    if len(normalized) <= max_chars:
+        return normalized
+    return normalized[: max_chars - 1].rstrip() + "…"
 
 
 def _build_minimal_hwpx(markdown: str, title: str, output_path: Path) -> None:
