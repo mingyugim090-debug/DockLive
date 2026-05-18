@@ -64,7 +64,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         <div className="mt-auto rounded-2xl border border-[#DDE7E2] bg-[#F6FAF8] p-4">
           <p className="text-sm font-bold text-[#24312D]">1분 안에 시작</p>
           <p className="mt-2 text-xs leading-5 text-[#65736E]">
-            템플릿 선택, 정보 입력, 참고자료 업로드, 미리보기, 다운로드 순서로 공고문을 만듭니다.
+            템플릿 선택, 핵심 정보 입력, AI 초안 생성, 미리보기, 다운로드 순서로 공고문을 만듭니다.
           </p>
         </div>
       </aside>

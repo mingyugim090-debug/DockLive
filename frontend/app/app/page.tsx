@@ -1,29 +1,22 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { noticeTemplates, type NoticeTemplate } from '@/data/mockTemplates';
 import { noticeSteps, useNoticeBuilder } from '@/hooks/useNoticeBuilder';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { NoticeTemplatePreviewModal } from '@/components/templates/NoticeTemplatePreview';
 
-const fileAccept = '.pdf,.docx,.hwp,.hwpx,.txt,.md';
-
-function fileSize(size: number) {
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-  return `${(size / 1024 / 1024).toFixed(1)} MB`;
-}
-
 export default function NoticeBuilderPage() {
   const searchParams = useSearchParams();
   const initialTemplateId = useMemo(() => searchParams.get('template'), [searchParams]);
   const builder = useNoticeBuilder(initialTemplateId);
-  const fileRef = useRef<HTMLInputElement>(null);
   const [previewTemplate, setPreviewTemplate] = useState<NoticeTemplate | null>(null);
 
   const canContinueInfo = builder.missingRequired.length === 0;
+  const coreFields = builder.selectedTemplate.fields.filter((field) => field.required);
+  const optionalFields = builder.selectedTemplate.fields.filter((field) => !field.required);
 
   return (
     <div className="space-y-6">
@@ -101,10 +94,12 @@ export default function NoticeBuilderPage() {
           <div className="flex flex-col gap-2">
             <p className="text-sm font-bold text-[#3A7A68]">Step 2. 필수 정보 입력</p>
             <h2 className="text-2xl font-bold text-[#24312D]">{builder.selectedTemplate.name}</h2>
-            <p className="text-sm leading-6 text-[#65736E]">정확히 모르는 항목은 비워도 됩니다. 필수 항목만 채우면 기본 입력값으로 초안을 만들 수 있습니다.</p>
+            <p className="text-sm leading-6 text-[#65736E]">
+              핵심 항목만 입력하면 내장된 HWPX 샘플 양식 기준으로 초안을 만듭니다. 세부 일정과 제출 서류는 필요할 때만 펼쳐서 보완하세요.
+            </p>
           </div>
           <div className="mt-6 grid gap-4 md:grid-cols-2">
-            {builder.selectedTemplate.fields.map((field) => (
+            {coreFields.map((field) => (
               <label key={field.id} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
                 <span className="text-sm font-bold text-[#34443F]">
                   {field.label}
@@ -129,55 +124,42 @@ export default function NoticeBuilderPage() {
               </label>
             ))}
           </div>
+          <details className="mt-5 rounded-2xl border border-[#E4EBE7] bg-[#FBFCFB] p-4">
+            <summary className="cursor-pointer text-sm font-bold text-[#245D50]">
+              선택 입력 더보기
+              <span className="ml-2 font-semibold text-[#7B8782]">일정, 지원 내용, 제출 서류 등은 비워도 AI가 샘플 양식 기준으로 채웁니다.</span>
+            </summary>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              {optionalFields.map((field) => (
+                <label key={field.id} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
+                  <span className="text-sm font-bold text-[#34443F]">{field.label}</span>
+                  {field.type === 'textarea' ? (
+                    <textarea
+                      value={builder.inputValues[field.id] ?? ''}
+                      onChange={(event) => builder.setInputValue(field.id, event.target.value)}
+                      placeholder={field.placeholder}
+                      className="mt-2 min-h-24 w-full rounded-xl border border-[#DDE7E2] bg-white px-4 py-3 text-sm leading-6 text-[#24312D] outline-none transition focus:border-[#6A9C89]"
+                    />
+                  ) : (
+                    <input
+                      value={builder.inputValues[field.id] ?? ''}
+                      onChange={(event) => builder.setInputValue(field.id, event.target.value)}
+                      placeholder={field.placeholder}
+                      type={field.type === 'date' ? 'text' : field.type}
+                      className="mt-2 h-12 w-full rounded-xl border border-[#DDE7E2] bg-white px-4 text-sm text-[#24312D] outline-none transition focus:border-[#6A9C89]"
+                    />
+                  )}
+                </label>
+              ))}
+            </div>
+          </details>
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-[#65736E]">
               {canContinueInfo ? '필수 정보가 입력되었습니다.' : `남은 필수 항목: ${builder.missingRequired.map((field) => field.label).join(', ')}`}
             </p>
-            <Button disabled={!canContinueInfo} onClick={() => builder.setCurrentStep('upload')}>참고자료 업로드로 이동</Button>
-          </div>
-        </Card>
-      ) : null}
-
-      {builder.currentStep === 'upload' ? (
-        <Card className="rounded-2xl">
-          <p className="text-sm font-bold text-[#3A7A68]">Step 3. 참고자료 업로드</p>
-          <h2 className="mt-1 text-2xl font-bold text-[#24312D]">기존 공고문, 운영계획서, 내부 메모를 참고자료로 추가할 수 있습니다.</h2>
-          <p className="mt-2 text-sm leading-6 text-[#65736E]">선택 사항입니다. 업로드 없이도 앞 단계의 기본 정보만으로 공고문을 생성할 수 있습니다.</p>
-          <input
-            ref={fileRef}
-            type="file"
-            multiple
-            accept={fileAccept}
-            className="hidden"
-            onChange={(event) => {
-              if (event.target.files) builder.addReferenceFiles(event.target.files);
-              event.currentTarget.value = '';
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            className="mt-6 flex min-h-[180px] w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#CADBD4] bg-[#F8FBFA] p-6 text-center transition hover:bg-[#F2F7F5]"
-          >
-            <span className="text-base font-bold text-[#245D50]">참고자료 선택</span>
-            <span className="mt-2 text-sm text-[#65736E]">PDF, DOCX, HWP, HWPX, TXT, MD 파일을 업로드할 수 있습니다.</span>
-          </button>
-          {builder.referenceFiles.length ? (
-            <div className="mt-5 grid gap-3 md:grid-cols-2">
-              {builder.referenceFiles.map((file) => (
-                <div key={`${file.name}-${file.size}`} className="flex items-center justify-between gap-3 rounded-xl border border-[#E4EBE7] bg-white p-4">
-                  <div>
-                    <p className="font-semibold text-[#24312D]">{file.name}</p>
-                    <p className="mt-1 text-xs text-[#7B8782]">{fileSize(file.size)}</p>
-                  </div>
-                  <Button type="button" variant="ghost" onClick={() => builder.removeReferenceFile(file.name)}>제거</Button>
-                </div>
-              ))}
-            </div>
-          ) : null}
-          <div className="mt-6 flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => builder.setCurrentStep('info')}>정보 수정</Button>
-            <Button onClick={builder.generateDraft}>AI 초안 생성</Button>
+            <Button disabled={!canContinueInfo || builder.isGenerating} onClick={builder.generateDraft}>
+              {builder.isGenerating ? 'AI 초안 생성 중' : 'AI 초안 생성'}
+            </Button>
           </div>
         </Card>
       ) : null}

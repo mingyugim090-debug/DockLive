@@ -22,6 +22,140 @@ function HwpTable({ rows }: { rows: Array<[string, string]> }) {
   );
 }
 
+function ApplicationFormBlock({ template }: { template: NoticeTemplate }) {
+  const { sample } = template;
+
+  return (
+    <section className="mt-5">
+      <h4 className="text-center text-sm font-extrabold">참가 신청서</h4>
+      <table className="mt-3 w-full border-collapse text-[11px] leading-5">
+        <tbody>
+          {[
+            ['신청자/기업명', '○○○'],
+            ['소속/대표자', sample.organization],
+            ['신청 분야', template.purpose],
+            ['연락처', '010-0000-0000 / notice@example.go.kr'],
+          ].map(([label, value]) => (
+            <tr key={label}>
+              <th className="w-28 border border-[#AEB8B2] bg-[#F0F3F1] px-2 py-1.5 text-left">{label}</th>
+              <td className="border border-[#AEB8B2] px-2 py-1.5">{value}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="mt-3 border border-[#AEB8B2]">
+        <div className="bg-[#F0F3F1] px-2 py-1.5 text-[11px] font-bold">신청 내용 및 추진 계획</div>
+        <div className="min-h-20 px-3 py-2 text-[11px] leading-5 text-[#34443F]">
+          {sample.sections[0]?.body[0]}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ProgramTableBlock({ rows }: { rows: Array<[string, string]> }) {
+  return (
+    <section className="mt-5">
+      <h4 className="text-[13px] font-extrabold">프로그램별 모집 현황</h4>
+      <table className="mt-2 w-full border-collapse text-[11px] leading-5">
+        <thead>
+          <tr className="bg-[#F0F3F1]">
+            {['구분', '기간/인원', '운영 내용'].map((item) => (
+              <th key={item} className="border border-[#AEB8B2] px-2 py-1.5 text-left">{item}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.slice(0, 3).map(([label, value], index) => (
+            <tr key={label}>
+              <td className="border border-[#AEB8B2] px-2 py-1.5">{label}</td>
+              <td className="border border-[#AEB8B2] px-2 py-1.5">{value}</td>
+              <td className="border border-[#AEB8B2] px-2 py-1.5">{index === 0 ? '강의·실습' : index === 1 ? '접수 및 선발' : '수료 관리'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
+function RfpBlock({ template }: { template: NoticeTemplate }) {
+  return (
+    <section className="mt-5">
+      <h4 className="text-center text-sm font-extrabold">제안요청서</h4>
+      <HwpTable rows={template.sample.overviewRows} />
+      <div className="mt-4 rounded-sm border border-[#AEB8B2]">
+        <div className="bg-[#F0F3F1] px-2 py-1.5 text-[11px] font-bold">제안서 작성 목차</div>
+        <ol className="grid grid-cols-2 gap-x-4 gap-y-1 px-4 py-2 text-[11px] leading-5">
+          {['사업 이해도', '수행 조직 및 인력', '추진 전략', '세부 과업 수행 방안', '품질 관리', '보안 및 사후관리'].map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
+function ScholarshipBlock({ template }: { template: NoticeTemplate }) {
+  return (
+    <section className="mt-5">
+      <HwpTable rows={template.sample.overviewRows} />
+      <div className="mt-4 grid grid-cols-2 gap-3 text-[11px] leading-5">
+        <div className="border border-[#AEB8B2]">
+          <div className="bg-[#F0F3F1] px-2 py-1.5 font-bold">공통 제출서류</div>
+          <ol className="list-decimal px-5 py-2">
+            {template.sample.attachments.slice(0, 3).map((item) => <li key={item}>{item}</li>)}
+          </ol>
+        </div>
+        <div className="border border-[#AEB8B2]">
+          <div className="bg-[#F0F3F1] px-2 py-1.5 font-bold">평가 항목</div>
+          <p className="px-2 py-2">학업 성취도, 성장 가능성, 경제 여건, 제출 서류 충실도</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ResearchBlock({ template }: { template: NoticeTemplate }) {
+  return (
+    <section className="mt-5">
+      <HwpTable rows={template.sample.overviewRows} />
+      <div className="mt-4 border border-[#AEB8B2] text-[11px] leading-5">
+        <div className="bg-[#F0F3F1] px-2 py-1.5 font-bold">연구윤리 및 보안 확인</div>
+        <div className="grid grid-cols-[24px_1fr] gap-y-1 px-3 py-2">
+          {['개인정보 보호 기준 준수', '연구자료 외부 반출 금지', '이해상충 및 참여 제한 여부 확인'].map((item) => (
+            <div key={item} className="contents">
+              <span>□</span>
+              <span>{item}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function SampleBody({ template }: { template: NoticeTemplate }) {
+  const { sample } = template;
+
+  if (sample.layout === 'application') {
+    return <ApplicationFormBlock template={template} />;
+  }
+  if (sample.layout === 'program') {
+    return <ProgramTableBlock rows={sample.overviewRows} />;
+  }
+  if (sample.layout === 'rfp') {
+    return <RfpBlock template={template} />;
+  }
+  if (sample.layout === 'scholarship') {
+    return <ScholarshipBlock template={template} />;
+  }
+  if (sample.layout === 'research') {
+    return <ResearchBlock template={template} />;
+  }
+  return <HwpTable rows={sample.overviewRows} />;
+}
+
 function SampleHwpxPage({ template }: { template: NoticeTemplate }) {
   const { sample } = template;
 
@@ -42,7 +176,7 @@ function SampleHwpxPage({ template }: { template: NoticeTemplate }) {
           <p className="mt-2 text-[12px] leading-6 text-[#34443F]">{sample.intro}</p>
         </section>
 
-        <HwpTable rows={sample.overviewRows} />
+        <SampleBody template={template} />
 
         <div className="mt-6 space-y-4">
           {sample.sections.map((section) => (

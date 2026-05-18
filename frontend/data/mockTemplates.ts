@@ -22,6 +22,7 @@ export interface NoticeTemplate {
 }
 
 export interface NoticeTemplateSample {
+  layout: 'notice' | 'application' | 'program' | 'scholarship' | 'research' | 'rfp';
   sourceName: string;
   sourceUrl: string;
   documentNo: string;
@@ -44,7 +45,7 @@ const commonFields: NoticeInputField[] = [
   { id: 'selectionCriteria', label: '선정 기준', type: 'textarea', required: false, placeholder: '예: 신청 자격 충족 여부, 사업 적합성, 제출 서류 완비 여부' },
   { id: 'benefit', label: '지원 내용', type: 'textarea', required: false, placeholder: '예: 교육, 멘토링, 공간 지원, 사업화 자금, 네트워킹' },
   { id: 'documents', label: '제출 서류', type: 'textarea', required: false, placeholder: '예: 신청서, 사업계획서, 개인정보 수집 및 이용 동의서' },
-  { id: 'department', label: '담당 부서', type: 'text', required: true, placeholder: '예: 창업지원팀' },
+  { id: 'department', label: '담당 부서', type: 'text', required: false, placeholder: '예: 창업지원팀' },
   { id: 'phone', label: '연락처', type: 'tel', required: false, placeholder: '예: 02-000-0000' },
   { id: 'email', label: '이메일', type: 'email', required: false, placeholder: '예: notice@example.go.kr' },
   { id: 'attachments', label: '붙임 문서 목록', type: 'textarea', required: false, placeholder: '예: 신청서 1부\n개인정보 수집 및 이용 동의서 1부' },
@@ -92,6 +93,7 @@ export const noticeTemplates: NoticeTemplate[] = [
     '캠프 목적, 참가 대상, 일정, 신청 방법, 선정 기준을 행정 공고문 형식으로 정리합니다.',
     '#4F7CAC',
     {
+      layout: 'application',
       sourceName: '강원대학교 창업경진대회 HWPX 공고 첨부',
       sourceUrl: 'https://biology.kangwon.ac.kr/biology/selectBbsNttView.do?bbsNo=222&key=1011&nttNo=165079',
       documentNo: '창업지원단 공고 제2026-01호',
@@ -120,6 +122,7 @@ export const noticeTemplates: NoticeTemplate[] = [
     '지원 대상, 지원 내용, 평가 절차, 제출 서류를 참여기업 모집 공고에 맞춰 구성합니다.',
     '#3A8F7B',
     {
+      layout: 'notice',
       sourceName: 'KOCCA/WelCon 참여기업 모집 HWPX 공고 양식',
       sourceUrl: 'https://welcon.kocca.kr/en/info/business/1955732',
       documentNo: '지원사업 공고 제2026-02호',
@@ -148,6 +151,7 @@ export const noticeTemplates: NoticeTemplate[] = [
     '교육 목적, 수강 대상, 교육 일정, 신청 절차와 수료 안내를 한 문서로 만듭니다.',
     '#6C7A89',
     {
+      layout: 'program',
       sourceName: '목원대학교 교육 프로그램 HWP 안내 양식',
       sourceUrl: 'https://www.mokwon.ac.kr/kr/html/sub06/0601.html?GotoPage=121&mode=V&no=5d2b89c217f2ac6ec5700d58072a4c6a',
       documentNo: '교육운영 공고 제2026-03호',
@@ -176,6 +180,7 @@ export const noticeTemplates: NoticeTemplate[] = [
     '행사 개요, 참가 대상, 접수 기간, 참여 방법과 유의사항을 안내문 톤으로 작성합니다.',
     '#B07D62',
     {
+      layout: 'notice',
       sourceName: '연수문화재단 참여 합창단 모집 PDF 공고 양식',
       sourceUrl: 'https://www.ysfac.or.kr/upfiles/editor/2025_09/0ca0834037879f8bc.pdf?ver=0.5821070726355883',
       documentNo: '행사운영 공고 제2026-04호',
@@ -204,6 +209,7 @@ export const noticeTemplates: NoticeTemplate[] = [
     '신청 자격, 선발 인원, 장학 내용, 제출 서류와 문의처를 명확하게 정리합니다.',
     '#7A8B54',
     {
+      layout: 'scholarship',
       sourceName: '동구 차세대인재육성장학생 HWP 공고 양식',
       sourceUrl: 'https://www.donggu.go.kr/dg/attach/preview/5288c5a713acaf0525f0f7f948bfc0c5/778bdbf5db9ced7c8fd52756c00bf0cd',
       documentNo: '장학 공고 제2026-05호',
@@ -232,6 +238,7 @@ export const noticeTemplates: NoticeTemplate[] = [
     '입주 대상, 모집 규모, 공간 지원, 평가 기준과 계약 절차를 공고문 구조로 작성합니다.',
     '#6E7F80',
     {
+      layout: 'application',
       sourceName: '기업마당 입주기업 모집 공고와 HWP 첨부 서식',
       sourceUrl: 'https://bizinfo.go.kr/biz/bizb/selectBIZB200Detail.do?condition=&cpage=&keyword=&mvnEntrprsRcritPblancId=MVNP_000000000000266&rows=10',
       documentNo: '입주모집 공고 제2026-06호',
@@ -260,6 +267,7 @@ export const noticeTemplates: NoticeTemplate[] = [
     '연구 목적, 참여 조건, 운영 일정, 윤리 안내와 제출 서류를 기관 공고 형식으로 만듭니다.',
     '#5F819D',
     {
+      layout: 'research',
       sourceName: '한국과학창의재단 연구과제 공모 HWP 신청 양식',
       sourceUrl: 'https://sanhak.kookje.ac.kr/sanhak/index.php?idx=581&mode=view&pCode=projectguide',
       documentNo: '연구과제 공고 제2026-07호',
@@ -288,6 +296,7 @@ export const noticeTemplates: NoticeTemplate[] = [
     '과업 범위, 참가 자격, 제출 방식, 평가 기준과 계약 절차를 입찰 공고 형식으로 구성합니다.',
     '#8A6F5A',
     {
+      layout: 'rfp',
       sourceName: '한국교통연구원 제안요청서 HWP 입찰 공고 양식',
       sourceUrl: 'https://m.koti.re.kr/user/bbs/bidNotiView.do?bbs_no=69994',
       documentNo: '입찰 공고 제2026-08호',

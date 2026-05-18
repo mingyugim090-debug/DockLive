@@ -42,7 +42,7 @@ export function FinalCTASection() {
           </div>
 
           <div className="relative mt-6 flex flex-wrap items-center justify-center gap-4">
-            {['참고자료 업로드 선택', 'HWPX 즉시 다운로드', '미리보기 수정 가능'].map((pill) => (
+            {['샘플 양식 내장', 'HWPX 즉시 다운로드', '미리보기 수정 가능'].map((pill) => (
               <span key={pill} className="flex items-center gap-1.5 text-xs text-[#6B7280]">
                 <svg className="h-3.5 w-3.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />

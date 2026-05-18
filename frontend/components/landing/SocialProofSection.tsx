@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 
 const STATS = [
   { value: '8종', label: '공고문 템플릿' },
-  { value: '6단계', label: '제작 흐름' },
+  { value: '5단계', label: '제작 흐름' },
   { value: 'HWPX', label: '한글 배포 형식' },
 ];
 
@@ -28,7 +28,7 @@ export function SocialProofSection() {
               사용자는 1분 안에<br />제작 흐름을 이해합니다
             </h2>
             <p className="mt-3 text-sm leading-6 text-[#6B7280]">
-              템플릿을 고르고, 기본 정보를 입력하고, 참고자료를 더한 뒤 미리보기에서 확인하고 다운로드합니다.
+              템플릿을 고르고, 핵심 정보만 입력한 뒤 미리보기에서 확인하고 다운로드합니다.
             </p>
             <div className="mt-6 grid grid-cols-3 gap-3">
               {STATS.map(({ value, label }, i) => (
@@ -70,7 +70,7 @@ export function SocialProofSection() {
               <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#9AA1AD]">제작 단계</p>
               {[
                 ['①', '공고문 유형 선택'],
-                ['②', '기본 정보 입력 및 참고자료 업로드'],
+                ['②', '핵심 정보 입력 및 AI 초안 생성'],
                 ['③', '미리보기 확인 후 HWPX 다운로드'],
               ].map(([num, src], i) => (
                 <motion.div

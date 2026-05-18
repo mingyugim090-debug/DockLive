@@ -17,8 +17,8 @@ function UploadStep() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
           </svg>
         </div>
-        <p className="text-xs font-semibold text-[#5263E8]">운영계획서나 참고자료 업로드</p>
-        <p className="text-[10px] text-[#9AA1AD]">선택 사항 · 업로드 없이 생성 가능</p>
+        <p className="text-xs font-semibold text-[#5263E8]">샘플 양식 기반 공고문 시작</p>
+        <p className="text-[10px] text-[#9AA1AD]">업로드 없이 바로 생성 가능</p>
       </div>
       {/* Uploaded file */}
       <motion.div
@@ -315,7 +315,7 @@ function WorkflowScene3D() {
 const TRUST = [
   { value: '1분', label: '흐름 이해' },
   { value: 'HWPX', label: '행정문서 출력' },
-  { value: '6단계', label: '제작 플로우' },
+  { value: '5단계', label: '제작 플로우' },
 ];
 
 /* ── hero section ─────────────────────────────────────────────────── */
@@ -402,7 +402,7 @@ export function HeroSection() {
             <div className="text-center">
               <p className="text-sm font-semibold text-[#273044]">템플릿을 고르면 HWPX 공고문까지</p>
               <p className="mt-1 text-sm leading-6 text-[#6B7280]">
-                공고문 유형 선택, 기본 정보 입력, 참고자료 업로드, 미리보기, 다운로드 흐름으로 1분 안에 방향을 이해할 수 있습니다.
+                공고문 유형 선택, 핵심 정보 입력, AI 초안 생성, 미리보기, 다운로드 흐름으로 1분 안에 방향을 이해할 수 있습니다.
               </p>
             </div>
             <ButtonLink href="/auth?next=/app" className="px-7 py-2.5 text-sm">

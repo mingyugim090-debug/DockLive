@@ -10,12 +10,11 @@ import {
 } from '@/lib/api';
 import type { ExportResponse, NoticeDocument } from '@/lib/types';
 
-export type NoticeBuilderStep = 'template' | 'info' | 'upload' | 'generate' | 'preview' | 'download';
+export type NoticeBuilderStep = 'template' | 'info' | 'generate' | 'preview' | 'download';
 
 export const noticeSteps: Array<{ id: NoticeBuilderStep; label: string }> = [
   { id: 'template', label: '공고문 유형 선택' },
   { id: 'info', label: '기본 정보 입력' },
-  { id: 'upload', label: '참고자료 업로드' },
   { id: 'generate', label: 'AI 초안 생성' },
   { id: 'preview', label: '문서 미리보기' },
   { id: 'download', label: '다운로드' },
@@ -36,7 +35,6 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
   const [currentStep, setCurrentStep] = useState<NoticeBuilderStep>(initialTemplateId ? 'info' : 'template');
   const [selectedTemplateId, setSelectedTemplateId] = useState(initialTemplateId || 'startup_camp_notice');
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
-  const [referenceFiles, setReferenceFiles] = useState<File[]>([]);
   const [draftDocument, setDraftDocument] = useState<NoticeDocument | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -64,18 +62,6 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
     [inputValues, selectedTemplate.fields],
   );
 
-  const addReferenceFiles = useCallback((files: FileList | File[]) => {
-    const next = Array.from(files);
-    setReferenceFiles((current) => {
-      const seen = new Set(current.map((file) => `${file.name}-${file.size}`));
-      return [...current, ...next.filter((file) => !seen.has(`${file.name}-${file.size}`))];
-    });
-  }, []);
-
-  const removeReferenceFile = useCallback((name: string) => {
-    setReferenceFiles((current) => current.filter((file) => file.name !== name));
-  }, []);
-
   const generateDraft = useCallback(async () => {
     if (missingRequired.length > 0) {
       setError('필수 정보를 먼저 입력해 주세요.');
@@ -87,17 +73,17 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
     setWarnings([]);
     setCurrentStep('generate');
     try {
-      const response = await generateNoticeDocument(selectedTemplateId, inputValues, referenceFiles);
+      const response = await generateNoticeDocument(selectedTemplateId, inputValues);
       setDraftDocument(response.data);
       setWarnings(response.warnings ?? []);
       setCurrentStep('preview');
     } catch (err) {
       setError(err instanceof Error ? err.message : '공고문 초안 생성에 실패했습니다.');
-      setCurrentStep('upload');
+      setCurrentStep('info');
     } finally {
       setIsGenerating(false);
     }
-  }, [inputValues, missingRequired.length, referenceFiles, selectedTemplateId]);
+  }, [inputValues, missingRequired.length, selectedTemplateId]);
 
   const updateDraft = useCallback((updater: (document: NoticeDocument) => NoticeDocument) => {
     setDraftDocument((current) => (current ? updater(current) : current));
@@ -126,7 +112,6 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
   const reset = useCallback(() => {
     setCurrentStep('template');
     setInputValues({});
-    setReferenceFiles([]);
     setDraftDocument(null);
     setWarnings([]);
     setError(null);
@@ -138,7 +123,6 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
     selectedTemplate,
     selectedTemplateId,
     inputValues,
-    referenceFiles,
     draftDocument,
     warnings,
     error,
@@ -148,8 +132,6 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
     setCurrentStep,
     selectTemplate,
     setInputValue,
-    addReferenceFiles,
-    removeReferenceFile,
     generateDraft,
     updateDraft,
     download,
