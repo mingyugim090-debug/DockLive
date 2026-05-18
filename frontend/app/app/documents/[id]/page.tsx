@@ -147,8 +147,8 @@ export default function DocumentDetailPage({ params }: { params: { id: string } 
           <div className="mt-6 rounded-[22px] bg-[#EEF2FF] p-4 text-sm leading-6 text-[#5263E8]">
             현재 선택된 작업: {result.label}. 왼쪽 생성 결과 탭에서 결과를 확인하세요.
           </div>
-          <Link href="/app/templates" className="mt-4 inline-flex w-full items-center justify-center rounded-full border border-[#ECECF1] bg-white px-5 py-2.5 text-sm font-semibold text-[#273044]">
-            템플릿으로 이어가기
+          <Link href="/app" className="mt-4 inline-flex w-full items-center justify-center rounded-full border border-[#ECECF1] bg-white px-5 py-2.5 text-sm font-semibold text-[#273044]">
+            Workspace에서 공고문 작성
           </Link>
         </Card>
       </section>

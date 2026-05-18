@@ -31,9 +31,48 @@ export function getApiUrl(): string {
   return API_URL;
 }
 
+type ApiErrorPayload =
+  | string
+  | {
+      detail?: unknown;
+      error?: unknown;
+      message?: unknown;
+    }
+  | unknown[];
+
+function stringifyErrorDetail(value: unknown): string | null {
+  if (!value) return null;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) {
+    const messages = value
+      .map((item) => stringifyErrorDetail(item))
+      .filter((message): message is string => Boolean(message));
+    return messages.length ? messages.join('\n') : null;
+  }
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const direct = stringifyErrorDetail(record.message ?? record.msg ?? record.detail ?? record.error);
+    if (direct) {
+      const loc = Array.isArray(record.loc) ? record.loc.join('.') : null;
+      return loc ? `${loc}: ${direct}` : direct;
+    }
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 async function readError(res: Response, fallback: string): Promise<Error> {
-  const err = await res.json().catch(() => ({ detail: fallback }));
-  return new Error(err.detail ?? fallback);
+  const contentType = res.headers.get('content-type') ?? '';
+  const payload: ApiErrorPayload | null = contentType.includes('application/json')
+    ? await res.json().catch(() => null)
+    : await res.text().catch(() => null);
+  const message = stringifyErrorDetail(payload) ?? fallback;
+  return new Error(message);
 }
 
 export async function getHwpxStatus(): Promise<HwpxStatusResponse> {

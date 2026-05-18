@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useMemo, useRef, useState } from 'react';
 import { noticeTemplates, type NoticeTemplate } from '@/data/mockTemplates';
@@ -298,11 +297,6 @@ export default function NoticeBuilderPage() {
         </Card>
       ) : null}
 
-      <div className="flex justify-end">
-        <Link href="/app/templates" className="text-sm font-semibold text-[#3A7A68] hover:underline">
-          모든 템플릿 보기
-        </Link>
-      </div>
       <NoticeTemplatePreviewModal template={previewTemplate} onClose={() => setPreviewTemplate(null)} />
     </div>
   );

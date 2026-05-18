@@ -1,7 +1,8 @@
 import base64
 import json
+import logging
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from core.errors import AnalysisError
 from models.schemas import ExportResponse, NoticeExportRequest, NoticeGenerateRequest, NoticeGenerateResponse
@@ -15,6 +16,7 @@ from services.notice_service import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 HWPX_MEDIA_TYPE = "application/vnd.hancom.hwpx"
 DOCX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -35,7 +37,15 @@ async def generate_notice(
     for upload in files or []:
         if not upload.filename:
             continue
-        text, file_warnings = extract_reference_text(await upload.read(), upload.filename)
+        try:
+            text, file_warnings = extract_reference_text(await upload.read(), upload.filename)
+        except HTTPException as exc:
+            warnings.append(f"{upload.filename} 참고자료를 읽지 못해 제외했습니다: {exc.detail}")
+            continue
+        except Exception as exc:
+            logger.warning("Failed to extract reference text from %s: %s", upload.filename, exc, exc_info=True)
+            warnings.append(f"{upload.filename} 참고자료를 읽지 못해 제외했습니다.")
+            continue
         warnings.extend(file_warnings)
         references.append({"filename": upload.filename, "text": text})
 
