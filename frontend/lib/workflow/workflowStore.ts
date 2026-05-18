@@ -51,7 +51,7 @@ const PENDING_TEMPLATE_KEY = 'docklive:mvp:pending-template';
 
 export const defaultWorkflowSettings: WorkflowSettings = {
   outputFormat: 'HWPX',
-  processingMode: '보고서형 정리',
+  processingMode: '행정 공고문',
   themeMode: '시스템 기본',
 };
 
@@ -156,7 +156,7 @@ export function saveCompletedWorkflow(payload: CompleteWorkflowPayload): StoredW
     lastJob: jobType,
     category: task.name,
     summary: `${task.name} 작업으로 생성된 결과입니다. ${payload.outputFormat} 출력 형식으로 다운로드할 수 있습니다.`,
-    keywords: [task.name, payload.outputFormat, 'MVP 결과', payload.templateName ?? '워크스페이스'].filter(Boolean),
+    keywords: [task.name, payload.outputFormat, '공고문 결과', payload.templateName ?? '워크스페이스'].filter(Boolean),
     structure: payload.result.previewBlocks.map((block) => ({ title: block.title, description: block.body })),
     generatedResult: payload.result.previewBlocks[0]?.body ?? payload.result.title,
     taskId: payload.taskId,

@@ -2,7 +2,7 @@ import type { HwpxComposeResponse } from '@/lib/types';
 
 export type WorkflowTaskId = 'summary' | 'minutes' | 'report' | 'plan' | 'format' | 'official' | 'custom';
 export type OutputFormat = 'HWPX' | 'Markdown' | 'DOCX' | 'PDF';
-export type ProcessingMode = '간결한 요약' | '자세한 요약' | '보고서형 정리';
+export type ProcessingMode = '간결한 공고문' | '상세한 공고문' | '행정 공고문';
 
 export interface WorkflowTask {
   id: WorkflowTaskId;

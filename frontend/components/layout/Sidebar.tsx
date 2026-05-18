@@ -5,11 +5,11 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const items = [
-  { href: '/app', label: '공고문 만들기', icon: '문' },
-  { href: '/app/templates', label: '템플릿', icon: '틀' },
-  { href: '/app/documents', label: '문서함', icon: '함' },
-  { href: '/app/history', label: '작업내역', icon: '역' },
-  { href: '/app/settings', label: '설정', icon: '설' },
+  { href: '/app', label: 'Workspace', icon: '문' },
+  { href: '/app/templates', label: 'Templates', icon: '틀' },
+  { href: '/app/documents', label: 'Documents', icon: '함' },
+  { href: '/app/billing', label: 'Billing', icon: '원' },
+  { href: '/app/settings', label: 'Settings', icon: '설' },
 ];
 
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -34,7 +34,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           <Image src="/docklive-mark.svg" alt="" width={42} height={42} className="h-10 w-10" />
           <span>
             <span className="block text-base font-bold text-[#24312D]">DockLive</span>
-            <span className="text-xs text-[#65736E]">공고문 자동화 도구</span>
+            <span className="text-xs text-[#65736E]">공고문 자동 제작</span>
           </span>
         </Link>
 

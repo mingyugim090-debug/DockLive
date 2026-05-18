@@ -2,11 +2,12 @@
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useMemo, useRef } from 'react';
-import { noticeTemplates } from '@/data/mockTemplates';
+import { useMemo, useRef, useState } from 'react';
+import { noticeTemplates, type NoticeTemplate } from '@/data/mockTemplates';
 import { noticeSteps, useNoticeBuilder } from '@/hooks/useNoticeBuilder';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { NoticeTemplatePreviewModal } from '@/components/templates/NoticeTemplatePreview';
 
 const fileAccept = '.pdf,.docx,.hwp,.hwpx,.txt,.md';
 
@@ -21,6 +22,7 @@ export default function NoticeBuilderPage() {
   const initialTemplateId = useMemo(() => searchParams.get('template'), [searchParams]);
   const builder = useNoticeBuilder(initialTemplateId);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [previewTemplate, setPreviewTemplate] = useState<NoticeTemplate | null>(null);
 
   const canContinueInfo = builder.missingRequired.length === 0;
 
@@ -29,13 +31,13 @@ export default function NoticeBuilderPage() {
       <section className="rounded-3xl border border-[#DDE7E2] bg-[#F6FAF8] px-6 py-7 shadow-sm lg:px-8">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-sm font-bold text-[#3A7A68]">공고문 제작</p>
-            <h2 className="mt-2 text-3xl font-bold tracking-normal text-[#24312D]">템플릿을 고르면 공고문 초안이 바로 만들어집니다.</h2>
+            <p className="text-sm font-bold text-[#3A7A68]">공고문 AI Agent</p>
+            <h2 className="mt-2 text-3xl font-bold tracking-normal text-[#24312D]">유형을 고르고 필요한 정보만 입력하면 공고문이 완성됩니다.</h2>
             <p className="mt-3 max-w-3xl text-sm leading-7 text-[#65736E]">
-              필요한 정보를 입력하고 참고자료를 더하면 행정 공고문 형식의 HWPX, PDF, DOCX 파일로 내려받을 수 있습니다.
+              공공기관, 대학, 지자체 담당자가 쓰는 모집공고와 지원사업 공고를 HWPX, DOCX, PDF로 내려받을 수 있습니다.
             </p>
           </div>
-          <Button variant="secondary" onClick={builder.reset}>새 공고문 시작</Button>
+          <Button variant="secondary" onClick={builder.reset}>새 공고문 작성</Button>
         </div>
       </section>
 
@@ -78,15 +80,16 @@ export default function NoticeBuilderPage() {
               </div>
               <h3 className="mt-4 text-lg font-bold text-[#24312D]">{template.name}</h3>
               <p className="mt-2 text-sm leading-6 text-[#65736E]">{template.description}</p>
-              <div className="mt-4 text-xs leading-5 text-[#7B8782]">
-                {template.previewSections.slice(0, 3).join(' · ')}
+              <div className="mt-4 rounded-xl bg-[#F8FBFA] p-3 text-xs leading-5 text-[#65736E]">
+                <p>입력 항목 {template.inputCount}개</p>
+                <p>출력 형식 {template.outputFormats.join(' / ')}</p>
               </div>
               <div className="mt-auto flex gap-2 pt-5">
-                <Button type="button" variant="secondary" className="flex-1 px-3" onClick={() => builder.selectTemplate(template)}>
+                <Button type="button" variant="secondary" className="flex-1 px-3" onClick={() => setPreviewTemplate(template)}>
                   미리보기
                 </Button>
                 <Button type="button" className="flex-1 px-3" onClick={() => builder.selectTemplate(template)}>
-                  작성하기
+                  이 템플릿으로 작성하기
                 </Button>
               </div>
             </Card>
@@ -99,7 +102,7 @@ export default function NoticeBuilderPage() {
           <div className="flex flex-col gap-2">
             <p className="text-sm font-bold text-[#3A7A68]">Step 2. 필수 정보 입력</p>
             <h2 className="text-2xl font-bold text-[#24312D]">{builder.selectedTemplate.name}</h2>
-            <p className="text-sm leading-6 text-[#65736E]">정확히 모르는 항목은 비워도 됩니다. 필수 항목만 채우면 초안을 만들 수 있습니다.</p>
+            <p className="text-sm leading-6 text-[#65736E]">정확히 모르는 항목은 비워도 됩니다. 필수 항목만 채우면 기본 입력값으로 초안을 만들 수 있습니다.</p>
           </div>
           <div className="mt-6 grid gap-4 md:grid-cols-2">
             {builder.selectedTemplate.fields.map((field) => (
@@ -131,7 +134,7 @@ export default function NoticeBuilderPage() {
             <p className="text-sm text-[#65736E]">
               {canContinueInfo ? '필수 정보가 입력되었습니다.' : `남은 필수 항목: ${builder.missingRequired.map((field) => field.label).join(', ')}`}
             </p>
-            <Button disabled={!canContinueInfo} onClick={() => builder.setCurrentStep('upload')}>참고자료 단계로 이동</Button>
+            <Button disabled={!canContinueInfo} onClick={() => builder.setCurrentStep('upload')}>참고자료 업로드로 이동</Button>
           </div>
         </Card>
       ) : null}
@@ -139,8 +142,8 @@ export default function NoticeBuilderPage() {
       {builder.currentStep === 'upload' ? (
         <Card className="rounded-2xl">
           <p className="text-sm font-bold text-[#3A7A68]">Step 3. 참고자료 업로드</p>
-          <h2 className="mt-1 text-2xl font-bold text-[#24312D]">기존 공고문이나 운영계획서를 참고자료로 추가할 수 있습니다.</h2>
-          <p className="mt-2 text-sm leading-6 text-[#65736E]">업로드는 선택 사항입니다. 자료가 없어도 입력값만으로 초안을 생성합니다.</p>
+          <h2 className="mt-1 text-2xl font-bold text-[#24312D]">기존 공고문, 운영계획서, 내부 메모를 참고자료로 추가할 수 있습니다.</h2>
+          <p className="mt-2 text-sm leading-6 text-[#65736E]">선택 사항입니다. 업로드 없이도 앞 단계의 기본 정보만으로 공고문을 생성할 수 있습니다.</p>
           <input
             ref={fileRef}
             type="file"
@@ -175,7 +178,7 @@ export default function NoticeBuilderPage() {
           ) : null}
           <div className="mt-6 flex justify-end gap-2">
             <Button variant="secondary" onClick={() => builder.setCurrentStep('info')}>정보 수정</Button>
-            <Button onClick={builder.generateDraft}>초안 생성</Button>
+            <Button onClick={builder.generateDraft}>AI 초안 생성</Button>
           </div>
         </Card>
       ) : null}
@@ -187,7 +190,7 @@ export default function NoticeBuilderPage() {
           <div className="mx-auto mt-6 h-3 max-w-xl overflow-hidden rounded-full bg-[#E4EBE7]">
             <div className="h-full w-2/3 animate-pulse rounded-full bg-[#6A9C89]" />
           </div>
-          <p className="mt-4 text-sm text-[#65736E]">내부 JSON이나 자동작성 메타 정보는 최종 문서에 넣지 않습니다.</p>
+          <p className="mt-4 text-sm text-[#65736E]">행정 공고문 형식에 맞춰 제목, 안내문, 본문 항목, 문의처를 정리합니다.</p>
         </Card>
       ) : null}
 
@@ -230,7 +233,7 @@ export default function NoticeBuilderPage() {
                   ].map(([label, value]) => (
                     <tr key={label}>
                       <th className="w-32 border border-[#DDE7E2] bg-[#F3F7F5] px-3 py-2 text-left">{label}</th>
-                      <td className="border border-[#DDE7E2] px-3 py-2">{value || '확인 필요'}</td>
+                      <td className="border border-[#DDE7E2] px-3 py-2">{value || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -279,7 +282,7 @@ export default function NoticeBuilderPage() {
       {builder.currentStep === 'download' && builder.draftDocument ? (
         <Card className="rounded-2xl">
           <p className="text-sm font-bold text-[#3A7A68]">Step 6. 다운로드</p>
-          <h2 className="mt-1 text-2xl font-bold text-[#24312D]">검토한 공고문을 필요한 형식으로 내려받으세요.</h2>
+          <h2 className="mt-1 text-2xl font-bold text-[#24312D]">검토한 공고문을 HWPX, DOCX, PDF로 내려받으세요.</h2>
           <div className="mt-6 flex flex-wrap gap-3">
             <Button disabled={Boolean(builder.exporting)} onClick={() => builder.download('HWPX')}>
               {builder.exporting === 'HWPX' ? 'HWPX 생성 중' : 'HWPX 다운로드'}
@@ -300,6 +303,7 @@ export default function NoticeBuilderPage() {
           모든 템플릿 보기
         </Link>
       </div>
+      <NoticeTemplatePreviewModal template={previewTemplate} onClose={() => setPreviewTemplate(null)} />
     </div>
   );
 }

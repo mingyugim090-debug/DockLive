@@ -3,9 +3,9 @@
 import { motion } from 'framer-motion';
 
 const STATS = [
-  { value: '5분', label: '공고 → 초안 완성' },
-  { value: '100%', label: '원문 기반 분석' },
-  { value: 'HWPX', label: '한글 공식 형식' },
+  { value: '8종', label: '공고문 템플릿' },
+  { value: '6단계', label: '제작 흐름' },
+  { value: 'HWPX', label: '한글 배포 형식' },
 ];
 
 export function SocialProofSection() {
@@ -25,10 +25,10 @@ export function SocialProofSection() {
               <span className="text-xs font-bold text-[#5263E8]">신뢰성</span>
             </div>
             <h2 className="text-2xl font-bold leading-snug text-[#1F2937] sm:text-3xl">
-              모든 초안은<br />원문 출처를 표시합니다
+              사용자는 1분 안에<br />제작 흐름을 이해합니다
             </h2>
             <p className="mt-3 text-sm leading-6 text-[#6B7280]">
-              AI가 쓴 내용이 공고문 어느 문장에서 왔는지 확인할 수 있어 할루시네이션을 직접 검증할 수 있습니다.
+              템플릿을 고르고, 기본 정보를 입력하고, 참고자료를 더한 뒤 미리보기에서 확인하고 다운로드합니다.
             </p>
             <div className="mt-6 grid grid-cols-3 gap-3">
               {STATS.map(({ value, label }, i) => (
@@ -56,22 +56,22 @@ export function SocialProofSection() {
             className="rounded-[24px] border border-[#ECECF1] bg-white shadow-panel"
           >
             <div className="flex items-center justify-between border-b border-[#ECECF1] px-5 py-3">
-              <span className="text-xs font-semibold text-[#273044]">사업계획서 초안 — 사업 개요</span>
-              <span className="rounded-full bg-[#EDEFFF] px-2.5 py-0.5 text-[10px] font-bold text-[#5263E8]">출처 표시</span>
+              <span className="text-xs font-semibold text-[#273044]">공고문 미리보기 — 창업캠프 모집</span>
+              <span className="rounded-full bg-[#EDEFFF] px-2.5 py-0.5 text-[10px] font-bold text-[#5263E8]">HWPX 구조</span>
             </div>
             <div className="px-5 py-4">
               <p className="text-sm leading-8 text-[#374151]">
-                <sup className="mr-0.5 font-bold text-[#5263E8]">①</sup>본 사업은 청년 창업자를 대상으로 하며,{' '}
-                <sup className="mr-0.5 font-bold text-[#5263E8]">②</sup>지원 금액은 최대 3,000만원이고{' '}
-                <sup className="mr-0.5 font-bold text-[#5263E8]">③</sup>사업 기간은 협약 체결일로부터 12개월입니다.
+                <sup className="mr-0.5 font-bold text-[#5263E8]">1</sup>사업 개요,{' '}
+                <sup className="mr-0.5 font-bold text-[#5263E8]">2</sup>모집 대상,{' '}
+                <sup className="mr-0.5 font-bold text-[#5263E8]">3</sup>신청 기간과 운영 일정을 행정문서 순서에 맞춰 정리합니다.
               </p>
             </div>
             <div className="space-y-2 border-t border-[#ECECF1] px-5 py-4">
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#9AA1AD]">원문 출처</p>
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#9AA1AD]">제작 단계</p>
               {[
-                ['①', '공고문 3p "지원 대상: 만 39세 이하 예비창업자"'],
-                ['②', '공고문 4p "지원 내용: 최대 3,000만원 이내"'],
-                ['③', '공고문 5p "사업 기간: 협약일로부터 1년"'],
+                ['①', '공고문 유형 선택'],
+                ['②', '기본 정보 입력 및 참고자료 업로드'],
+                ['③', '미리보기 확인 후 HWPX 다운로드'],
               ].map(([num, src], i) => (
                 <motion.div
                   key={num}

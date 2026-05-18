@@ -1,4 +1,4 @@
-const problems = ['긴 문서를 읽고 요약하는 시간 소모', '반복되는 서식 정리', '보고서와 회의록 작성 부담', '파일별 내용 관리의 어려움'];
+const problems = ['공고문 항목을 매번 새로 구성', '모집 대상과 일정 문안 정리', 'HWPX 배포 파일 준비', '붙임 문서 목록 관리'];
 
 export function ProblemSection() {
   return (

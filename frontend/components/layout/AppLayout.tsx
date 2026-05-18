@@ -11,7 +11,7 @@ import { Sidebar } from './Sidebar';
 const titles: Array<[string, string]> = [
   ['/app/templates', '템플릿'],
   ['/app/documents', '문서함'],
-  ['/app/history', '작업내역'],
+  ['/app/billing', 'Billing'],
   ['/app/settings', '설정'],
   ['/app', '공고문 만들기'],
 ];

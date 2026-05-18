@@ -13,10 +13,10 @@ import type { ExportResponse, NoticeDocument } from '@/lib/types';
 export type NoticeBuilderStep = 'template' | 'info' | 'upload' | 'generate' | 'preview' | 'download';
 
 export const noticeSteps: Array<{ id: NoticeBuilderStep; label: string }> = [
-  { id: 'template', label: '템플릿 선택' },
-  { id: 'info', label: '정보 입력' },
+  { id: 'template', label: '공고문 유형 선택' },
+  { id: 'info', label: '기본 정보 입력' },
   { id: 'upload', label: '참고자료 업로드' },
-  { id: 'generate', label: '초안 생성' },
+  { id: 'generate', label: 'AI 초안 생성' },
   { id: 'preview', label: '문서 미리보기' },
   { id: 'download', label: '다운로드' },
 ];
@@ -33,7 +33,7 @@ function downloadExportResponse(exported: ExportResponse) {
 }
 
 export function useNoticeBuilder(initialTemplateId?: string | null) {
-  const [currentStep, setCurrentStep] = useState<NoticeBuilderStep>('template');
+  const [currentStep, setCurrentStep] = useState<NoticeBuilderStep>(initialTemplateId ? 'info' : 'template');
   const [selectedTemplateId, setSelectedTemplateId] = useState(initialTemplateId || 'startup_camp_notice');
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
   const [referenceFiles, setReferenceFiles] = useState<File[]>([]);

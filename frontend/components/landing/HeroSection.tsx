@@ -17,8 +17,8 @@ function UploadStep() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
           </svg>
         </div>
-        <p className="text-xs font-semibold text-[#5263E8]">공고문을 드래그하거나 클릭해 업로드</p>
-        <p className="text-[10px] text-[#9AA1AD]">PDF · HWPX · HWP · DOCX</p>
+        <p className="text-xs font-semibold text-[#5263E8]">운영계획서나 참고자료 업로드</p>
+        <p className="text-[10px] text-[#9AA1AD]">선택 사항 · 업로드 없이 생성 가능</p>
       </div>
       {/* Uploaded file */}
       <motion.div
@@ -33,7 +33,7 @@ function UploadStep() {
           </svg>
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[11px] font-semibold text-[#273044]">청년창업_지원사업_공고.pdf</p>
+          <p className="truncate text-[11px] font-semibold text-[#273044]">창업캠프_운영계획.pdf</p>
           <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-[#EDEFFF]">
             <motion.div
               className="h-full rounded-full bg-gradient-to-r from-[#5263E8] to-[#7A69EC]"
@@ -58,16 +58,16 @@ function UploadStep() {
 
 function AnalyzeStep() {
   const items = [
-    { label: '마감일', value: 'D-14 · 2026.06.30', accent: true, delay: 0.1 },
-    { label: '지원 자격', value: '만 39세 이하 예비창업자', accent: false, delay: 0.25 },
-    { label: '지원 금액', value: '최대 3,000만원', accent: false, delay: 0.4 },
-    { label: '제출 서류', value: '사업계획서, 신청서 外 3종', accent: false, delay: 0.55 },
+    { label: '공고 유형', value: '창업캠프 모집', accent: true, delay: 0.1 },
+    { label: '모집 대상', value: '예비창업자 및 대학생', accent: false, delay: 0.25 },
+    { label: '모집 인원', value: '30명 내외', accent: false, delay: 0.4 },
+    { label: '제출 서류', value: '신청서, 동의서 外', accent: false, delay: 0.55 },
   ];
   return (
     <div className="space-y-2.5">
       <div className="flex items-center gap-2 rounded-xl bg-[#F6F8FB] px-3 py-2">
         <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[#5263E8]" />
-        <p className="text-[11px] font-semibold text-[#5263E8]">AI가 공고문에서 핵심 정보를 추출하는 중</p>
+        <p className="text-[11px] font-semibold text-[#5263E8]">AI가 공고문 기본 정보를 구조화하는 중</p>
       </div>
       {items.map(({ label, value, accent, delay }) => (
         <motion.div
@@ -88,13 +88,13 @@ function AnalyzeStep() {
 function DraftStep() {
   const sections = [
     { title: '사업 개요', lines: [80, 95, 60], delay: 0 },
-    { title: '추진 계획', lines: [90, 75, 85, 50], delay: 0.3 },
+    { title: '모집 대상', lines: [90, 75, 85, 50], delay: 0.3 },
   ];
   return (
     <div className="space-y-2.5">
       <div className="flex items-center gap-2 rounded-xl bg-[#EDEFFF] px-3 py-2">
         <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[#5263E8]" />
-        <p className="text-[11px] font-semibold text-[#5263E8]">섹션별 초안 작성 중 — 2 / 5 완료</p>
+        <p className="text-[11px] font-semibold text-[#5263E8]">행정 공고문 초안 작성 중 — 4 / 9 완료</p>
       </div>
       {sections.map(({ title, lines, delay }) => (
         <motion.div
@@ -139,7 +139,7 @@ function ExportStep() {
         </div>
         <div className="text-center">
           <p className="text-sm font-bold text-[#1F2937]">HWPX 초안 완성!</p>
-          <p className="mt-0.5 text-[11px] text-[#6B7280]">청년창업_사업계획서_초안.hwpx</p>
+          <p className="mt-0.5 text-[11px] text-[#6B7280]">창업캠프_모집공고문.hwpx</p>
         </div>
       </motion.div>
       <div className="grid grid-cols-2 gap-2">
@@ -166,9 +166,9 @@ function ExportStep() {
 /* ── step metadata ────────────────────────────────────────────────── */
 
 const STEPS = [
-  { id: 0, phase: '01', label: '업로드', title: '공고문 업로드', Component: UploadStep },
-  { id: 1, phase: '02', label: '분석', title: 'AI 핵심 정보 추출', Component: AnalyzeStep },
-  { id: 2, phase: '03', label: '초안', title: '섹션별 초안 생성', Component: DraftStep },
+  { id: 0, phase: '01', label: '유형', title: '공고문 유형 선택', Component: UploadStep },
+  { id: 1, phase: '02', label: '정보', title: '기본 정보 입력', Component: AnalyzeStep },
+  { id: 2, phase: '03', label: '초안', title: 'AI 공고문 생성', Component: DraftStep },
   { id: 3, phase: '04', label: '완성', title: 'HWPX 파일 완성', Component: ExportStep },
 ] as const;
 
@@ -211,10 +211,6 @@ function WorkflowScene3D() {
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
     >
-      {/* Ambient glows */}
-      <div className="pointer-events-none absolute -right-12 -top-12 h-60 w-60 rounded-full bg-[#D8DDFC] opacity-60 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-10 -left-10 h-48 w-48 rounded-full bg-[#E9E6FF] opacity-50 blur-3xl" />
-
       {/* 3D card */}
       <motion.div
         style={{ rotateX, rotateY, transformStyle: 'preserve-3d' }}
@@ -317,9 +313,9 @@ function WorkflowScene3D() {
 /* ── trust signals ────────────────────────────────────────────────── */
 
 const TRUST = [
-  { value: '5분', label: '분석→초안 완성' },
-  { value: 'HWPX', label: '한글 공식 형식' },
-  { value: '출처 표시', label: '원문 기반 분석' },
+  { value: '1분', label: '흐름 이해' },
+  { value: 'HWPX', label: '행정문서 출력' },
+  { value: '6단계', label: '제작 플로우' },
 ];
 
 /* ── hero section ─────────────────────────────────────────────────── */
@@ -342,24 +338,24 @@ export function HeroSection() {
         >
           <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[#D8DDFC] bg-white/80 px-3.5 py-1.5 shadow-sm">
             <span className="flex h-1.5 w-1.5 rounded-full bg-[#5263E8]" />
-            <span className="text-xs font-bold text-[#5263E8]">AI 문서 자동화 Agent</span>
+            <span className="text-xs font-bold text-[#5263E8]">공고문 AI Agent</span>
           </div>
 
           <h1 className="text-[2.6rem] font-bold leading-[1.15] tracking-tight text-[#1F2937] sm:text-5xl lg:text-[3.1rem]">
-            공고에서
+            공고문을
             <br />
-            제출 서류까지,
+            만드는
             <br />
-            <span className="gradient-text">AI가 완성합니다</span>
+            <span className="gradient-text">AI Agent</span>
           </h1>
 
           <p className="mt-5 max-w-[460px] text-base leading-7 text-[#6B7280]">
-            공고문을 올리면 AI Agent가 일정·자격·서류를 분석하고 지원서·사업계획서 초안을 5분 안에 만들어 드립니다.
+            공공기관·대학·지자체 담당자를 위한 공고문 자동 제작 서비스입니다. 유형을 고르고 기본 정보를 입력하면 모집공고, 지원사업 공고, 행사 안내문을 바로 만듭니다.
           </p>
 
           <div className="mt-7 flex flex-col gap-3 sm:flex-row">
             <ButtonLink href="/auth?next=/app">
-              무료로 시작하기
+              공고문 만들기
               <svg className="ml-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
               </svg>
@@ -398,15 +394,15 @@ export function HeroSection() {
         <div className="rounded-[32px] border border-[#ECECF1] bg-white/70 px-8 py-8 shadow-panel backdrop-blur-sm">
           <div className="flex flex-col items-center gap-7">
             <div className="flex flex-wrap items-end justify-center gap-6 sm:gap-10">
-              <Folder color="blue" size="md" label="청년창업" />
-              <Folder color="yellow" size="md" label="R&D 과제" />
-              <Folder color="orange" size="md" label="정부 지원" />
-              <Folder color="grey" size="md" label="공모전" />
+              <Folder color="blue" size="md" label="모집공고" />
+              <Folder color="yellow" size="md" label="지원사업" />
+              <Folder color="orange" size="md" label="행사 안내" />
+              <Folder color="grey" size="md" label="입찰 공고" />
             </div>
             <div className="text-center">
-              <p className="text-sm font-semibold text-[#273044]">공모전부터 정부 지원사업까지</p>
+              <p className="text-sm font-semibold text-[#273044]">템플릿을 고르면 HWPX 공고문까지</p>
               <p className="mt-1 text-sm leading-6 text-[#6B7280]">
-                PDF · HWPX · DOCX 형식의 어떤 공모 문서든 업로드하면 AI가 5분 안에 분석하고 초안을 만들어 드립니다.
+                공고문 유형 선택, 기본 정보 입력, 참고자료 업로드, 미리보기, 다운로드 흐름으로 1분 안에 방향을 이해할 수 있습니다.
               </p>
             </div>
             <ButtonLink href="/auth?next=/app" className="px-7 py-2.5 text-sm">

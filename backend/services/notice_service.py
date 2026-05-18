@@ -20,52 +20,69 @@ FORBIDDEN_NOTICE_TERMS = [
     "LiveDock: 자동작성 내용",
     "DockLive: 자동작성 내용",
     "자동작성 초안",
+    "요약",
+    "JSON 문자열",
+    "추가 입력 필요",
+    "내부 상태값",
     "generated_fields",
     "documentType",
     "template_id",
     "validation_summary",
+    "sections",
+    "contact",
+]
+
+CANONICAL_NOTICE_SECTION_HEADINGS = [
+    "사업 개요",
+    "모집 대상",
+    "모집 인원",
+    "신청 기간",
+    "운영 일정",
+    "신청 방법",
+    "선정 기준",
+    "제출 서류",
 ]
 
 NOTICE_TEMPLATES: dict[str, dict[str, Any]] = {
     "startup_camp_notice": {
         "name": "창업캠프 모집 공고문",
         "purpose": "창업캠프 참가자 모집",
-        "sections": ["사업 개요", "모집 대상", "운영 일정", "신청 방법", "선정 및 안내"],
+        "sections": CANONICAL_NOTICE_SECTION_HEADINGS,
     },
     "business_support_notice": {
         "name": "지원사업 참여기업 모집 공고문",
         "purpose": "지원사업 참여기업 모집",
-        "sections": ["사업 개요", "지원 대상", "지원 내용", "신청 방법", "평가 및 선정"],
+        "sections": CANONICAL_NOTICE_SECTION_HEADINGS,
     },
     "education_program_notice": {
         "name": "교육 프로그램 수강생 모집 공고문",
         "purpose": "교육 프로그램 수강생 모집",
-        "sections": ["교육 개요", "모집 대상", "교육 일정", "신청 방법", "수료 및 안내"],
+        "sections": CANONICAL_NOTICE_SECTION_HEADINGS,
     },
     "event_participant_notice": {
         "name": "행사 참가자 모집 공고문",
         "purpose": "행사 참가자 모집",
-        "sections": ["행사 개요", "모집 대상", "행사 일정", "참가 신청", "유의사항"],
-    },
-    "supporters_notice": {
-        "name": "대외활동/서포터즈 모집 공고문",
-        "purpose": "대외활동 또는 서포터즈 모집",
-        "sections": ["활동 개요", "모집 대상", "활동 내용", "신청 방법", "선발 일정"],
+        "sections": CANONICAL_NOTICE_SECTION_HEADINGS,
     },
     "scholarship_notice": {
         "name": "장학생 모집 공고문",
         "purpose": "장학생 모집",
-        "sections": ["장학사업 개요", "신청 자격", "지원 내용", "신청 방법", "선발 기준"],
+        "sections": CANONICAL_NOTICE_SECTION_HEADINGS,
+    },
+    "tenant_company_notice": {
+        "name": "입주기업 모집 공고문",
+        "purpose": "창업보육센터·공간 입주기업 모집",
+        "sections": CANONICAL_NOTICE_SECTION_HEADINGS,
     },
     "research_participant_notice": {
         "name": "연구과제 참여자 모집 공고문",
         "purpose": "연구과제 참여자 모집",
-        "sections": ["연구 개요", "모집 대상", "참여 내용", "신청 방법", "연구 윤리 및 유의사항"],
+        "sections": CANONICAL_NOTICE_SECTION_HEADINGS,
     },
     "bid_rfp_notice": {
         "name": "입찰/제안요청 공고문",
         "purpose": "입찰 또는 제안서 접수",
-        "sections": ["공고 개요", "과업 범위", "입찰 참가 자격", "제안서 제출", "평가 및 계약"],
+        "sections": CANONICAL_NOTICE_SECTION_HEADINGS,
     },
 }
 
@@ -95,21 +112,15 @@ def generate_notice_document(
 
 
 def render_notice_markdown(document: NoticeDocument) -> str:
-    rows = [
-        ("기관명", document.organization),
-        ("공고 유형", document.purpose),
-        ("신청 기간", document.schedule.applicationPeriod),
-        ("운영 기간", document.schedule.eventPeriod),
-        ("접수 방법", document.applicationMethod),
-    ]
     lines = [
         f"# {document.title}",
         "",
-        "| 구분 | 내용 |",
-        "| --- | --- |",
+        document.organization,
+        "",
+        "공고 안내문",
+        f"{document.organization}은(는) {document.purpose}을(를) 다음과 같이 공고하오니 관심 있는 대상자의 많은 신청 바랍니다.",
+        "",
     ]
-    lines.extend(f"| {label} | {_cell(value)} |" for label, value in rows if value)
-    lines.append("")
 
     for index, section in enumerate(document.sections, start=1):
         heading = section.heading.strip()
@@ -119,12 +130,12 @@ def render_notice_markdown(document: NoticeDocument) -> str:
 
     lines.extend(
         [
-            "## 문의처",
-            "| 부서 | 연락처 | 이메일 |",
-            "| --- | --- | --- |",
-            f"| {_cell(document.contact.department)} | {_cell(document.contact.phone)} | {_cell(document.contact.email)} |",
+            "## 9. 문의처",
+            f"- 담당 부서: {_cell(document.contact.department)}",
+            f"- 연락처: {_cell(document.contact.phone)}",
+            f"- 이메일: {_cell(document.contact.email)}",
             "",
-            "## 붙임",
+            "## 붙임 문서 목록",
         ]
     )
     if document.attachments:
@@ -137,12 +148,144 @@ def render_notice_markdown(document: NoticeDocument) -> str:
 def export_notice_hwpx(document: NoticeDocument) -> tuple[str, bytes, dict[str, Any]]:
     markdown = render_notice_markdown(document)
     _assert_clean_notice_text(markdown, "HWPX 입력")
-    filename, content, summary = _export_notice_markdown_to_hwpx(markdown, document.title)
+    filename, content, summary = _export_notice_document_to_hwpx(document)
     excerpt = str(summary.get("extracted_text_excerpt") or "")
     _assert_clean_notice_text(excerpt or markdown, "HWPX 추출 텍스트")
     summary["renderer"] = "notice_document_renderer"
     summary["forbidden_terms_checked"] = FORBIDDEN_NOTICE_TERMS
     return filename, content, summary
+
+
+def _export_notice_document_to_hwpx(document: NoticeDocument) -> tuple[str, bytes, dict[str, Any]]:
+    scripts = _require_hwpx_scripts(
+        "build_hwpx.py",
+        "fix_namespaces.py",
+        "validate.py",
+        "text_extract.py",
+        "verify_hwpx.py",
+        "hwpx_helpers.py",
+    )
+    tmpdir = _make_tmp_dir()
+    safe_title = _safe_title(document.title)
+    summary: dict[str, Any] = {
+        "validation_passed": False,
+        "namespace_fixed": False,
+        "warnings": [],
+        "generation_method": "notice-document-xml-renderer",
+    }
+    try:
+        section_path = tmpdir / "section0.xml"
+        output_path = tmpdir / f"{safe_title}.hwpx"
+        verify_path = tmpdir / "verify.json"
+        section_path.write_text(_build_notice_section_xml(document), encoding="utf-8")
+
+        python_bin = sys.executable or "python"
+        _run_hwpx_command(
+            [
+                python_bin,
+                str(scripts["build_hwpx.py"]),
+                "--section",
+                str(section_path),
+                "--title",
+                document.title,
+                "--creator",
+                document.organization or "DockLive",
+                "--output",
+                str(output_path),
+            ]
+        )
+        fix_result = _run_hwpx_command([python_bin, str(scripts["fix_namespaces.py"]), str(output_path)])
+        summary["namespace_fixed"] = True
+        summary["namespace_output"] = (fix_result.stdout or fix_result.stderr or "").strip()[:1000]
+        validate_result = _run_hwpx_command([python_bin, str(scripts["validate.py"]), str(output_path)])
+        summary["validation_passed"] = True
+        summary["validation_output"] = (validate_result.stdout or validate_result.stderr or "").strip()[:1000]
+
+        try:
+            _run_hwpx_command(
+                [
+                    python_bin,
+                    str(scripts["verify_hwpx.py"]),
+                    "--result",
+                    str(output_path),
+                    "--json",
+                    str(verify_path),
+                ]
+            )
+            summary["verify_passed"] = True
+            if verify_path.exists():
+                summary["verify_report"] = json.loads(verify_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            summary["verify_passed"] = False
+            summary["warnings"].append(f"verify_hwpx.py 확인을 완료하지 못했습니다: {str(exc)[:300]}")
+
+        try:
+            text_result = _run_hwpx_command([python_bin, str(scripts["text_extract.py"]), str(output_path), "--include-tables"])
+            extracted = text_result.stdout or ""
+            summary["text_extract_passed"] = True
+            summary["text_chars"] = len(extracted)
+            summary["title_found"] = bool(document.title and document.title[:20] in extracted)
+            summary["extracted_text_excerpt"] = extracted[:1000]
+        except Exception as exc:
+            summary["text_extract_passed"] = False
+            summary["text_chars"] = 0
+            summary["warnings"].append(f"text_extract.py 확인을 완료하지 못했습니다: {str(exc)[:300]}")
+
+        if not output_path.exists() or output_path.stat().st_size < 1000:
+            raise AnalysisError("공고문 HWPX 파일이 정상적으로 생성되지 않았습니다.")
+        return output_path.name, output_path.read_bytes(), summary
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def _build_notice_section_xml(document: NoticeDocument) -> str:
+    scripts_dir = Path(__file__).resolve().parents[1] / "hwpx_toolchain" / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    from hwpx_helpers import NS_DECL, extract_secpr_and_colpr, make_empty_line, make_first_para, make_text_para, reset_id
+
+    reference = Path(__file__).resolve().parents[1] / "hwpx_toolchain" / "templates" / "reference.hwpx"
+    secpr, colpr = extract_secpr_and_colpr(reference)
+    reset_id()
+    parts = [
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>',
+        f"<hs:sec {NS_DECL}>",
+        make_first_para(secpr, colpr, charpr="8", parapr="24"),
+        make_text_para(document.title, charpr="7", parapr="19"),
+        make_empty_line(charpr="8", parapr="24"),
+        make_text_para(document.organization, charpr="19", parapr="20"),
+        make_empty_line(charpr="8", parapr="24"),
+        make_text_para("공고 안내문", charpr="25", parapr="25"),
+        make_text_para(
+            f"{document.organization}은(는) {document.purpose}을(를) 다음과 같이 공고하오니 관심 있는 대상자의 많은 신청 바랍니다.",
+            charpr="20",
+            parapr="24",
+        ),
+    ]
+
+    for section in document.sections:
+        parts.append(make_empty_line(charpr="8", parapr="24"))
+        parts.append(make_text_para(section.heading, charpr="25", parapr="25"))
+        for line in _split_body_lines(section.body):
+            parts.append(make_text_para(line, charpr="20", parapr="24"))
+
+    parts.append(make_empty_line(charpr="8", parapr="24"))
+    parts.append(make_text_para("9. 문의처", charpr="25", parapr="25"))
+    for line in [
+        f"담당 부서: {_cell(document.contact.department)}",
+        f"연락처: {_cell(document.contact.phone)}",
+        f"이메일: {_cell(document.contact.email)}",
+    ]:
+        parts.append(make_text_para(line, charpr="20", parapr="24"))
+
+    parts.append(make_empty_line(charpr="8", parapr="24"))
+    parts.append(make_text_para("붙임 문서 목록", charpr="25", parapr="25"))
+    attachments = document.attachments or ["해당 없음"]
+    for index, item in enumerate(attachments, start=1):
+        parts.append(make_text_para(f"{index}. {item}", charpr="20", parapr="24"))
+
+    parts.append("</hs:sec>")
+    return "\n".join(parts)
 
 
 def _export_notice_markdown_to_hwpx(markdown: str, title: str) -> tuple[str, bytes, dict[str, Any]]:
@@ -351,14 +494,20 @@ def _normalize_notice_document(
             NoticeSection(heading=f"{index}. {heading}", body=_default_section_body(heading, inputs))
             for index, heading in enumerate(template["sections"], start=1)
         ]
+    body_by_heading: dict[str, str] = {}
+    for section in document.sections:
+        normalized_heading = _canonical_heading(section.heading)
+        body = section.body.strip()
+        if normalized_heading and body:
+            body_by_heading[normalized_heading] = body
+
     normalized_sections = []
-    for index, section in enumerate(document.sections, start=1):
-        heading = re.sub(r"^\d+\.\s*", "", section.heading.strip()) or template["sections"][min(index - 1, len(template["sections"]) - 1)]
-        body = section.body.strip() or _default_section_body(heading, inputs)
+    for index, heading in enumerate(CANONICAL_NOTICE_SECTION_HEADINGS, start=1):
+        body = body_by_heading.get(heading) or _default_section_body(heading, inputs)
         normalized_sections.append(NoticeSection(heading=f"{index}. {heading}", body=body))
     document.sections = normalized_sections
     if not document.attachments:
-        document.attachments = ["신청서", "개인정보 수집 및 이용 동의서"]
+        document.attachments = _split_attachments(inputs.get("attachments")) or _split_attachments(inputs.get("documents")) or ["신청서", "개인정보 수집 및 이용 동의서"]
     return document
 
 
@@ -371,7 +520,10 @@ def _mock_notice_document(
     title = inputs.get("title") or template["name"]
     organization = inputs.get("organization") or "서울과학기술대학교 창업지원단"
     target = inputs.get("target") or "해당 분야에 관심 있는 시민 및 기관 관계자"
+    capacity = inputs.get("capacity") or "모집 규모는 기관 계획과 예산 범위에 따라 정합니다."
     benefit = inputs.get("benefit") or "전문 교육, 네트워킹, 후속 지원 기회"
+    documents = inputs.get("documents") or inputs.get("attachments") or "신청서, 개인정보 수집 및 이용 동의서 등 공고에서 정한 서류"
+    criteria = inputs.get("selectionCriteria") or "신청 자격, 사업 목적 적합성, 제출 서류의 충실성 등을 종합적으로 검토합니다."
     reference_note = " 참고자료의 주요 내용을 반영하여 세부 일정과 운영 방식은 담당 부서 확인 후 확정합니다." if references else ""
     return {
         "documentType": template_id,
@@ -382,7 +534,15 @@ def _mock_notice_document(
         "sections": [
             {
                 "heading": f"{idx}. {heading}",
-                "body": _default_section_body(heading, inputs, target=target, benefit=benefit) + reference_note,
+                "body": _default_section_body(
+                    heading,
+                    inputs,
+                    target=target,
+                    capacity=capacity,
+                    benefit=benefit,
+                    documents=documents,
+                    criteria=criteria,
+                ) + reference_note,
             }
             for idx, heading in enumerate(template["sections"], start=1)
         ],
@@ -403,27 +563,39 @@ def _default_section_body(
     heading: str,
     inputs: dict[str, str],
     target: str = "공고 대상자",
+    capacity: str = "모집 규모는 기관 계획과 예산 범위에 따라 정합니다.",
     benefit: str = "세부 지원 내용",
+    documents: str = "신청서, 개인정보 수집 및 이용 동의서 등 공고에서 정한 서류",
+    criteria: str = "신청 자격, 사업 목적 적합성, 제출 서류의 충실성 등을 종합적으로 검토합니다.",
 ) -> str:
     title = inputs.get("title") or "본 공고"
     organization = inputs.get("organization") or "주관 기관"
-    if "개요" in heading:
-        return f"{organization}은 {title}을 통해 사업 목적에 적합한 참여자를 모집하고, 원활한 운영을 위한 절차를 안내합니다."
-    if "대상" in heading or "자격" in heading:
+    application_period = inputs.get("applicationPeriod") or "공고문에 따른 접수 기간"
+    event_period = inputs.get("eventPeriod") or "선정 이후 별도 안내하는 운영 일정"
+    method = inputs.get("applicationMethod") or "기관 누리집 또는 담당 부서가 안내한 접수 방법"
+    if heading == "사업 개요":
+        return f"{organization}은 {title}을 통해 사업 목적에 적합한 참여자를 모집하고, 원활한 운영을 위한 절차를 안내합니다. 주요 지원 내용은 {benefit}입니다."
+    if heading == "모집 대상":
         return f"모집 대상은 {target}이며, 세부 자격 요건은 공고문과 제출 서류를 기준으로 확인합니다."
-    if "내용" in heading or "지원" in heading:
-        return f"주요 내용은 {benefit}이며, 선정 이후 세부 운영 기준에 따라 지원합니다."
-    if "일정" in heading:
-        return "신청 접수, 심사, 선정 안내, 프로그램 운영 순으로 진행하며 세부 일정은 기관 사정에 따라 조정될 수 있습니다."
-    if "방법" in heading or "제출" in heading:
-        return "신청자는 공고문에서 정한 제출 서류를 준비하여 접수 기간 내 지정된 방법으로 제출해야 합니다."
+    if heading == "모집 인원":
+        return capacity
+    if heading == "신청 기간":
+        return application_period
+    if heading == "운영 일정":
+        return f"운영 일정은 {event_period}이며, 신청 접수, 심사, 선정 안내, 사업 운영 순으로 진행합니다."
+    if heading == "신청 방법":
+        return f"신청자는 제출 서류를 준비하여 {method}으로 접수해야 합니다."
+    if heading == "선정 기준":
+        return criteria
+    if heading == "제출 서류":
+        return documents
     return "세부 사항은 공고문 본문과 붙임 서류를 확인하여 주시기 바랍니다."
 
 
 def _quality_warnings(document: NoticeDocument) -> list[str]:
     warnings = []
-    if "확인 필요" in render_notice_markdown(document):
-        warnings.append("일부 항목은 확인 필요로 표시되었습니다. 다운로드 전 실제 기관 정보를 확인해 주세요.")
+    if not document.contact.phone or not document.contact.email:
+        warnings.append("문의처 일부가 비어 있습니다. 다운로드 전 실제 연락처를 확인해 주세요.")
     return warnings
 
 
@@ -436,7 +608,40 @@ def _assert_clean_notice_text(text: str, label: str) -> None:
 
 
 def _cell(value: str) -> str:
-    return (value or "확인 필요").replace("|", "/").replace("\n", "<br>")
+    return (value or "-").replace("|", "/").replace("\n", "<br>")
+
+
+def _split_body_lines(value: str) -> list[str]:
+    clean = re.sub(r"\r\n?", "\n", value or "").strip()
+    if not clean:
+        return ["-"]
+    lines = [line.strip(" \t-") for line in clean.split("\n") if line.strip(" \t-")]
+    return lines or [clean]
+
+
+def _canonical_heading(value: str) -> str:
+    heading = re.sub(r"^\d+\.\s*", "", (value or "").strip())
+    heading = heading.replace("지원 대상", "모집 대상").replace("신청 자격", "모집 대상")
+    for canonical in CANONICAL_NOTICE_SECTION_HEADINGS:
+        if canonical == heading or canonical in heading:
+            return canonical
+    if "개요" in heading:
+        return "사업 개요"
+    if "대상" in heading or "자격" in heading:
+        return "모집 대상"
+    if "인원" in heading or "규모" in heading:
+        return "모집 인원"
+    if "신청 기간" in heading or "접수 기간" in heading:
+        return "신청 기간"
+    if "일정" in heading or "기간" in heading:
+        return "운영 일정"
+    if "방법" in heading or "접수" in heading:
+        return "신청 방법"
+    if "선정" in heading or "평가" in heading:
+        return "선정 기준"
+    if "서류" in heading:
+        return "제출 서류"
+    return ""
 
 
 def _split_attachments(value: str | None) -> list[str]:
@@ -492,9 +697,9 @@ def _build_docx_with_python_docx(document: NoticeDocument) -> bytes:
     contact.rows[0].cells[0].text = "부서"
     contact.rows[0].cells[1].text = "연락처"
     contact.rows[0].cells[2].text = "이메일"
-    contact.rows[1].cells[0].text = document.contact.department or "확인 필요"
-    contact.rows[1].cells[1].text = document.contact.phone or "확인 필요"
-    contact.rows[1].cells[2].text = document.contact.email or "확인 필요"
+    contact.rows[1].cells[0].text = document.contact.department or "-"
+    contact.rows[1].cells[1].text = document.contact.phone or "-"
+    contact.rows[1].cells[2].text = document.contact.email or "-"
     doc.add_heading("붙임", level=1)
     for item in document.attachments or ["해당 없음"]:
         doc.add_paragraph(item, style="List Number")

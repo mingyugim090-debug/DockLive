@@ -59,7 +59,7 @@ export const themePresets: ThemePreset[] = [
   {
     id: 'comfort',
     name: '편안한 분위기',
-    mood: '과제와 회의록 정리',
+    mood: '공고문 제작',
     description: '부드러운 아이보리와 세이지 톤으로 협업 도구처럼 편안합니다.',
     swatches: ['#FBF8F1', '#FFFFFF', '#7AA37A'],
     vars: {

@@ -9,7 +9,7 @@ import { ThemeSettings } from './ThemeSettings';
 
 export function SettingsPanel() {
   const [format, setFormat] = useState<OutputFormat>('HWPX');
-  const [summary, setSummary] = useState<ProcessingMode>('보고서형 정리');
+  const [summary, setSummary] = useState<ProcessingMode>('행정 공고문');
 
   useEffect(() => {
     const settings = loadWorkflowSettings();
@@ -32,7 +32,7 @@ export function SettingsPanel() {
         <div className="mt-5 grid gap-4">
           <Input defaultValue="DockLive 사용자" aria-label="이름" />
           <Input defaultValue="user@docklive.example" aria-label="이메일" />
-          <Input defaultValue="문서 자동화 팀" aria-label="소속" />
+          <Input defaultValue="공고문 담당 팀" aria-label="소속" />
         </div>
       </Card>
 
@@ -48,9 +48,9 @@ export function SettingsPanel() {
             </Select>
           </label>
           <label className="text-sm font-semibold text-[var(--theme-muted)]">
-            AI 처리 옵션
+            공고문 작성 옵션
             <Select value={summary} onChange={(event) => setSummary(event.target.value as ProcessingMode)} className="mt-2">
-              {['간결한 요약', '자세한 요약', '보고서형 정리'].map((item) => (
+              {['간결한 공고문', '상세한 공고문', '행정 공고문'].map((item) => (
                 <option key={item}>{item}</option>
               ))}
             </Select>
@@ -61,7 +61,7 @@ export function SettingsPanel() {
       <Card>
         <h2 className="text-xl font-bold text-[var(--theme-text)]">알림 설정</h2>
         <div className="mt-5 space-y-3">
-          {['작업 완료 알림', '오류 발생 알림', '주간 작업 요약'].map((item) => (
+          {['공고문 생성 완료 알림', '오류 발생 알림', '주간 작성 현황'].map((item) => (
             <label
               key={item}
               className="flex items-center justify-between rounded-[18px] bg-[var(--theme-surface-muted)] p-4 text-sm font-semibold text-[var(--theme-text)]"
