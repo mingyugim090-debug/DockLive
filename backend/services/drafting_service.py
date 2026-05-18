@@ -624,7 +624,7 @@ def export_markdown_to_hwpx_with_validation(markdown: str, title: str) -> tuple[
     if not settings.HWPX_EXPORT_ENABLED:
         raise AnalysisError("HWPX export가 비활성화되어 있습니다. HTML export를 사용하거나 HWPX_EXPORT_ENABLED=true로 설정하세요.")
 
-    scripts = _require_hwpx_scripts("md2hwpx.py", "fix_namespaces.py", "validate.py", "text_extract.py")
+    scripts = _require_hwpx_scripts("md2hwpx.py", "fix_namespaces.py", "validate.py", "text_extract.py", "verify_hwpx.py")
     safe_title = _safe_title(title)
     tmpdir = _make_tmp_dir()
     summary: dict[str, Any] = {
@@ -639,8 +639,10 @@ def export_markdown_to_hwpx_with_validation(markdown: str, title: str) -> tuple[
         markdown_path.write_text(markdown, encoding="utf-8")
 
         python_bin = sys.executable or "python"
-        base_template = scripts["md2hwpx.py"].parents[1] / "templates" / "base"
-        if base_template.exists():
+        template_root = scripts["md2hwpx.py"].parents[1] / "templates"
+        base_template = template_root / "base"
+        reference_template = template_root / "reference.hwpx"
+        if base_template.exists() or reference_template.exists():
             try:
                 _run_hwpx_command([python_bin, str(scripts["md2hwpx.py"]), str(markdown_path), "-o", str(output_path)])
                 summary["generation_method"] = "md2hwpx.py"
@@ -660,18 +662,45 @@ def export_markdown_to_hwpx_with_validation(markdown: str, title: str) -> tuple[
         validate_result = _run_hwpx_command([python_bin, str(scripts["validate.py"]), str(output_path)])
         summary["validation_passed"] = True
         summary["validation_output"] = (validate_result.stdout or validate_result.stderr or "").strip()[:1000]
+        verify_path = tmpdir / "verify.json"
         try:
-            text_result = _run_hwpx_command([python_bin, str(scripts["text_extract.py"]), str(output_path)])
+            verify_result = _run_hwpx_command(
+                [
+                    python_bin,
+                    str(scripts["verify_hwpx.py"]),
+                    "--result",
+                    str(output_path),
+                    "--json",
+                    str(verify_path),
+                ]
+            )
+            summary["verify_passed"] = True
+            summary["verify_output"] = (verify_result.stdout or verify_result.stderr or "").strip()[:1000]
+            if verify_path.exists():
+                summary["verify_report"] = json.loads(verify_path.read_text(encoding="utf-8"))
+        except subprocess.CalledProcessError as exc:
+            summary["verify_passed"] = False
+            summary["warnings"].append(f"verify_hwpx.py 실패: {(exc.stderr or exc.stdout or str(exc))[:500]}")
+        try:
+            text_result = _run_hwpx_command([python_bin, str(scripts["text_extract.py"]), str(output_path), "--include-tables"])
             extracted_text = text_result.stdout or ""
             summary["text_extract_passed"] = True
             summary["text_chars"] = len(extracted_text)
             summary["title_found"] = title[:20] in extracted_text if title else False
+            meaningful_terms = _hwpx_quality_terms(markdown, title)
+            found_terms = [term for term in meaningful_terms if term in extracted_text]
+            summary["content_terms_checked"] = meaningful_terms[:10]
+            summary["content_terms_found"] = found_terms[:10]
+            summary["generated_content_found"] = bool(found_terms)
             summary["extracted_text_excerpt"] = extracted_text[:500]
         except subprocess.CalledProcessError as exc:
             summary["text_extract_passed"] = False
             summary["text_chars"] = 0
             summary["title_found"] = False
+            summary["generated_content_found"] = False
             summary["warnings"].append(f"text_extract.py 실패: {(exc.stderr or exc.stdout or str(exc))[:500]}")
+        if not summary.get("generated_content_found"):
+            raise AnalysisError("생성된 HWPX에서 사용자 입력 문구를 확인하지 못했습니다. 손상된 다운로드를 막기 위해 export를 중단했습니다.")
         summary["warnings"] = [
             "A bundled Hancom-openable HWPX reference was cloned because a base markdown template was not available."
             if "minimal HWPX fallback" in warning
@@ -686,6 +715,31 @@ def export_markdown_to_hwpx_with_validation(markdown: str, title: str) -> tuple[
 def export_markdown_to_hwpx(markdown: str, title: str) -> tuple[str, bytes]:
     filename, content, _summary = export_markdown_to_hwpx_with_validation(markdown, title)
     return filename, content
+
+
+def _hwpx_quality_terms(markdown: str, title: str) -> list[str]:
+    """Pick stable user-facing terms that should survive HWPX generation."""
+    candidates: list[str] = []
+    for raw in [title, *markdown.splitlines()]:
+        text = _markdown_line_to_text(raw)
+        text = re.sub(r"\|?\s*-{2,}\s*\|?", " ", text)
+        text = re.sub(r"[|:()\[\]{}]", " ", text)
+        text = re.sub(r"\s+", " ", text).strip()
+        if 4 <= len(text) <= 80:
+            candidates.append(text)
+        for token in re.findall(r"[A-Za-z0-9가-힣]{4,}", text):
+            if len(token) >= 4:
+                candidates.append(token)
+    seen: set[str] = set()
+    terms: list[str] = []
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        terms.append(candidate)
+        if len(terms) >= 12:
+            break
+    return terms or [_safe_title(title)]
 
 
 def build_template_replacements(workflow: WorkflowSession, extra: dict[str, str] | None = None) -> dict[str, str]:

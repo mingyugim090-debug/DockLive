@@ -41,6 +41,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
 TEMPLATES_DIR = SKILL_DIR / "templates"
 BASE_DIR = TEMPLATES_DIR / "base"
+REFERENCE_HWPX = TEMPLATES_DIR / "reference.hwpx"
 
 AVAILABLE_TEMPLATES = ["gonmun", "report", "minutes"]
 
@@ -112,6 +113,27 @@ def pack_hwpx(input_dir: Path, output_path: Path) -> None:
             zf.write(input_dir / rel_path, rel_path, compress_type=ZIP_DEFLATED)
 
 
+def prepare_base_package(work: Path) -> str:
+    """Populate work with a reusable HWPX base package.
+
+    Older deployments bundled a full templates/base directory. The current MVP ships a
+    verified reference.hwpx instead, so use it as the base package when the directory is
+    absent. This keeps markdown exports on the structured md2hwpx path instead of
+    falling back to a form-clone document that looks like the wrong user-facing output.
+    """
+    if BASE_DIR.is_dir():
+        shutil.copytree(BASE_DIR, work)
+        return "base-directory"
+
+    if REFERENCE_HWPX.is_file():
+        work.mkdir(parents=True, exist_ok=False)
+        with ZipFile(REFERENCE_HWPX, "r") as zf:
+            zf.extractall(work)
+        return "reference-hwpx"
+
+    raise SystemExit(f"Base template not found: {BASE_DIR} or {REFERENCE_HWPX}")
+
+
 def validate_hwpx(hwpx_path: Path) -> list[str]:
     """Quick structural validation of the output HWPX."""
     errors: list[str] = []
@@ -164,27 +186,32 @@ def build(
 ) -> None:
     """Main build logic."""
 
-    if not BASE_DIR.is_dir():
-        raise SystemExit(f"Base template not found: {BASE_DIR}")
-
     with tempfile.TemporaryDirectory() as tmpdir:
         work = Path(tmpdir) / "build"
 
-        # 1. Copy base template
-        shutil.copytree(BASE_DIR, work)
+        # 1. Copy or unpack base template
+        base_kind = prepare_base_package(work)
 
         # 2. Apply template overlay
         if template:
             overlay_dir = TEMPLATES_DIR / template
             if not overlay_dir.is_dir():
-                raise SystemExit(
-                    f"Template '{template}' not found. "
-                    f"Available: {', '.join(AVAILABLE_TEMPLATES)}"
-                )
-            for overlay_file in overlay_dir.iterdir():
-                if overlay_file.is_file() and overlay_file.suffix == ".xml":
-                    dest = work / "Contents" / overlay_file.name
-                    shutil.copy2(overlay_file, dest)
+                if base_kind == "reference-hwpx":
+                    print(
+                        f"WARNING: Template overlay '{template}' not found; "
+                        "using reference HWPX styles only.",
+                        file=sys.stderr,
+                    )
+                else:
+                    raise SystemExit(
+                        f"Template '{template}' not found. "
+                        f"Available: {', '.join(AVAILABLE_TEMPLATES)}"
+                    )
+            if overlay_dir.is_dir():
+                for overlay_file in overlay_dir.iterdir():
+                    if overlay_file.is_file() and overlay_file.suffix == ".xml":
+                        dest = work / "Contents" / overlay_file.name
+                        shutil.copy2(overlay_file, dest)
 
         # 3. Apply custom overrides
         if header_override:

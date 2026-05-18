@@ -201,8 +201,8 @@ def verify(source_path=None, result_path=None, json_output=None):
 
 def _print_report(report):
     """검수 결과를 콘솔에 출력한다."""
-    status_icon = {"PASS": "✅", "WARN": "⚠️", "FAIL": "❌"}.get(
-        report["status"], "❓"
+    status_icon = {"PASS": "[PASS]", "WARN": "[WARN]", "FAIL": "[FAIL]"}.get(
+        report["status"], "[?]"
     )
     print(f"\n{'='*60}")
     print(f"  HWPX 검수 결과: {status_icon} {report['status']}")
