@@ -9,12 +9,11 @@ import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 
 const titles: Array<[string, string]> = [
-  ['/app/upload', '문서 업로드'],
-  ['/app/documents', '문서 목록'],
   ['/app/templates', '템플릿'],
-  ['/app/history', '작업 이력'],
+  ['/app/documents', '문서함'],
+  ['/app/history', '작업내역'],
   ['/app/settings', '설정'],
-  ['/app', '문서 자동화 워크스페이스'],
+  ['/app', '공고문 만들기'],
 ];
 
 function AppLayoutInner({ children, title }: { children: ReactNode; title: string }) {
@@ -22,7 +21,7 @@ function AppLayoutInner({ children, title }: { children: ReactNode; title: strin
   const { isPurchaseModalOpen, closePurchaseModal, user } = useCreditContext();
 
   return (
-    <div className="min-h-screen bg-[var(--theme-bg)] text-[var(--theme-text)] transition-colors duration-300 lg:grid lg:grid-cols-[280px_1fr]">
+    <div className="min-h-screen bg-[#F8FAF9] text-[var(--theme-text)] transition-colors duration-300 lg:grid lg:grid-cols-[280px_1fr]">
       <Sidebar open={open} onClose={() => setOpen(false)} />
       <div className="min-w-0">
         <Header title={title} onMenu={() => setOpen(true)} />
@@ -51,7 +50,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     () =>
       titles.find(
         ([path]) => pathname === path || (path !== '/app' && pathname.startsWith(path)),
-      )?.[1] ?? '문서 자동화 워크스페이스',
+      )?.[1] ?? '공고문 만들기',
     [pathname],
   );
 

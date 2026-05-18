@@ -5,12 +5,11 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const items = [
-  { href: '/app', label: 'Workspace', icon: 'W' },
-  { href: '/app/upload', label: 'Upload', icon: 'U' },
-  { href: '/app/documents', label: 'Documents', icon: 'D' },
-  { href: '/app/templates', label: 'Templates', icon: 'T' },
-  { href: '/app/history', label: 'History', icon: 'H' },
-  { href: '/app/settings', label: 'Settings', icon: 'S' },
+  { href: '/app', label: '공고문 만들기', icon: '문' },
+  { href: '/app/templates', label: '템플릿', icon: '틀' },
+  { href: '/app/documents', label: '문서함', icon: '함' },
+  { href: '/app/history', label: '작업내역', icon: '역' },
+  { href: '/app/settings', label: '설정', icon: '설' },
 ];
 
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -20,22 +19,22 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
     <>
       <div
         className={[
-          'fixed inset-0 z-40 bg-[#273044]/25 backdrop-blur-sm transition lg:hidden',
+          'fixed inset-0 z-40 bg-[#24312D]/25 backdrop-blur-sm transition lg:hidden',
           open ? 'opacity-100' : 'pointer-events-none opacity-0',
         ].join(' ')}
         onClick={onClose}
       />
       <aside
         className={[
-          'fixed inset-y-0 left-0 z-50 flex w-[280px] flex-col border-r border-[var(--theme-border)] bg-[color-mix(in_srgb,var(--theme-surface)_92%,transparent)] px-4 py-5 shadow-panel backdrop-blur-xl transition-transform lg:static lg:z-auto lg:h-screen lg:translate-x-0 lg:shadow-none',
+          'fixed inset-y-0 left-0 z-50 flex w-[280px] flex-col border-r border-[var(--theme-border)] bg-white px-4 py-5 shadow-panel transition-transform lg:static lg:z-auto lg:h-screen lg:translate-x-0 lg:shadow-none',
           open ? 'translate-x-0' : '-translate-x-full',
         ].join(' ')}
       >
-        <Link href="/" className="flex items-center gap-3 rounded-[22px] px-3 py-2" onClick={onClose}>
+        <Link href="/" className="flex items-center gap-3 rounded-2xl px-3 py-2" onClick={onClose}>
           <Image src="/docklive-mark.svg" alt="" width={42} height={42} className="h-10 w-10" />
           <span>
-            <span className="block text-base font-bold text-[var(--theme-text)]">DockLive</span>
-            <span className="text-xs text-[var(--theme-muted)]">Document Agent</span>
+            <span className="block text-base font-bold text-[#24312D]">DockLive</span>
+            <span className="text-xs text-[#65736E]">공고문 자동화 도구</span>
           </span>
         </Link>
 
@@ -50,11 +49,11 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                 className={[
                   'flex items-center gap-3 rounded-full px-4 py-3 text-sm font-semibold transition',
                   active
-                    ? 'bg-[var(--theme-primary-soft)] text-[var(--theme-primary)]'
-                    : 'text-[var(--theme-muted)] hover:bg-[var(--theme-surface-muted)] hover:text-[var(--theme-text)]',
+                    ? 'bg-[#E7F1ED] text-[#245D50]'
+                    : 'text-[#65736E] hover:bg-[#F3F7F5] hover:text-[#24312D]',
                 ].join(' ')}
               >
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--theme-surface)] text-xs font-bold">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-[11px] font-bold shadow-sm">
                   {item.icon}
                 </span>
                 {item.label}
@@ -63,14 +62,11 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           })}
         </nav>
 
-        <div className="mt-auto rounded-[24px] border border-[var(--theme-border)] bg-[var(--theme-bg-soft)] p-4">
-          <p className="text-sm font-semibold text-[var(--theme-text)]">Agent MVP</p>
-          <p className="mt-1 text-xs leading-5 text-[var(--theme-muted)]">
-            공고 분석, 입력 수집, 초안 작성, HWPX export를 한곳에서 진행합니다.
+        <div className="mt-auto rounded-2xl border border-[#DDE7E2] bg-[#F6FAF8] p-4">
+          <p className="text-sm font-bold text-[#24312D]">1분 안에 시작</p>
+          <p className="mt-2 text-xs leading-5 text-[#65736E]">
+            템플릿 선택, 정보 입력, 참고자료 업로드, 미리보기, 다운로드 순서로 공고문을 만듭니다.
           </p>
-          <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--theme-primary-soft)]">
-            <div className="h-full w-[62%] rounded-full gradient-primary" />
-          </div>
         </div>
       </aside>
     </>

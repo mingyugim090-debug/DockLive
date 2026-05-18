@@ -250,3 +250,38 @@ export interface HwpxConvertResponse extends ExportResponse {
   conversion_method: string;
   warnings: string[];
 }
+
+export interface NoticeSection {
+  heading: string;
+  body: string;
+}
+
+export interface NoticeSchedule {
+  applicationPeriod: string;
+  eventPeriod: string;
+}
+
+export interface NoticeContact {
+  department: string;
+  phone: string;
+  email: string;
+}
+
+export interface NoticeDocument {
+  documentType: string;
+  title: string;
+  organization: string;
+  purpose: string;
+  applicationMethod: string;
+  sections: NoticeSection[];
+  schedule: NoticeSchedule;
+  contact: NoticeContact;
+  attachments: string[];
+}
+
+export interface NoticeGenerateResponse {
+  success: boolean;
+  data: NoticeDocument;
+  preview_markdown: string;
+  warnings: string[];
+}

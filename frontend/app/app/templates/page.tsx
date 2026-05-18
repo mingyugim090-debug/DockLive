@@ -1,89 +1,52 @@
-'use client';
-
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { TemplateCard } from '@/components/templates/TemplateCard';
-import { TemplateWorkflowPanel } from '@/components/templates/TemplateWorkflowPanel';
+import Link from 'next/link';
+import { noticeTemplates } from '@/data/mockTemplates';
+import { ButtonLink } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { mockDocuments } from '@/data/mockDocuments';
-import { mockTemplates } from '@/data/mockTemplates';
-import type { OutputFormat, WorkflowTaskId } from '@/data/workspaceTasks';
-import { savePendingTemplate } from '@/lib/workflow/workflowStore';
-
-const templateTaskMap: Record<string, { taskId: WorkflowTaskId; outputFormat: OutputFormat; instructionHint: string }> = {
-  'tpl-meeting': {
-    taskId: 'minutes',
-    outputFormat: 'Markdown',
-    instructionHint: '회의 목적, 참석자, 강조할 결정사항을 입력하세요.',
-  },
-  'tpl-report': {
-    taskId: 'report',
-    outputFormat: 'Markdown',
-    instructionHint: '보고 목적, 대상 독자, 강조할 결론을 입력하세요.',
-  },
-  'tpl-plan': {
-    taskId: 'plan',
-    outputFormat: 'HWPX',
-    instructionHint: '대상 사용자, 핵심 문제, 실행 계획을 입력하세요.',
-  },
-  'tpl-assignment': {
-    taskId: 'report',
-    outputFormat: 'Markdown',
-    instructionHint: '과제 주제, 분량, 반드시 포함할 참고 자료를 입력하세요.',
-  },
-  'tpl-official': {
-    taskId: 'official',
-    outputFormat: 'HWPX',
-    instructionHint: '수신 기관, 요청 목적, 포함해야 할 첨부 항목을 입력하세요.',
-  },
-  'tpl-slide': {
-    taskId: 'custom',
-    outputFormat: 'Markdown',
-    instructionHint: '청중, 발표 시간, 꼭 강조할 메시지를 입력하세요.',
-  },
-};
 
 export default function TemplatesPage() {
-  const router = useRouter();
-  const [selected, setSelected] = useState('tpl-report');
-  const selectedTemplate = mockTemplates.find((template) => template.id === selected) ?? mockTemplates[0];
-
-  const startTemplateWorkflow = (templateId: string) => {
-    const template = mockTemplates.find((item) => item.id === templateId) ?? mockTemplates[0];
-    const mapping = templateTaskMap[template.id] ?? templateTaskMap['tpl-report'];
-    savePendingTemplate({
-      templateId: template.id,
-      templateName: template.name,
-      taskId: mapping.taskId,
-      outputFormat: mapping.outputFormat,
-      instructionHint: mapping.instructionHint,
-    });
-    router.push('/app');
-  };
-
   return (
     <div className="space-y-6">
-      <Card className="bg-[#EEF2FF]">
-        <h2 className="text-2xl font-bold text-[#273044]">템플릿을 선택하고, 문서 생성 워크플로우까지 이어가세요.</h2>
-        <p className="mt-2 text-sm leading-6 text-[#6B7280]">
-          각 템플릿은 단순한 보기용 카드가 아니라 기존 문서 선택, 작성 방향 입력, 결과 생성으로 이어지는 작업 흐름을 가집니다.
+      <section className="rounded-3xl border border-[#DDE7E2] bg-[#F6FAF8] px-6 py-7 shadow-sm lg:px-8">
+        <p className="text-sm font-bold text-[#3A7A68]">공고문 템플릿</p>
+        <h2 className="mt-2 text-3xl font-bold text-[#24312D]">업무에 맞는 공고문 샘플을 선택하세요.</h2>
+        <p className="mt-3 max-w-3xl text-sm leading-7 text-[#65736E]">
+          템플릿을 선택하면 필요한 정보 입력 단계로 바로 이어집니다. 각 템플릿은 제목, 주요 정보 표, 본문, 문의처, 붙임 영역을 갖춘 공고문 구조로 생성됩니다.
         </p>
-      </Card>
+      </section>
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_400px]">
-        <div className="grid gap-5 md:grid-cols-2">
-          {mockTemplates.map((template) => (
-            <TemplateCard
-              key={template.id}
-              template={template}
-              selected={selected === template.id}
-              onSelect={() => setSelected(template.id)}
-              onStart={() => startTemplateWorkflow(template.id)}
-            />
-          ))}
-        </div>
-        <TemplateWorkflowPanel template={selectedTemplate} documents={mockDocuments} />
-      </div>
+      <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+        {noticeTemplates.map((template) => (
+          <Card key={template.id} hover className="flex min-h-[340px] flex-col rounded-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <span className="rounded-full px-3 py-1 text-xs font-bold text-white" style={{ backgroundColor: template.accent }}>
+                {template.purpose}
+              </span>
+              <span className="rounded-full bg-[#F3F7F5] px-3 py-1 text-xs font-bold text-[#65736E]">
+                {template.inputCount}개 입력
+              </span>
+            </div>
+            <h3 className="mt-5 text-lg font-bold text-[#24312D]">{template.name}</h3>
+            <p className="mt-2 text-sm leading-6 text-[#65736E]">{template.description}</p>
+            <div className="mt-5 rounded-xl border border-[#E4EBE7] bg-[#FBFCFB] p-4">
+              <p className="text-xs font-bold text-[#7B8782]">미리보기 구성</p>
+              <ul className="mt-3 space-y-1 text-sm leading-6 text-[#34443F]">
+                {template.previewSections.map((section) => <li key={section}>- {section}</li>)}
+              </ul>
+            </div>
+            <div className="mt-auto flex gap-2 pt-5">
+              <Link
+                href={`/app?template=${template.id}`}
+                className="inline-flex flex-1 items-center justify-center rounded-full border border-[#DDE7E2] bg-white px-3 py-2.5 text-sm font-semibold text-[#34443F] transition hover:bg-[#F3F7F5]"
+              >
+                미리보기
+              </Link>
+              <ButtonLink href={`/app?template=${template.id}`} className="flex-1 px-3">
+                이 템플릿으로 작성하기
+              </ButtonLink>
+            </div>
+          </Card>
+        ))}
+      </section>
     </div>
   );
 }

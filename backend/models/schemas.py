@@ -271,5 +271,49 @@ class HwpxConvertResponse(ExportResponse):
     warnings: list[str] = Field(default_factory=list)
 
 
+class NoticeSection(BaseModel):
+    heading: str
+    body: str
+
+
+class NoticeSchedule(BaseModel):
+    applicationPeriod: str = ""
+    eventPeriod: str = ""
+
+
+class NoticeContact(BaseModel):
+    department: str = ""
+    phone: str = ""
+    email: str = ""
+
+
+class NoticeDocument(BaseModel):
+    documentType: str
+    title: str
+    organization: str
+    purpose: str = ""
+    applicationMethod: str = ""
+    sections: list[NoticeSection] = Field(default_factory=list)
+    schedule: NoticeSchedule = Field(default_factory=NoticeSchedule)
+    contact: NoticeContact = Field(default_factory=NoticeContact)
+    attachments: list[str] = Field(default_factory=list)
+
+
+class NoticeGenerateRequest(BaseModel):
+    template_id: str
+    inputs: dict[str, str] = Field(default_factory=dict)
+
+
+class NoticeGenerateResponse(BaseModel):
+    success: bool
+    data: NoticeDocument
+    preview_markdown: str
+    warnings: list[str] = Field(default_factory=list)
+
+
+class NoticeExportRequest(BaseModel):
+    document: NoticeDocument
+
+
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")

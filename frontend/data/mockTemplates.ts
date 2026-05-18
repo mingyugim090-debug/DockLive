@@ -1,64 +1,127 @@
-import type { MockTemplate } from './types';
+export type NoticeFieldType = 'text' | 'textarea' | 'date' | 'email' | 'tel';
 
-export const mockTemplates: MockTemplate[] = [
-  {
-    id: 'tpl-meeting',
-    name: '회의록 템플릿',
-    description: '논의 안건, 결정 사항, 후속 작업을 깔끔하게 정리합니다.',
-    recommendedFor: '회의 메모, 음성 기록 요약본',
-    output: 'DOCX / Markdown',
-    useCase: '흩어진 회의 메모를 공식 회의록 구조로 바꾸고 담당자별 액션 아이템을 분리합니다.',
-    workflow: ['회의 메모 업로드', '참석자와 회의 목적 입력', '안건/결정/후속 작업 생성', '회의록 다운로드'],
-    sampleResult: '회의 개요, 안건별 요약, 결정 사항, 담당자별 후속 작업이 포함된 회의록 초안',
-  },
-  {
-    id: 'tpl-report',
-    name: '보고서 템플릿',
-    description: '배경, 분석, 결론, 제안 순서로 문서를 재구성합니다.',
-    recommendedFor: '리서치 자료, 과제, 업무 보고',
-    output: 'PDF / DOCX',
-    useCase: '자료 묶음을 읽고 보고서 흐름에 맞는 제목, 요약, 본문 구조를 생성합니다.',
-    workflow: ['자료 문서 선택', '보고 목적 입력', '핵심 근거와 결론 정리', '보고서 초안 생성'],
-    sampleResult: '요약, 배경, 주요 분석, 시사점, 제안 사항으로 정리된 보고서 초안',
-  },
-  {
-    id: 'tpl-plan',
-    name: '기획서 템플릿',
-    description: '문제 정의와 실행 계획을 중심으로 기획서 초안을 만듭니다.',
-    recommendedFor: '제품 기획, 프로젝트 제안',
-    output: 'DOCX / HWPX',
-    useCase: '아이디어나 기획 메모를 실행 가능한 프로젝트 제안서 구조로 정리합니다.',
-    workflow: ['기획 자료 선택', '대상 사용자와 목표 입력', '문제/해결/범위 정리', '기획서 초안 생성'],
-    sampleResult: '문제 정의, 목표, 핵심 기능, 일정, 기대 효과가 포함된 기획서 초안',
-  },
-  {
-    id: 'tpl-assignment',
-    name: '과제 정리 템플릿',
-    description: '참고 자료를 주제별로 묶고 제출용 초안 흐름을 잡습니다.',
-    recommendedFor: '대학 과제, 조사 보고서',
-    output: 'Markdown / DOCX',
-    useCase: '여러 참고 자료를 과제 주제에 맞춰 분류하고 서론-본론-결론 형태의 제출 초안을 만듭니다.',
-    workflow: ['과제 자료 업로드', '과제 주제와 분량 입력', '자료별 핵심 주장 분류', '제출용 초안과 참고 요약 생성'],
-    sampleResult: '주제별 참고 자료 요약, 과제 목차, 서론/본론/결론 초안, 보완할 근거 목록',
-  },
-  {
-    id: 'tpl-official',
-    name: '공문서 정리 템플릿',
-    description: '공문 문체와 문단 구조에 맞춰 내용을 정돈합니다.',
-    recommendedFor: '기관 제출 문서, 안내문',
-    output: 'HWPX / PDF',
-    useCase: '일반 문장을 기관 제출용 공문 문체와 항목 구조로 정리합니다.',
-    workflow: ['원본 문서 선택', '수신 기관과 요청 목적 입력', '공문 문체로 문단 정리', 'HWPX/PDF 결과 생성'],
-    sampleResult: '제목, 수신/발신, 요청 배경, 주요 내용, 첨부 목록이 정리된 공문서 초안',
-  },
-  {
-    id: 'tpl-slide',
-    name: '발표자료 초안 템플릿',
-    description: '문서 내용을 발표 흐름에 맞는 슬라이드 아웃라인으로 변환합니다.',
-    recommendedFor: '발표 준비, 제안 발표',
-    output: 'Markdown / PPT outline',
-    useCase: '긴 문서를 발표 순서에 맞춰 슬라이드 제목과 핵심 메시지로 재구성합니다.',
-    workflow: ['발표 자료 선택', '청중과 발표 시간 입력', '슬라이드 흐름 생성', '발표자료 아웃라인 다운로드'],
-    sampleResult: '슬라이드별 제목, 핵심 메시지, 발표자 메모가 포함된 발표자료 아웃라인',
-  },
+export interface NoticeInputField {
+  id: string;
+  label: string;
+  type: NoticeFieldType;
+  required: boolean;
+  placeholder: string;
+}
+
+export interface NoticeTemplate {
+  id: string;
+  name: string;
+  purpose: string;
+  description: string;
+  inputCount: number;
+  accent: string;
+  fields: NoticeInputField[];
+  previewSections: string[];
+}
+
+const commonFields: NoticeInputField[] = [
+  { id: 'title', label: '공고 제목', type: 'text', required: true, placeholder: '예: 2026년 노원 대학 연합 창업캠프 참가자 모집 공고' },
+  { id: 'organization', label: '기관명', type: 'text', required: true, placeholder: '예: 서울과학기술대학교 창업지원단' },
+  { id: 'target', label: '모집 대상', type: 'textarea', required: true, placeholder: '예: 창업에 관심 있는 관내 대학생 및 예비창업자' },
+  { id: 'applicationPeriod', label: '신청 기간', type: 'text', required: true, placeholder: '예: 2026. 6. 1.(월) ~ 6. 20.(토)' },
+  { id: 'eventPeriod', label: '운영 기간', type: 'text', required: false, placeholder: '예: 2026. 7. 3.(금) ~ 7. 5.(일)' },
+  { id: 'applicationMethod', label: '신청 방법', type: 'textarea', required: true, placeholder: '예: 기관 홈페이지에서 신청서 내려받아 이메일 제출' },
+  { id: 'benefit', label: '지원 내용', type: 'textarea', required: false, placeholder: '예: 교육, 멘토링, 네트워킹, 수료증 발급' },
+  { id: 'department', label: '담당 부서', type: 'text', required: true, placeholder: '예: 창업지원팀' },
+  { id: 'phone', label: '연락처', type: 'tel', required: false, placeholder: '예: 02-000-0000' },
+  { id: 'email', label: '이메일', type: 'email', required: false, placeholder: '예: notice@example.go.kr' },
+  { id: 'attachments', label: '붙임 문서', type: 'textarea', required: false, placeholder: '예: 신청서, 개인정보 수집 및 이용 동의서' },
 ];
+
+function template(
+  id: string,
+  name: string,
+  purpose: string,
+  description: string,
+  accent: string,
+  previewSections: string[],
+): NoticeTemplate {
+  return {
+    id,
+    name,
+    purpose,
+    description,
+    inputCount: commonFields.filter((field) => field.required).length,
+    accent,
+    fields: commonFields,
+    previewSections,
+  };
+}
+
+export const noticeTemplates: NoticeTemplate[] = [
+  template(
+    'startup_camp_notice',
+    '창업캠프 모집 공고문',
+    '창업 교육·캠프 참가자 모집',
+    '창업캠프 일정, 모집 대상, 신청 방법, 문의처를 행정 공고문 형식으로 정리합니다.',
+    '#4F7CAC',
+    ['사업 개요', '모집 대상', '운영 일정', '신청 방법', '선정 및 안내'],
+  ),
+  template(
+    'business_support_notice',
+    '지원사업 참여기업 모집 공고문',
+    '기업 지원사업 참여자 모집',
+    '지원 대상, 지원 내용, 평가 절차, 제출 서류를 참여기업 모집 공고로 구성합니다.',
+    '#3A8F7B',
+    ['사업 개요', '지원 대상', '지원 내용', '신청 방법', '평가 및 선정'],
+  ),
+  template(
+    'education_program_notice',
+    '교육 프로그램 수강생 모집 공고문',
+    '교육 프로그램 수강생 모집',
+    '교육 목적, 수강 대상, 교육 일정, 수료 기준을 한눈에 보이도록 정리합니다.',
+    '#6C7A89',
+    ['교육 개요', '모집 대상', '교육 일정', '신청 방법', '수료 및 안내'],
+  ),
+  template(
+    'event_participant_notice',
+    '행사 참가자 모집 공고문',
+    '행사·포럼·설명회 참가자 모집',
+    '행사 개요와 참가 신청 절차를 공공기관 안내문 톤으로 작성합니다.',
+    '#B07D62',
+    ['행사 개요', '모집 대상', '행사 일정', '참가 신청', '유의사항'],
+  ),
+  template(
+    'supporters_notice',
+    '대외활동/서포터즈 모집 공고문',
+    '대외활동·홍보단·서포터즈 모집',
+    '활동 내용, 선발 일정, 활동 혜택을 모집 공고 형식으로 구성합니다.',
+    '#7B6FA6',
+    ['활동 개요', '모집 대상', '활동 내용', '신청 방법', '선발 일정'],
+  ),
+  template(
+    'scholarship_notice',
+    '장학생 모집 공고문',
+    '장학금 신청자 모집',
+    '신청 자격, 장학 금액, 제출 서류, 선발 기준을 명확하게 정리합니다.',
+    '#7A8B54',
+    ['장학사업 개요', '신청 자격', '지원 내용', '신청 방법', '선발 기준'],
+  ),
+  template(
+    'research_participant_notice',
+    '연구과제 참여자 모집 공고문',
+    '연구과제 참여자 모집',
+    '연구 목적, 참여 조건, 연구 윤리, 신청 방법을 공고문으로 구성합니다.',
+    '#5F819D',
+    ['연구 개요', '모집 대상', '참여 내용', '신청 방법', '연구 윤리 및 유의사항'],
+  ),
+  template(
+    'bid_rfp_notice',
+    '입찰/제안요청 공고문',
+    '입찰 또는 제안서 제출 안내',
+    '과업 범위, 참가 자격, 제출 방식, 평가 절차를 입찰 공고 형식으로 작성합니다.',
+    '#8A6F5A',
+    ['공고 개요', '과업 범위', '입찰 참가 자격', '제안서 제출', '평가 및 계약'],
+  ),
+];
+
+export function getNoticeTemplate(id: string | null | undefined): NoticeTemplate {
+  return noticeTemplates.find((template) => template.id === id) ?? noticeTemplates[0];
+}
+
+export const mockTemplates = noticeTemplates;

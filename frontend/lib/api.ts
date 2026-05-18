@@ -6,6 +6,8 @@ import type {
   ExportResponse,
   HwpxComposeResponse,
   HwpxConvertResponse,
+  NoticeDocument,
+  NoticeGenerateResponse,
   HwpxPlaceholderMapResponse,
   HwpxStatusResponse,
   WorkflowResponse,
@@ -264,6 +266,50 @@ export async function exportPersistedHwpxToPdf(downloadId: string, filename: str
   const params = new URLSearchParams({ filename });
   const res = await fetch(`${API_URL}/api/hwpx/download/${downloadId}/pdf?${params.toString()}`);
   if (!res.ok) throw await readError(res, `HWPX PDF export failed: ${res.status}`);
+  return res.json();
+}
+
+export async function generateNoticeDocument(
+  templateId: string,
+  inputs: Record<string, string>,
+  files: File[] = [],
+): Promise<NoticeGenerateResponse> {
+  const formData = new FormData();
+  formData.append('payload_json', JSON.stringify({ template_id: templateId, inputs }));
+  files.forEach((file) => formData.append('files', file));
+
+  const res = await fetch(`${API_URL}/api/notices/generate`, { method: 'POST', body: formData });
+  if (!res.ok) throw await readError(res, `공고문 생성 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function exportNoticeHwpx(document: NoticeDocument): Promise<ExportResponse> {
+  const res = await fetch(`${API_URL}/api/notices/export/hwpx`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ document }),
+  });
+  if (!res.ok) throw await readError(res, `HWPX 다운로드 생성 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function exportNoticePdf(document: NoticeDocument): Promise<ExportResponse> {
+  const res = await fetch(`${API_URL}/api/notices/export/pdf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ document }),
+  });
+  if (!res.ok) throw await readError(res, `PDF 다운로드 생성 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function exportNoticeDocx(document: NoticeDocument): Promise<ExportResponse> {
+  const res = await fetch(`${API_URL}/api/notices/export/docx`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ document }),
+  });
+  if (!res.ok) throw await readError(res, `DOCX 다운로드 생성 실패: ${res.status}`);
   return res.json();
 }
 
