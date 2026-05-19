@@ -17,12 +17,9 @@ export type NoticeAiTarget =
   | { type: 'title' }
   | { type: 'summary' }
   | { type: 'section'; index: number }
-  | { type: 'original'; id: string; label: string }
   | { type: 'schedule' }
   | { type: 'contact' }
   | { type: 'attachments' };
-
-export type HwpxOriginalEdits = Record<string, { before: string; after: string }>;
 
 export const noticeSteps: Array<{ id: NoticeBuilderStep; label: string }> = [
   { id: 'template', label: '공고문 유형 선택' },
@@ -204,15 +201,6 @@ function buildComposeRequest(document: NoticeDocument, inputs: Record<string, st
   ].filter(Boolean).join('\n');
 }
 
-function buildOriginalEditInstructions(originalEdits: HwpxOriginalEdits): string {
-  const edits = Object.values(originalEdits)
-    .filter((edit) => edit.after.trim() && edit.after.trim() !== edit.before.trim())
-    .map((edit, index) => [`[원본 수정 ${index + 1}]`, `기존: ${edit.before}`, `수정: ${edit.after}`].join('\n'));
-  return edits.length
-    ? ['업로드한 HWPX 원본 화면에서 사용자가 직접 수정한 내용입니다. 원본 양식의 해당 문구 또는 가장 가까운 입력 칸에 반영해 주세요.', ...edits].join('\n\n')
-    : '';
-}
-
 function buildApplicantContext(inputs: Record<string, string>) {
   return Object.entries(inputs)
     .filter(([key, value]) => value.trim() && !['aiPrompt'].includes(key))
@@ -244,9 +232,6 @@ function mergeGeneratedTarget(base: NoticeDocument, generated: NoticeDocument, t
   if (target.type === 'attachments') {
     return { ...base, attachments: generated.attachments.length ? generated.attachments : base.attachments };
   }
-  if (target.type === 'original') {
-    return base;
-  }
 
   const baseSection = base.sections[target.index];
   const generatedSection =
@@ -271,13 +256,11 @@ async function exportUploadedHwpx(
   sourceFile: File,
   document: NoticeDocument,
   inputs: Record<string, string>,
-  originalEdits: HwpxOriginalEdits,
   format: 'HWPX' | 'PDF',
 ): Promise<ExportResponse> {
-  const requestText = [buildComposeRequest(document, inputs), buildOriginalEditInstructions(originalEdits)].filter(Boolean).join('\n\n');
   const composed = await composeHwpxDocument(
     sourceFile,
-    requestText,
+    buildComposeRequest(document, inputs),
     buildApplicantContext(inputs),
     document.title,
   );
@@ -327,7 +310,6 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
   );
   const [sourceFiles, setSourceFiles] = useState<File[]>([]);
   const [sourceFileName, setSourceFileName] = useState<string | null>(null);
-  const [originalEdits, setOriginalEdits] = useState<HwpxOriginalEdits>({});
   const [warnings, setWarnings] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -344,7 +326,6 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
     setDraftDocument(draft);
     setSourceFiles([]);
     setSourceFileName(null);
-    setOriginalEdits({});
     setWarnings([]);
     setError(null);
     setCurrentStep('preview');
@@ -362,7 +343,6 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
     setDraftDocument(draft);
     setSourceFiles([file]);
     setSourceFileName(file.name);
-    setOriginalEdits({});
     setWarnings(['업로드한 원본 양식은 다운로드 시 HWPX 자동작성 엔진에 전달되어 가능한 한 서식을 보존합니다.']);
     setError(null);
     setCurrentStep('preview');
@@ -454,18 +434,6 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
     });
   }, []);
 
-  const updateOriginalEdit = useCallback((id: string, before: string, after: string) => {
-    setOriginalEdits((current) => {
-      const next = { ...current };
-      if (!after.trim() || after.trim() === before.trim()) {
-        delete next[id];
-      } else {
-        next[id] = { before, after };
-      }
-      return next;
-    });
-  }, []);
-
   const download = useCallback(async (format: 'HWPX' | 'PDF' | 'DOCX') => {
     if (!draftDocument) return;
     const normalized = normalizeNoticeDocument(draftDocument);
@@ -474,7 +442,7 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
     try {
       const exported =
         sourceFiles[0] && isHwpxLikeFile(sourceFiles[0]) && format !== 'DOCX'
-          ? await exportUploadedHwpx(sourceFiles[0], normalized, inputValues, originalEdits, format)
+          ? await exportUploadedHwpx(sourceFiles[0], normalized, inputValues, format)
           : format === 'HWPX'
             ? await exportNoticeHwpx(normalized)
             : format === 'PDF'
@@ -487,7 +455,7 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
     } finally {
       setExporting(null);
     }
-  }, [draftDocument, inputValues, originalEdits, sourceFiles]);
+  }, [draftDocument, inputValues, sourceFiles]);
 
   const reset = useCallback(() => {
     setCurrentStep('template');
@@ -495,7 +463,6 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
     setDraftDocument(null);
     setSourceFiles([]);
     setSourceFileName(null);
-    setOriginalEdits({});
     setWarnings([]);
     setError(null);
   }, []);
@@ -507,9 +474,7 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
     selectedTemplateId,
     inputValues,
     draftDocument,
-    sourceFile: sourceFiles[0] ?? null,
     sourceFileName,
-    originalEdits,
     warnings,
     error,
     isGenerating,
@@ -522,7 +487,6 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
     generateDraft,
     applyAiRequest,
     updateDraft,
-    updateOriginalEdit,
     download,
     reset,
   };

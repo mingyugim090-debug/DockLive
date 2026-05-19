@@ -1,17 +1,15 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/Button';
 import type { NoticeDocument } from '@/lib/types';
-import { readHwpxPreview, type HwpxPreview } from '@/lib/hwpxPreview';
-import type { HwpxOriginalEdits, NoticeAiTarget } from '@/hooks/useNoticeBuilder';
+import type { NoticeAiTarget } from '@/hooks/useNoticeBuilder';
 
 type SelectedTarget =
   | { type: 'title' }
   | { type: 'summary' }
   | { type: 'section'; index: number }
-  | { type: 'original'; id: string; label: string }
   | { type: 'schedule' }
   | { type: 'contact' }
   | { type: 'attachments' };
@@ -31,11 +29,8 @@ export function NoticeWebEditor({
   document,
   warnings,
   exporting,
-  sourceFile,
   sourceFileName,
-  originalEdits,
   onChange,
-  onOriginalEditChange,
   onBackToInfo,
   onRegenerate,
   onDownload,
@@ -44,11 +39,8 @@ export function NoticeWebEditor({
   document: NoticeDocument;
   warnings: string[];
   exporting: ExportFormat | null;
-  sourceFile?: File | null;
   sourceFileName?: string | null;
-  originalEdits?: HwpxOriginalEdits;
   onChange: (document: NoticeDocument) => void;
-  onOriginalEditChange?: (id: string, before: string, after: string) => void;
   onBackToInfo: () => void;
   onRegenerate: () => void;
   onDownload: (format: ExportFormat) => void;
@@ -58,47 +50,8 @@ export function NoticeWebEditor({
   const [selected, setSelected] = useState<SelectedTarget>({ type: 'section', index: 0 });
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiRunning, setAiRunning] = useState(false);
-  const [hwpxPreview, setHwpxPreview] = useState<HwpxPreview | null>(null);
-  const [previewError, setPreviewError] = useState<string | null>(null);
   const selectedSectionIndex = selected.type === 'section' ? selected.index : -1;
   const selectedSection = selected.type === 'section' ? safeDocument.sections[selected.index] : null;
-  const selectedOriginal =
-    selected.type === 'original'
-      ? hwpxPreview?.blocks.find((block) => block.id === selected.id) ?? { id: selected.id, text: selected.label }
-      : null;
-
-  useEffect(() => {
-    if (!sourceFile) {
-      setHwpxPreview(null);
-      setPreviewError(null);
-      return;
-    }
-
-    let alive = true;
-    let imageUrl: string | null = null;
-    setPreviewError(null);
-    setHwpxPreview(null);
-
-    readHwpxPreview(sourceFile)
-      .then((preview) => {
-        if (!alive) {
-          if (preview.imageUrl) URL.revokeObjectURL(preview.imageUrl);
-          return;
-        }
-        imageUrl = preview.imageUrl;
-        setHwpxPreview(preview);
-        const firstBlock = preview.blocks[0];
-        if (firstBlock) setSelected({ type: 'original', id: firstBlock.id, label: firstBlock.text });
-      })
-      .catch((error) => {
-        if (alive) setPreviewError(error instanceof Error ? error.message : 'HWPX 원본을 읽지 못했습니다.');
-      });
-
-    return () => {
-      alive = false;
-      if (imageUrl) URL.revokeObjectURL(imageUrl);
-    };
-  }, [sourceFile]);
 
   const structureItems = useMemo(
     () => [
@@ -203,16 +156,6 @@ export function NoticeWebEditor({
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_390px]">
         <section className="h-[calc(100vh-230px)] min-h-[680px] overflow-auto rounded-2xl border border-[#DDE7E2] bg-[#E2E8E5] p-5">
-          {sourceFile ? (
-            <OriginalHwpxViewer
-              fileName={sourceFileName}
-              preview={hwpxPreview}
-              error={previewError}
-              selectedId={selected.type === 'original' ? selected.id : null}
-              edits={originalEdits ?? {}}
-              onSelect={(block) => setSelected({ type: 'original', id: block.id, label: block.text })}
-            />
-          ) : (
           <article className="mx-auto min-h-[1120px] max-w-[760px] bg-white px-10 py-12 text-[#142033] shadow-[0_18px_48px_rgba(36,49,45,0.14)] sm:px-16">
             {sourceFileName ? (
               <div className="mb-7 flex items-center justify-between border-b border-[#DDE5E0] pb-3 text-xs font-bold text-[#65736E]">
@@ -348,19 +291,11 @@ export function NoticeWebEditor({
               {safeDocument.organization}
             </footer>
           </article>
-          )}
         </section>
 
         <aside className="space-y-4 xl:sticky xl:top-4 xl:self-start">
           <Panel title="선택 영역 수정">
-            {selectedOriginal ? (
-              <TextArea
-                label="원본 선택 영역"
-                value={originalEdits?.[selectedOriginal.id]?.after ?? selectedOriginal.text}
-                onChange={(value) => onOriginalEditChange?.(selectedOriginal.id, selectedOriginal.text, value)}
-                minHeight="min-h-[190px]"
-              />
-            ) : selected.type === 'title' ? (
+            {selected.type === 'title' ? (
               <div className="space-y-3">
                 <TextInput label="공고 제목" value={safeDocument.title} onChange={(value) => update((draft) => ({ ...draft, title: value }))} />
                 <TextInput label="기관명" value={safeDocument.organization} onChange={(value) => update((draft) => ({ ...draft, organization: value }))} />
@@ -460,83 +395,6 @@ export function NoticeWebEditor({
         </aside>
       </div>
     </div>
-  );
-}
-
-function OriginalHwpxViewer({
-  fileName,
-  preview,
-  error,
-  selectedId,
-  edits,
-  onSelect,
-}: {
-  fileName?: string | null;
-  preview: HwpxPreview | null;
-  error: string | null;
-  selectedId: string | null;
-  edits: HwpxOriginalEdits;
-  onSelect: (block: { id: string; text: string }) => void;
-}) {
-  if (error) {
-    return (
-      <article className="mx-auto min-h-[760px] max-w-[760px] bg-white px-10 py-12 text-[#142033] shadow-[0_18px_48px_rgba(36,49,45,0.14)] sm:px-16">
-        <p className="text-sm font-bold text-[#B95050]">HWPX 원본을 표시하지 못했습니다.</p>
-        <p className="mt-3 text-sm leading-6 text-[#65736E]">{error}</p>
-      </article>
-    );
-  }
-
-  if (!preview) {
-    return (
-      <article className="mx-auto flex min-h-[760px] max-w-[760px] items-center justify-center bg-white px-10 py-12 text-[#65736E] shadow-[0_18px_48px_rgba(36,49,45,0.14)]">
-        <p className="text-sm font-bold">HWPX 원본을 읽는 중입니다.</p>
-      </article>
-    );
-  }
-
-  return (
-    <article className="mx-auto min-h-[1120px] max-w-[820px] bg-white text-[#142033] shadow-[0_18px_48px_rgba(36,49,45,0.14)]">
-      {preview.imageUrl ? (
-        <div className="border-b border-[#E3E8E5] bg-[#F8FAF9] p-4">
-          <img src={preview.imageUrl} alt={fileName ? `${fileName} 원본 미리보기` : 'HWPX 원본 미리보기'} className="mx-auto max-h-[1040px] w-auto max-w-full bg-white object-contain" />
-        </div>
-      ) : null}
-
-      <div className="px-8 py-8 sm:px-12">
-        <div className="mb-5 flex items-center justify-between border-b border-[#DDE5E0] pb-3 text-xs font-bold text-[#65736E]">
-          <span>업로드 원본 HWPX</span>
-          <span className="max-w-[520px] truncate">{fileName}</span>
-        </div>
-
-        {preview.warnings.length ? (
-          <div className="mb-5 rounded-xl border border-amber-100 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
-            {preview.warnings.map((warning) => <p key={warning}>{warning}</p>)}
-          </div>
-        ) : null}
-
-        <div className="space-y-2">
-          {preview.blocks.map((block, index) => {
-            const edited = edits[block.id]?.after;
-            const active = selectedId === block.id;
-            return (
-              <button
-                key={block.id}
-                type="button"
-                onClick={() => onSelect(block)}
-                className={[
-                  'block w-full rounded-lg border px-4 py-3 text-left text-sm leading-7 transition',
-                  active ? 'border-[#245D50] bg-[#F5FAF8] shadow-[0_0_0_3px_rgba(36,93,80,0.10)]' : 'border-transparent hover:border-[#DDE7E2]',
-                ].join(' ')}
-              >
-                <span className="mr-3 align-top text-[11px] font-bold text-[#8A9692]">{String(index + 1).padStart(2, '0')}</span>
-                <span className={edited ? 'text-[#245D50]' : ''}>{edited || block.text}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </article>
   );
 }
 
