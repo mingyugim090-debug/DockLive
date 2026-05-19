@@ -7,6 +7,7 @@ import { noticeSteps, useNoticeBuilder } from '@/hooks/useNoticeBuilder';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { NoticeTemplatePreviewModal } from '@/components/templates/NoticeTemplatePreview';
+import { NoticeWebEditor } from '@/components/workspace/NoticeWebEditor';
 
 export default function NoticeBuilderPage() {
   const searchParams = useSearchParams();
@@ -177,86 +178,15 @@ export default function NoticeBuilderPage() {
 
       {builder.currentStep === 'preview' && builder.draftDocument ? (
         <Card className="rounded-2xl">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <p className="text-sm font-bold text-[#3A7A68]">Step 5. 문서 미리보기 및 수정</p>
-              <input
-                value={builder.draftDocument.title}
-                onChange={(event) => builder.updateDraft((doc) => ({ ...doc, title: event.target.value }))}
-                className="mt-2 w-full rounded-xl border border-transparent bg-transparent text-2xl font-bold text-[#24312D] outline-none focus:border-[#DDE7E2] focus:bg-white"
-              />
-              <p className="mt-2 text-sm text-[#65736E]">{builder.draftDocument.organization}</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" onClick={() => builder.setCurrentStep('info')}>정보 수정</Button>
-              <Button variant="secondary" onClick={builder.generateDraft} disabled={builder.isGenerating}>다시 생성</Button>
-              <Button onClick={() => builder.setCurrentStep('download')}>다운로드로 이동</Button>
-            </div>
-          </div>
-
-          {builder.warnings.length ? (
-            <div className="mt-5 rounded-xl border border-amber-100 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
-              {builder.warnings.map((warning) => <p key={warning}>{warning}</p>)}
-            </div>
-          ) : null}
-
-          <div className="mt-6 rounded-2xl border border-[#E4EBE7] bg-[#FBFCFB] p-5">
-            <div className="rounded-xl bg-white p-6 text-[#24312D] shadow-sm">
-              <h1 className="text-center text-2xl font-extrabold">{builder.draftDocument.title}</h1>
-              <table className="mt-6 w-full border-collapse text-sm">
-                <tbody>
-                  {[
-                    ['기관명', builder.draftDocument.organization],
-                    ['공고 유형', builder.draftDocument.purpose],
-                    ['신청 기간', builder.draftDocument.schedule.applicationPeriod],
-                    ['운영 기간', builder.draftDocument.schedule.eventPeriod],
-                    ['접수 방법', builder.draftDocument.applicationMethod],
-                  ].map(([label, value]) => (
-                    <tr key={label}>
-                      <th className="w-32 border border-[#DDE7E2] bg-[#F3F7F5] px-3 py-2 text-left">{label}</th>
-                      <td className="border border-[#DDE7E2] px-3 py-2">{value || '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="mt-6 space-y-5">
-                {builder.draftDocument.sections.map((section, index) => (
-                  <section key={`${section.heading}-${index}`}>
-                    <input
-                      value={section.heading}
-                      onChange={(event) => builder.updateDraft((doc) => ({
-                        ...doc,
-                        sections: doc.sections.map((item, itemIndex) => itemIndex === index ? { ...item, heading: event.target.value } : item),
-                      }))}
-                      className="w-full rounded-lg border border-transparent bg-transparent text-lg font-bold outline-none focus:border-[#DDE7E2] focus:bg-white"
-                    />
-                    <textarea
-                      value={section.body}
-                      onChange={(event) => builder.updateDraft((doc) => ({
-                        ...doc,
-                        sections: doc.sections.map((item, itemIndex) => itemIndex === index ? { ...item, body: event.target.value } : item),
-                      }))}
-                      className="mt-2 min-h-24 w-full rounded-xl border border-[#EEF3F0] bg-white px-3 py-3 text-sm leading-7 outline-none focus:border-[#6A9C89]"
-                    />
-                  </section>
-                ))}
-              </div>
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
-                <div>
-                  <h3 className="font-bold">문의처</h3>
-                  <p className="mt-2 text-sm leading-7">
-                    {builder.draftDocument.contact.department} / {builder.draftDocument.contact.phone} / {builder.draftDocument.contact.email}
-                  </p>
-                </div>
-                <div>
-                  <h3 className="font-bold">붙임</h3>
-                  <ol className="mt-2 list-decimal pl-5 text-sm leading-7">
-                    {builder.draftDocument.attachments.map((item) => <li key={item}>{item}</li>)}
-                  </ol>
-                </div>
-              </div>
-            </div>
-          </div>
+          <NoticeWebEditor
+            document={builder.draftDocument}
+            warnings={builder.warnings}
+            exporting={builder.exporting}
+            onChange={(document) => builder.updateDraft(() => document)}
+            onBackToInfo={() => builder.setCurrentStep('info')}
+            onRegenerate={builder.generateDraft}
+            onDownload={builder.download}
+          />
         </Card>
       ) : null}
 
