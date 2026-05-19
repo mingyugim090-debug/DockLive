@@ -167,6 +167,34 @@ export function NoticeWebEditor({
               </table>
             </EditableBlock>
 
+            <EditableBlock selected={selected.type === 'schedule'} onClick={() => setSelected({ type: 'schedule' })} className="mt-6">
+              <h4 className="text-base font-extrabold">추진 절차 및 평가 구조</h4>
+              <div className="mt-3 grid grid-cols-5 border border-[#C5D1CC] text-center text-xs font-bold">
+                {['공고', '접수', '요건 검토', '평가', '선정 안내'].map((step, index) => (
+                  <div key={step} className="border-r border-[#C5D1CC] last:border-r-0">
+                    <div className="bg-[#E8F1ED] py-1 text-[#245D50]">{index + 1}</div>
+                    <div className="py-2">{step}</div>
+                  </div>
+                ))}
+              </div>
+              <table className="mt-4 w-full border-collapse text-sm">
+                <tbody>
+                  {[
+                    ['적합성', '30%', '공고 목적과 신청 내용의 부합 정도'],
+                    ['실현 가능성', '30%', '일정, 수행 역량, 제출 계획의 구체성'],
+                    ['기대 효과', '25%', '성과 확산 가능성 및 공공성'],
+                    ['서류 완성도', '15%', '제출 서류의 충실도와 사실 확인 가능성'],
+                  ].map(([label, score, value]) => (
+                    <tr key={label}>
+                      <th className="w-28 border border-[#C5D1CC] bg-[#F3F7F5] px-3 py-2 text-left">{label}</th>
+                      <td className="w-20 border border-[#C5D1CC] px-3 py-2 font-bold">{score}</td>
+                      <td className="border border-[#C5D1CC] px-3 py-2">{value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </EditableBlock>
+
             <EditableBlock selected={selected.type === 'section' && selected.index === 0} onClick={() => setSelected({ type: 'section', index: 0 })} className="mt-8">
               <h4 className="text-center text-base font-extrabold">참가 신청서</h4>
               <table className="mt-4 w-full border-collapse text-sm">

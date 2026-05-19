@@ -139,6 +139,41 @@ function SampleBody({ template }: { template: NoticeTemplate }) {
   return <HwpTable rows={template.sample.overviewRows} />;
 }
 
+function ProcessAndEvaluationBlock() {
+  const steps = ['공고', '접수', '요건 검토', '평가', '선정 안내'];
+  const scores = [
+    ['적합성', '30%', 'w-[78%]'],
+    ['실현 가능성', '30%', 'w-[72%]'],
+    ['기대 효과', '25%', 'w-[64%]'],
+    ['서류 완성도', '15%', 'w-[45%]'],
+  ];
+
+  return (
+    <section className="mt-5">
+      <h4 className="text-[13px] font-extrabold">추진 절차 및 평가 구조</h4>
+      <div className="mt-2 grid grid-cols-5 border border-[#AEB8B2] text-center text-[10px] font-bold">
+        {steps.map((step, index) => (
+          <div key={step} className="border-r border-[#AEB8B2] last:border-r-0">
+            <div className="bg-[#E8F1ED] py-1 text-[#245D50]">{index + 1}</div>
+            <div className="py-2">{step}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 border border-[#AEB8B2] px-3 py-2 text-[11px] leading-5">
+        {scores.map(([label, value, width]) => (
+          <div key={label} className="grid grid-cols-[70px_1fr_34px] items-center gap-2 py-1">
+            <span className="font-bold">{label}</span>
+            <span className="h-2 bg-[#EEF3F0]">
+              <span className={`block h-2 bg-[#6A9C89] ${width}`} />
+            </span>
+            <span>{value}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function SampleHwpxPage({ template }: { template: NoticeTemplate }) {
   const { sample } = template;
   return (
@@ -159,6 +194,8 @@ function SampleHwpxPage({ template }: { template: NoticeTemplate }) {
         </section>
 
         <SampleBody template={template} />
+
+        <ProcessAndEvaluationBlock />
 
         <div className="mt-6 space-y-4">
           {sample.sections.map((section) => (

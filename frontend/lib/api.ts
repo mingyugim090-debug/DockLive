@@ -75,6 +75,21 @@ async function readError(res: Response, fallback: string): Promise<Error> {
   return new Error(message);
 }
 
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = 45000): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('AI 초안 생성 응답이 지연되고 있습니다. 현재 초안을 기준으로 자동 보강을 계속합니다.');
+    }
+    throw error;
+  } finally {
+    globalThis.clearTimeout(timeout);
+  }
+}
+
 export async function getHwpxStatus(): Promise<HwpxStatusResponse> {
   const res = await fetch(`${API_URL}/api/hwpx/status`);
   if (!res.ok) throw await readError(res, `HWPX 상태 조회 실패: ${res.status}`);
@@ -317,7 +332,7 @@ export async function generateNoticeDocument(
   formData.append('payload_json', JSON.stringify({ template_id: templateId, inputs }));
   files.forEach((file) => formData.append('files', file));
 
-  const res = await fetch(`${API_URL}/api/notices/generate`, { method: 'POST', body: formData });
+  const res = await fetchWithTimeout(`${API_URL}/api/notices/generate`, { method: 'POST', body: formData }, 45000);
   if (!res.ok) throw await readError(res, `공고문 생성 실패: ${res.status}`);
   return res.json();
 }

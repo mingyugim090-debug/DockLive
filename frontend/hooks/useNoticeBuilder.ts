@@ -126,6 +126,38 @@ function documentToInputs(document: NoticeDocument, existing: Record<string, str
   };
 }
 
+function buildLocalAiDraft(document: NoticeDocument): NoticeDocument {
+  const ensure = (headingKeyword: string, fallbackHeading: string, body: string) => {
+    const existing = document.sections.find((section) => section.heading.includes(headingKeyword));
+    if (existing) {
+      return {
+        ...existing,
+        body: existing.body.includes(body.slice(0, 24)) ? existing.body : `${existing.body.trim()}\n\n${body}`,
+      };
+    }
+    return { heading: fallbackHeading, body };
+  };
+
+  const sections = [
+    ensure('개요', '1. 사업 개요', `${document.organization}은(는) ${document.purpose}의 목적에 맞는 대상자를 모집하고, 신청 접수부터 선정 안내까지 표준 절차에 따라 운영합니다.`),
+    ensure('대상', '2. 신청 자격', '신청 대상은 공고 목적에 부합하고 제출 서류를 기한 내 완비할 수 있는 개인, 팀 또는 기관입니다. 세부 자격과 제외 대상은 붙임 서식 및 증빙자료로 확인합니다.'),
+    ensure('선정', '3. 선정 방법', '선정은 신청 자격 충족 여부, 제출 서류의 완성도, 사업 목적과의 적합성, 수행 가능성, 기대 효과를 종합적으로 검토하여 진행합니다.'),
+    ensure('방법', '4. 신청 방법', document.applicationMethod || '신청자는 공고문 붙임 양식을 작성하여 접수 기간 내 담당 부서 이메일 또는 접수 시스템으로 제출합니다.'),
+    ...document.sections.filter(
+      (section) => !['개요', '대상', '자격', '선정', '평가', '방법'].some((keyword) => section.heading.includes(keyword)),
+    ),
+  ].map((section, index) => ({
+    ...section,
+    heading: section.heading.match(/^\d+\./) ? section.heading : `${index + 1}. ${section.heading}`,
+  }));
+
+  return {
+    ...document,
+    sections,
+    attachments: Array.from(new Set([...document.attachments, '제출 서류 체크리스트', '개인정보 수집 및 이용 동의서'])),
+  };
+}
+
 export function useNoticeBuilder(initialTemplateId?: string | null) {
   const initialTemplate = getNoticeTemplate(initialTemplateId || 'startup_camp_notice');
   const [currentStep, setCurrentStep] = useState<NoticeBuilderStep>(initialTemplateId ? 'preview' : 'template');
@@ -177,8 +209,13 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
       setWarnings(response.warnings ?? []);
       setCurrentStep('preview');
     } catch (err) {
-      setError(err instanceof Error ? err.message : '공고문 초안 생성에 실패했습니다.');
-      setDraftDocument(baseDraft);
+      const fallbackDraft = normalizeNoticeDocument(buildLocalAiDraft(baseDraft));
+      setDraftDocument(fallbackDraft);
+      setInputValues(documentToInputs(fallbackDraft, payloadInputs));
+      setWarnings([
+        err instanceof Error ? err.message : 'AI 서버 응답을 받지 못해 현재 초안을 기준으로 자동 보강했습니다.',
+        '서버 응답이 복구되면 같은 버튼으로 다시 AI 초안 생성을 시도할 수 있습니다.',
+      ]);
       setCurrentStep('preview');
     } finally {
       setIsGenerating(false);

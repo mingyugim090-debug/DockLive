@@ -242,11 +242,114 @@ def _build_notice_section_xml(document: NoticeDocument) -> str:
     scripts_dir = Path(__file__).resolve().parents[1] / "hwpx_toolchain" / "scripts"
     if str(scripts_dir) not in sys.path:
         sys.path.insert(0, str(scripts_dir))
-    from hwpx_helpers import NS_DECL, extract_secpr_and_colpr, make_empty_line, make_first_para, make_text_para, reset_id
+    from hwpx_helpers import (
+        NS_DECL,
+        extract_secpr_and_colpr,
+        make_empty_line,
+        make_first_para,
+        make_text_para,
+        next_id,
+        reset_id,
+        xml_escape,
+    )
 
     reference = Path(__file__).resolve().parents[1] / "hwpx_toolchain" / "templates" / "reference.hwpx"
     secpr, colpr = extract_secpr_and_colpr(reference)
     reset_id()
+
+    def make_table(
+        headers: list[str],
+        rows: list[list[str]],
+        col_widths: list[int] | None = None,
+        row_height: int = 2300,
+    ) -> str:
+        num_cols = max(1, len(headers))
+        body_width = 42520
+        if col_widths is None:
+            base_width = body_width // num_cols
+            col_widths = [base_width] * num_cols
+            col_widths[-1] += body_width - sum(col_widths)
+        total_rows = 1 + len(rows)
+        p_id = next_id()
+        tbl_id = next_id()
+
+        def make_cell(text: str, is_header: bool, col_idx: int, row_idx: int) -> str:
+            cell_pid = next_id()
+            border_fill = "4" if is_header else "3"
+            char_pr = "25" if is_header else "20"
+            para_pr = "25" if is_header else "24"
+            return (
+                f'<hp:tc name="" header="{1 if is_header else 0}" hasMargin="0" protect="0" editable="0" dirty="1" borderFillIDRef="{border_fill}">'
+                f'<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER" '
+                f'linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0">'
+                f'<hp:p paraPrIDRef="{para_pr}" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0" id="{cell_pid}">'
+                f'<hp:run charPrIDRef="{char_pr}"><hp:t>{xml_escape(text)}</hp:t></hp:run>'
+                f'</hp:p></hp:subList>'
+                f'<hp:cellAddr colAddr="{col_idx}" rowAddr="{row_idx}"/>'
+                f'<hp:cellSpan colSpan="1" rowSpan="1"/>'
+                f'<hp:cellSz width="{col_widths[col_idx]}" height="{row_height}"/>'
+                f'<hp:cellMargin left="220" right="220" top="120" bottom="120"/>'
+                f'</hp:tc>'
+            )
+
+        table_rows = [
+            "<hp:tr>" + "".join(make_cell(header, True, col_idx, 0) for col_idx, header in enumerate(headers)) + "</hp:tr>"
+        ]
+        for row_idx, row in enumerate(rows, start=1):
+            padded = row[:num_cols] + [""] * max(0, num_cols - len(row))
+            table_rows.append(
+                "<hp:tr>"
+                + "".join(make_cell(padded[col_idx], False, col_idx, row_idx) for col_idx in range(num_cols))
+                + "</hp:tr>"
+            )
+
+        return (
+            f'<hp:p id="{p_id}" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
+            f'<hp:run charPrIDRef="0">'
+            f'<hp:tbl id="{tbl_id}" zOrder="0" numberingType="TABLE" textWrap="TOP_AND_BOTTOM" '
+            f'textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" pageBreak="CELL" repeatHeader="0" '
+            f'rowCnt="{total_rows}" colCnt="{num_cols}" cellSpacing="0" borderFillIDRef="3" noAdjust="0">'
+            f'<hp:sz width="{sum(col_widths)}" widthRelTo="ABSOLUTE" height="{row_height * total_rows}" heightRelTo="ABSOLUTE" protect="0"/>'
+            f'<hp:pos treatAsChar="1" affectLSpacing="0" flowWithText="1" allowOverlap="0" '
+            f'holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="COLUMN" vertAlign="TOP" horzAlign="LEFT" vertOffset="0" horzOffset="0"/>'
+            f'<hp:outMargin left="0" right="0" top="0" bottom="0"/>'
+            f'<hp:inMargin left="0" right="0" top="0" bottom="0"/>'
+            f'{"".join(table_rows)}'
+            f'</hp:tbl></hp:run></hp:p>'
+        )
+
+    def first_body(keyword: str, fallback: str = "") -> str:
+        for section in document.sections:
+            if keyword in section.heading:
+                return " ".join(_split_body_lines(section.body)) or fallback
+        return fallback
+
+    overview_rows = [
+        ["공고 유형", document.purpose or document.documentType],
+        ["주관 기관", document.organization],
+        ["신청 기간", document.schedule.applicationPeriod or "공고문 참조"],
+        ["운영 기간", document.schedule.eventPeriod or "선정 이후 별도 안내"],
+        ["접수 방법", document.applicationMethod or "붙임 서식 작성 후 제출"],
+    ]
+    application_rows = [
+        ["신청자/기업명", "OOO"],
+        ["소속/대표자", document.organization],
+        ["신청 분야", document.purpose or document.documentType],
+        ["연락처", f"{_cell(document.contact.phone)} / {_cell(document.contact.email)}"],
+    ]
+    schedule_rows = [
+        ["1", "공고 및 접수", document.schedule.applicationPeriod or "공고문 참조", "신청서 및 붙임 서류 접수"],
+        ["2", "요건 검토", "접수 마감 후", "자격 요건 및 제출 서류 확인"],
+        ["3", "평가 및 선정", "별도 안내", "평가 기준에 따른 심사"],
+        ["4", "결과 안내", "선정 후", "홈페이지 또는 개별 통보"],
+    ]
+    evaluation_rows = [
+        ["적합성", "30%", first_body("목적", "공고 목적과 신청 내용의 부합 정도")],
+        ["실현 가능성", "30%", first_body("지원", "추진 계획, 일정, 수행 역량의 구체성")],
+        ["기대 효과", "25%", first_body("평가", "성과 확산 가능성 및 공공성")],
+        ["서류 완성도", "15%", first_body("서류", "제출 서류의 충실도와 사실 확인 가능성")],
+    ]
+
     parts = [
         '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>',
         f"<hs:sec {NS_DECL}>",
@@ -261,6 +364,27 @@ def _build_notice_section_xml(document: NoticeDocument) -> str:
             charpr="20",
             parapr="24",
         ),
+        make_empty_line(charpr="8", parapr="24"),
+        make_table(["구분", "내용"], overview_rows, col_widths=[10500, 32020]),
+        make_empty_line(charpr="8", parapr="24"),
+        make_text_para("참가 신청서", charpr="25", parapr="25"),
+        make_table(["항목", "작성 내용"], application_rows, col_widths=[12000, 30520]),
+        make_text_para("신청 내용 및 추진 계획", charpr="25", parapr="25"),
+        make_table(
+            ["구분", "주요 내용"],
+            [
+                ["신청 내용", first_body("개요", document.purpose or "공고 목적에 맞는 신청 내용을 작성합니다.")],
+                ["추진 계획", first_body("방법", document.applicationMethod or "접수 후 선정 절차에 따라 추진합니다.")],
+            ],
+            col_widths=[12000, 30520],
+            row_height=3000,
+        ),
+        make_empty_line(charpr="8", parapr="24"),
+        make_text_para("추진 일정", charpr="25", parapr="25"),
+        make_table(["단계", "절차", "일정", "확인 사항"], schedule_rows, col_widths=[5000, 9500, 12000, 16020]),
+        make_empty_line(charpr="8", parapr="24"),
+        make_text_para("평가 기준", charpr="25", parapr="25"),
+        make_table(["평가 항목", "비중", "세부 기준"], evaluation_rows, col_widths=[8500, 6500, 27520]),
     ]
 
     for section in document.sections:
@@ -271,18 +395,24 @@ def _build_notice_section_xml(document: NoticeDocument) -> str:
 
     parts.append(make_empty_line(charpr="8", parapr="24"))
     parts.append(make_text_para("9. 문의처", charpr="25", parapr="25"))
-    for line in [
-        f"담당 부서: {_cell(document.contact.department)}",
-        f"연락처: {_cell(document.contact.phone)}",
-        f"이메일: {_cell(document.contact.email)}",
-    ]:
-        parts.append(make_text_para(line, charpr="20", parapr="24"))
+    parts.append(
+        make_table(
+            ["담당 부서", "연락처", "이메일"],
+            [[_cell(document.contact.department), _cell(document.contact.phone), _cell(document.contact.email)]],
+            col_widths=[13000, 12500, 17020],
+        )
+    )
 
     parts.append(make_empty_line(charpr="8", parapr="24"))
     parts.append(make_text_para("붙임 문서 목록", charpr="25", parapr="25"))
     attachments = document.attachments or ["해당 없음"]
-    for index, item in enumerate(attachments, start=1):
-        parts.append(make_text_para(f"{index}. {item}", charpr="20", parapr="24"))
+    parts.append(
+        make_table(
+            ["번호", "문서명", "비고"],
+            [[str(index), item, "1부"] for index, item in enumerate(attachments, start=1)],
+            col_widths=[5000, 28520, 9000],
+        )
+    )
 
     parts.append("</hs:sec>")
     return "\n".join(parts)
