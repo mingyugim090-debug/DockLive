@@ -134,8 +134,11 @@ export default function NoticeBuilderPage() {
             document={builder.draftDocument}
             warnings={builder.warnings}
             exporting={builder.exporting}
+            sourceFile={builder.sourceFile}
             sourceFileName={builder.sourceFileName}
+            originalEdits={builder.originalEdits}
             onChange={(document) => builder.updateDraft(() => document)}
+            onOriginalEditChange={builder.updateOriginalEdit}
             onBackToInfo={() => builder.setCurrentStep('info')}
             onRegenerate={builder.generateDraft}
             onDownload={builder.download}
