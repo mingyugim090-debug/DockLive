@@ -5,6 +5,113 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import type { NoticeTemplate } from '@/data/mockTemplates';
 
+type TemplateTrait = {
+  badge: string;
+  preface: string;
+  tableTitle: string;
+  headers: string[];
+  rows: string[][];
+  checklistTitle: string;
+  checklist: string[];
+  scores: Array<[string, string, string]>;
+  crawlNotes: string[];
+};
+
+const traits: Record<string, TemplateTrait> = {
+  startup_camp_notice: {
+    badge: '별지 제1호 서식',
+    preface: '아이디어 검증, 팀 구성, 캠프 운영 일정이 한 장에서 보이도록 신청서형 표를 앞에 배치합니다.',
+    tableTitle: '창업 아이디어 요약',
+    headers: ['항목', '작성 내용'],
+    rows: [['아이템명', '해결하려는 문제와 대상 고객'], ['시장 검증', '인터뷰, 설문, MVP 테스트 계획'], ['팀 역량', '역할 분담 및 보유 경험']],
+    checklistTitle: '제출 전 확인',
+    checklist: ['대표자 서명', '아이디어 요약서', '개인정보 동의서'],
+    scores: [['참여 의지', '30%', 'w-[78%]'], ['아이디어 구체성', '30%', 'w-[72%]'], ['팀 실행력', '25%', 'w-[64%]'], ['서류 완성도', '15%', 'w-[45%]']],
+    crawlNotes: ['신청서와 개인정보 동의서를 붙임으로 두는 참가자 모집 양식에 맞춤', '아이디어 요약서와 팀 역량 칸을 별도로 강조'],
+  },
+  business_support_notice: {
+    badge: '지원사업 공고',
+    preface: '지원 분야가 여러 개인 사업 공고처럼 분야, 지원 예시, 제출 제한을 촘촘한 표로 보여줍니다.',
+    tableTitle: '지원 분야 및 내용',
+    headers: ['분류', '지원 내용', '비고'],
+    rows: [['홍보·광고', 'IR, 홍보물, 영상, 홈페이지 제작', '기업 진단 후 조정'], ['오프라인 마케팅', '전시, 팝업스토어, 행사 운영', '확정 일정 확인'], ['특허·인증', '국내외 인증, 지식재산권 출원', '증빙 필요']],
+    checklistTitle: '지원신청서 묶음',
+    checklist: ['사업 신청서', '정보 수집 이용 동의서', '참여제한 체크리스트', '사업자등록증'],
+    scores: [['경쟁력', '25%', 'w-[62%]'], ['성장 가능성', '35%', 'w-[82%]'], ['수행 능력', '40%', 'w-[88%]'], ['가산 항목', '3점', 'w-[35%]']],
+    crawlNotes: ['지원 분야 표와 제출 서류 묶음을 전면 배치', '서류평가 배점 구조를 지원사업형으로 변경'],
+  },
+  education_program_notice: {
+    badge: '교육운영 안내',
+    preface: '과정별 정원, 시간표, 수료 기준이 먼저 보이는 교육 프로그램 안내문 구조입니다.',
+    tableTitle: '과정별 운영 계획',
+    headers: ['과정', '시간/정원', '수료 기준'],
+    rows: [['기초반', '총 32시간 / 25명', '출석 80% 이상'], ['심화반', '프로젝트 실습 / 20명', '과제 제출'], ['성과공유', '발표 및 피드백', '결과물 제출']],
+    checklistTitle: '수강 신청 확인',
+    checklist: ['수강 신청서', '교육 일정표', '출석 및 과제 기준 확인'],
+    scores: [['신청 적합성', '30%', 'w-[70%]'], ['교육 필요성', '30%', 'w-[76%]'], ['참여 가능성', '25%', 'w-[66%]'], ['접수 순서', '15%', 'w-[45%]']],
+    crawlNotes: ['교육 일정표와 수료 기준을 별도 표로 강조', '수강생 모집 공고에서 자주 보이는 과정별 정원 칸 반영'],
+  },
+  event_participant_notice: {
+    badge: '행사 참가 안내',
+    preface: '행사명, 참가비, 현장 일정, 유의사항이 빠르게 읽히는 참가자 모집 안내문입니다.',
+    tableTitle: '행사 운영 일정',
+    headers: ['구분', '일정', '참여 방식'],
+    rows: [['사전 접수', '공고일 ~ 마감일', '온라인 신청'], ['선정 안내', '접수 마감 후', '개별 통보'], ['행사 운영', '행사 당일', '현장 참여']],
+    checklistTitle: '참가자 확인',
+    checklist: ['참가 신청서', '유의사항 확인서', '보호자 동의서 해당 시'],
+    scores: [['접수 순서', '30%', 'w-[70%]'], ['참여 적합성', '30%', 'w-[68%]'], ['행사 기여도', '25%', 'w-[58%]'], ['안전 확인', '15%', 'w-[42%]']],
+    crawlNotes: ['참가자 모집 공고처럼 일정과 유의사항을 앞쪽에 배치', '모집 인원과 참가비 확인 칸을 표 안에 유지'],
+  },
+  scholarship_notice: {
+    badge: '장학생 선발계획',
+    preface: '성적, 소득, 추천서, 증빙서류처럼 장학 공고에서 중요한 확인 항목을 분리합니다.',
+    tableTitle: '선발 분야별 서류',
+    headers: ['구분', '필수 서류', '추가 확인'],
+    rows: [['공통', '장학금 신청서, 재학증명서', '주소/학적 기준'], ['성적', '성적증명서, 추천서', '평점 기준'], ['복지', '소득구간, 가족관계증명서', '해당자 증빙']],
+    checklistTitle: '장학 서류 체크',
+    checklist: ['신청서 사진 부착', '추천서 서명', '소득·성적 증빙', '중복수혜 확인'],
+    scores: [['학업 성취도', '35%', 'w-[80%]'], ['성장 가능성', '25%', 'w-[64%]'], ['경제 여건', '25%', 'w-[68%]'], ['서류 충실도', '15%', 'w-[45%]']],
+    crawlNotes: ['공통서류와 분야별 추가서류를 나누는 장학 공고 양식 반영', '성적·소득·추천 항목을 평가표처럼 표시'],
+  },
+  tenant_company_notice: {
+    badge: '입주신청서 별첨',
+    preface: '입주 공간, 계약 기간, 보육 지원, 사업계획서 항목이 함께 보이는 창업보육센터형 양식입니다.',
+    tableTitle: '입주 공간 및 지원',
+    headers: ['공간', '입주 조건', '지원 사항'],
+    rows: [['독립형 사무실', '창업 7년 이내', '주소지 등록'], ['공유공간', '예비창업자 가능', '회의실, 네트워크'], ['보육 프로그램', '평가 후 연장', '멘토링, 사업 연계']],
+    checklistTitle: '입주 신청 묶음',
+    checklist: ['입주 신청서', '사업계획서', '대표자 이력서', '사업자등록증'],
+    scores: [['사업성', '35%', 'w-[82%]'], ['공간 활용성', '25%', 'w-[66%]'], ['성장 가능성', '25%', 'w-[62%]'], ['입주 적합성', '15%', 'w-[44%]']],
+    crawlNotes: ['입주 신청서와 사업계획서가 함께 첨부되는 공고 구조 반영', '공간 유형과 주소지 등록 가능 여부를 표로 표현'],
+  },
+  research_participant_notice: {
+    badge: '연구참여 신청',
+    preface: '연구 목적, 참여 범위, 윤리·보안 확인을 체크박스와 서약 문구 중심으로 구성합니다.',
+    tableTitle: '연구 참여 범위',
+    headers: ['역할', '수행 내용', '보안 기준'],
+    rows: [['자료 조사', '문헌 및 정책자료 수집', '외부 반출 금지'], ['인터뷰', '참여자 안내 및 기록', '동의서 확인'], ['분석', '결과 정리 및 보고', '익명화 처리']],
+    checklistTitle: '연구윤리 확인',
+    checklist: ['개인정보 보호', '이해상충 확인', '자료 보안', '연구윤리 서약'],
+    scores: [['연구 적합성', '30%', 'w-[74%]'], ['전문성', '30%', 'w-[72%]'], ['윤리 준수', '25%', 'w-[70%]'], ['참여 가능성', '15%', 'w-[45%]']],
+    crawlNotes: ['연구 과제 신청서에서 자주 쓰는 윤리·보안 체크 영역 반영', '참여 역할과 수행 내용을 표로 분리'],
+  },
+  bid_rfp_notice: {
+    badge: '제안요청서',
+    preface: '과업 범위, 제출 부수, 기술·가격 평가를 입찰 공고식으로 촘촘하게 보여줍니다.',
+    tableTitle: '제안서 제출 구성',
+    headers: ['제출 항목', '부수/형식', '확인 사항'],
+    rows: [['기술제안서', '원본 1부, 사본 지정 부수', '목차 준수'], ['가격제안서', '별도 밀봉 또는 전자 제출', '산출내역 포함'], ['증빙서류', '참가자격 확인 서류', '기한 내 제출']],
+    checklistTitle: '입찰 유의사항',
+    checklist: ['제출 마감 시각', '제안요청서 목차', '가격 산출내역', '서약서 및 확약서'],
+    scores: [['기술 능력', '80%', 'w-[88%]'], ['가격 평가', '20%', 'w-[42%]'], ['수행 조직', '가점', 'w-[48%]'], ['보안 계획', '필수', 'w-[56%]']],
+    crawlNotes: ['RFP의 기술제안서·가격제안서 분리 제출 구조 반영', '기술/가격 평가 비중을 공고문처럼 표시'],
+  },
+};
+
+function getTrait(template: NoticeTemplate): TemplateTrait {
+  return traits[template.id] ?? traits.business_support_notice;
+}
+
 function HwpTable({ rows }: { rows: Array<[string, string]> }) {
   return (
     <table className="mt-5 w-full border-collapse text-[11px] leading-5 text-[#202833]">
@@ -139,14 +246,42 @@ function SampleBody({ template }: { template: NoticeTemplate }) {
   return <HwpTable rows={template.sample.overviewRows} />;
 }
 
-function ProcessAndEvaluationBlock() {
+function TraitTable({ trait }: { trait: TemplateTrait }) {
+  return (
+    <section className="mt-5">
+      <h4 className="text-[13px] font-extrabold">{trait.tableTitle}</h4>
+      <table className="mt-2 w-full border-collapse text-[11px] leading-5">
+        <thead>
+          <tr className="bg-[#E8F1ED]">
+            {trait.headers.map((header) => (
+              <th key={header} className="border border-[#AEB8B2] px-2 py-1.5 text-left text-[#245D50]">{header}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {trait.rows.map((row) => (
+            <tr key={row.join('-')}>
+              {row.map((cell) => (
+                <td key={cell} className="border border-[#AEB8B2] px-2 py-1.5">{cell}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="mt-3 border border-[#AEB8B2] text-[11px] leading-5">
+        <div className="bg-[#F0F3F1] px-2 py-1.5 font-bold">{trait.checklistTitle}</div>
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1 px-3 py-2">
+          {trait.checklist.map((item) => (
+            <span key={item}>□ {item}</span>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ProcessAndEvaluationBlock({ trait }: { trait: TemplateTrait }) {
   const steps = ['공고', '접수', '요건 검토', '평가', '선정 안내'];
-  const scores = [
-    ['적합성', '30%', 'w-[78%]'],
-    ['실현 가능성', '30%', 'w-[72%]'],
-    ['기대 효과', '25%', 'w-[64%]'],
-    ['서류 완성도', '15%', 'w-[45%]'],
-  ];
 
   return (
     <section className="mt-5">
@@ -160,7 +295,7 @@ function ProcessAndEvaluationBlock() {
         ))}
       </div>
       <div className="mt-3 border border-[#AEB8B2] px-3 py-2 text-[11px] leading-5">
-        {scores.map(([label, value, width]) => (
+        {trait.scores.map(([label, value, width]) => (
           <div key={label} className="grid grid-cols-[70px_1fr_34px] items-center gap-2 py-1">
             <span className="font-bold">{label}</span>
             <span className="h-2 bg-[#EEF3F0]">
@@ -176,6 +311,7 @@ function ProcessAndEvaluationBlock() {
 
 function SampleHwpxPage({ template }: { template: NoticeTemplate }) {
   const { sample } = template;
+  const trait = getTrait(template);
   return (
     <div className="mx-auto w-full max-w-[600px]">
       <div className="rounded-t-sm border border-b-0 border-[#D5DDD8] bg-[#EEF3F0] px-4 py-2 text-[11px] font-semibold text-[#52615B]">
@@ -183,6 +319,7 @@ function SampleHwpxPage({ template }: { template: NoticeTemplate }) {
       </div>
       <article className="max-h-[76vh] w-full overflow-y-auto border border-[#C9D2CD] bg-white px-8 py-9 text-[#202833] shadow-[0_28px_80px_rgba(36,49,45,0.18)]">
         <header className="text-center">
+          <p className="mx-auto inline-block border border-[#AEB8B2] px-3 py-1 text-[10px] font-bold text-[#52615B]">{trait.badge}</p>
           <p className="text-[11px] text-[#5D6770]">{sample.documentNo}</p>
           <h3 className="mt-5 text-[22px] font-extrabold leading-snug tracking-normal">{sample.title}</h3>
           <p className="mt-4 text-sm font-bold">{sample.organization}</p>
@@ -191,11 +328,14 @@ function SampleHwpxPage({ template }: { template: NoticeTemplate }) {
         <section className="mt-8 border-y border-[#C9D2CD] py-4">
           <h4 className="text-sm font-extrabold">공고 안내문</h4>
           <p className="mt-2 text-[12px] leading-6 text-[#34443F]">{sample.intro}</p>
+          <p className="mt-2 text-[11px] leading-5 text-[#5D6770]">{trait.preface}</p>
         </section>
 
         <SampleBody template={template} />
 
-        <ProcessAndEvaluationBlock />
+        <TraitTable trait={trait} />
+
+        <ProcessAndEvaluationBlock trait={trait} />
 
         <div className="mt-6 space-y-4">
           {sample.sections.map((section) => (
@@ -232,6 +372,7 @@ function SampleHwpxPage({ template }: { template: NoticeTemplate }) {
 
 export function NoticeTemplatePreviewModal({ template, onClose }: { template: NoticeTemplate | null; onClose: () => void }) {
   if (!template) return null;
+  const trait = getTrait(template);
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-[#1F2937]/45 px-4 py-6 backdrop-blur-sm" onClick={onClose}>
@@ -274,6 +415,14 @@ export function NoticeTemplatePreviewModal({ template, onClose }: { template: No
               <div>
                 <dt className="text-xs font-bold text-[#7B8782]">출력 형식</dt>
                 <dd className="mt-1 text-[#24312D]">{template.outputFormats.join(' / ')}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-bold text-[#7B8782]">미리보기 반영 특징</dt>
+                <dd className="mt-2 space-y-2 text-xs leading-5 text-[#52615B]">
+                  {trait.crawlNotes.map((note) => (
+                    <p key={note} className="rounded-lg bg-[#F6FAF8] px-3 py-2">{note}</p>
+                  ))}
+                </dd>
               </div>
             </dl>
           </aside>

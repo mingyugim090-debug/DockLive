@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/Button';
 import type { NoticeDocument } from '@/lib/types';
+import type { NoticeAiTarget } from '@/hooks/useNoticeBuilder';
 
 type SelectedTarget =
   | { type: 'title' }
@@ -28,22 +29,27 @@ export function NoticeWebEditor({
   document,
   warnings,
   exporting,
+  sourceFileName,
   onChange,
   onBackToInfo,
   onRegenerate,
   onDownload,
+  onAiRequest,
 }: {
   document: NoticeDocument;
   warnings: string[];
   exporting: ExportFormat | null;
+  sourceFileName?: string | null;
   onChange: (document: NoticeDocument) => void;
   onBackToInfo: () => void;
   onRegenerate: () => void;
   onDownload: (format: ExportFormat) => void;
+  onAiRequest?: (payload: { prompt: string; scope: 'selected' | 'all'; target: NoticeAiTarget }) => Promise<void>;
 }) {
   const safeDocument = normalizeDocument(document);
   const [selected, setSelected] = useState<SelectedTarget>({ type: 'section', index: 0 });
   const [aiPrompt, setAiPrompt] = useState('');
+  const [aiRunning, setAiRunning] = useState(false);
   const selectedSectionIndex = selected.type === 'section' ? selected.index : -1;
   const selectedSection = selected.type === 'section' ? safeDocument.sections[selected.index] : null;
 
@@ -72,9 +78,20 @@ export function NoticeWebEditor({
     else setSelected({ type: 'section', index: Number(id.replace('section-', '')) || 0 });
   }
 
-  function applyAiRequest(request: string, scope: 'selected' | 'all' = 'selected') {
+  async function applyAiRequest(request: string, scope: 'selected' | 'all' = 'selected') {
     const command = request.trim();
     if (!command) return;
+
+    if (onAiRequest) {
+      setAiRunning(true);
+      try {
+        await onAiRequest({ prompt: command, scope, target: selected });
+        setAiPrompt('');
+      } finally {
+        setAiRunning(false);
+      }
+      return;
+    }
 
     update((draft) => {
       if (scope === 'all') {
@@ -116,9 +133,13 @@ export function NoticeWebEditor({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-sm font-bold text-[#3A7A68]">HWPX 초안 편집</p>
-          <h2 className="mt-1 text-2xl font-bold text-[#24312D]">왼쪽 문서의 구성요소를 클릭해서 바로 수정하세요.</h2>
+          <h2 className="mt-1 text-2xl font-bold text-[#24312D]">
+            {sourceFileName ? '업로드한 HWPX 양식을 보면서 섹션별로 채워 넣으세요.' : '왼쪽 문서의 구성요소를 클릭해서 바로 수정하세요.'}
+          </h2>
           <p className="mt-2 text-sm leading-6 text-[#65736E]">
-            화면의 HWPX 미리보기와 오른쪽 편집 패널은 같은 문서 데이터를 사용합니다. 다운로드할 때도 현재 상태가 그대로 HWPX 생성에 반영됩니다.
+            {sourceFileName
+              ? `${sourceFileName} 원본은 다운로드 시 자동작성 엔진에 전달됩니다. 기본정보는 직접 입력하고, 긴 서술형 구간은 AI 요청으로 채울 수 있습니다.`
+              : '화면의 HWPX 미리보기와 오른쪽 편집 패널은 같은 문서 데이터를 사용합니다. 다운로드할 때도 현재 상태가 그대로 HWPX 생성에 반영됩니다.'}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -136,6 +157,12 @@ export function NoticeWebEditor({
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_390px]">
         <section className="h-[calc(100vh-230px)] min-h-[680px] overflow-auto rounded-2xl border border-[#DDE7E2] bg-[#E2E8E5] p-5">
           <article className="mx-auto min-h-[1120px] max-w-[760px] bg-white px-10 py-12 text-[#142033] shadow-[0_18px_48px_rgba(36,49,45,0.14)] sm:px-16">
+            {sourceFileName ? (
+              <div className="mb-7 flex items-center justify-between border-b border-[#DDE5E0] pb-3 text-xs font-bold text-[#65736E]">
+                <span>업로드 원본 HWPX</span>
+                <span>{sourceFileName}</span>
+              </div>
+            ) : null}
             <EditableBlock selected={selected.type === 'title'} onClick={() => setSelected({ type: 'title' })} className="text-center">
               <p className="text-xs text-[#65736E]">{safeDocument.organization} 공고 제2026-01호</p>
               <h3 className="mt-5 text-2xl font-extrabold leading-tight">{safeDocument.title}</h3>
@@ -328,15 +355,22 @@ export function NoticeWebEditor({
             <textarea
               value={aiPrompt}
               onChange={(event) => setAiPrompt(event.target.value)}
-              placeholder="선택한 문단 또는 전체 문서에 대한 수정 요청을 입력하세요."
+              placeholder="예: 이 섹션을 지원사업 신청서 문체로 5문장 정도 구체화하고, 확인되지 않은 수치와 일정은 확인 필요로 남겨줘."
               className="mt-3 min-h-24 w-full rounded-xl border border-[#DDE7E2] bg-white px-3 py-3 text-sm leading-6 outline-none transition focus:border-[#6A9C89]"
             />
             <div className="mt-3 grid grid-cols-2 gap-2">
-              <Button onClick={() => applyAiRequest(aiPrompt)} className="px-3">선택 영역 반영</Button>
-              <Button variant="secondary" onClick={() => applyAiRequest(aiPrompt || '전체 문서를 행정 공고문 문체로 정리', 'all')} className="px-3">
-                전체 문서 반영
+              <Button disabled={aiRunning} onClick={() => applyAiRequest(aiPrompt)} className="px-3">
+                {aiRunning ? 'AI 작성 중' : '선택 영역 반영'}
+              </Button>
+              <Button disabled={aiRunning} variant="secondary" onClick={() => applyAiRequest(aiPrompt || '전체 문서를 행정 공고문 문체로 정리', 'all')} className="px-3">
+                {aiRunning ? '작성 중' : '전체 문서 반영'}
               </Button>
             </div>
+            {sourceFileName ? (
+              <p className="mt-3 text-xs leading-5 text-[#7B8782]">
+                HWPX 다운로드를 누르면 현재 입력값과 AI 작성 내용을 원본 양식에 반영해 파일을 생성합니다.
+              </p>
+            ) : null}
           </Panel>
 
           <Panel title="문서 구조">

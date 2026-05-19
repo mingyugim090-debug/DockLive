@@ -1,7 +1,7 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { noticeTemplates, type NoticeTemplate } from '@/data/mockTemplates';
 import { noticeSteps, useNoticeBuilder } from '@/hooks/useNoticeBuilder';
 import { Button } from '@/components/ui/Button';
@@ -63,32 +63,35 @@ export default function NoticeBuilderPage() {
       ) : null}
 
       {builder.currentStep === 'template' ? (
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {noticeTemplates.map((template) => (
-            <Card key={template.id} hover className="flex min-h-[300px] flex-col rounded-2xl">
-              <div className="flex items-start justify-between gap-3">
-                <span className="rounded-full px-3 py-1 text-xs font-bold text-white" style={{ backgroundColor: template.accent }}>
-                  {template.purpose}
-                </span>
-                <span className="text-xs font-semibold text-[#7B8782]">{template.inputCount}개 입력</span>
-              </div>
-              <h2 className="mt-4 text-lg font-bold text-[#24312D]">{template.name}</h2>
-              <p className="mt-2 text-sm leading-6 text-[#65736E]">{template.description}</p>
-              <div className="mt-4 rounded-xl bg-[#F8FBFA] p-3 text-xs leading-5 text-[#65736E]">
-                <p>샘플 원본: {template.sample.sourceName}</p>
-                <p>출력 형식: {template.outputFormats.join(' / ')}</p>
-              </div>
-              <div className="mt-auto flex gap-2 pt-5">
-                <Button type="button" variant="secondary" className="flex-1 px-3" onClick={() => setPreviewTemplate(template)}>
-                  샘플 보기
-                </Button>
-                <Button type="button" className="flex-1 px-3" onClick={() => builder.selectTemplate(template)}>
-                  초안 열기
-                </Button>
-              </div>
-            </Card>
-          ))}
-        </section>
+        <div className="space-y-5">
+          <UploadedHwpxCard onFile={builder.selectUploadedFile} />
+          <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {noticeTemplates.map((template) => (
+              <Card key={template.id} hover className="flex min-h-[300px] flex-col rounded-2xl">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="rounded-full px-3 py-1 text-xs font-bold text-white" style={{ backgroundColor: template.accent }}>
+                    {template.purpose}
+                  </span>
+                  <span className="text-xs font-semibold text-[#7B8782]">{template.inputCount}개 입력</span>
+                </div>
+                <h2 className="mt-4 text-lg font-bold text-[#24312D]">{template.name}</h2>
+                <p className="mt-2 text-sm leading-6 text-[#65736E]">{template.description}</p>
+                <div className="mt-4 rounded-xl bg-[#F8FBFA] p-3 text-xs leading-5 text-[#65736E]">
+                  <p>샘플 원본: {template.sample.sourceName}</p>
+                  <p>출력 형식: {template.outputFormats.join(' / ')}</p>
+                </div>
+                <div className="mt-auto flex gap-2 pt-5">
+                  <Button type="button" variant="secondary" className="flex-1 px-3" onClick={() => setPreviewTemplate(template)}>
+                    샘플 보기
+                  </Button>
+                  <Button type="button" className="flex-1 px-3" onClick={() => builder.selectTemplate(template)}>
+                    초안 열기
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </section>
+        </div>
       ) : null}
 
       {builder.currentStep === 'info' ? (
@@ -131,10 +134,12 @@ export default function NoticeBuilderPage() {
             document={builder.draftDocument}
             warnings={builder.warnings}
             exporting={builder.exporting}
+            sourceFileName={builder.sourceFileName}
             onChange={(document) => builder.updateDraft(() => document)}
             onBackToInfo={() => builder.setCurrentStep('info')}
             onRegenerate={builder.generateDraft}
             onDownload={builder.download}
+            onAiRequest={builder.applyAiRequest}
           />
         </Card>
       ) : null}
@@ -160,6 +165,60 @@ export default function NoticeBuilderPage() {
 
       <NoticeTemplatePreviewModal template={previewTemplate} onClose={() => setPreviewTemplate(null)} />
     </div>
+  );
+}
+
+function UploadedHwpxCard({ onFile }: { onFile: (file: File) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+
+  const handleFiles = (files: FileList | null) => {
+    const file = files?.[0];
+    if (file) onFile(file);
+  };
+
+  return (
+    <section
+      onDragOver={(event) => {
+        event.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(event) => {
+        event.preventDefault();
+        setDragging(false);
+        handleFiles(event.dataTransfer.files);
+      }}
+      className={[
+        'grid gap-5 rounded-2xl border p-5 shadow-sm lg:grid-cols-[1fr_260px] lg:items-center',
+        dragging ? 'border-[#6A9C89] bg-[#F0F7F3]' : 'border-[#DDE7E2] bg-white',
+      ].join(' ')}
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".hwpx,.hwp"
+        className="hidden"
+        onChange={(event) => handleFiles(event.target.files)}
+      />
+      <div>
+        <p className="text-sm font-bold text-[#3A7A68]">내 HWPX 신청서로 시작</p>
+        <h2 className="mt-1 text-xl font-bold text-[#24312D]">공고문이나 신청서 양식을 올리면 왼쪽 문서 화면에서 바로 작성합니다.</h2>
+        <p className="mt-2 text-sm leading-6 text-[#65736E]">
+          기본정보는 섹션을 클릭해 직접 입력하고, 긴 서술형 항목은 오른쪽 AI 패널에 요청사항을 적어 자동으로 채울 수 있습니다.
+        </p>
+      </div>
+      <div className="flex flex-col gap-2">
+        <Button type="button" onClick={() => inputRef.current?.click()}>HWPX/HWP 업로드</Button>
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          className="rounded-xl border border-dashed border-[#BFD3CB] px-4 py-3 text-sm font-semibold text-[#65736E] transition hover:bg-[#F6FAF8]"
+        >
+          파일을 끌어와도 됩니다
+        </button>
+      </div>
+    </section>
   );
 }
 

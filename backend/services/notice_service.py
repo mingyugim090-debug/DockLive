@@ -655,6 +655,23 @@ def _mock_notice_document(
     documents = inputs.get("documents") or inputs.get("attachments") or "신청서, 개인정보 수집 및 이용 동의서 등 공고에서 정한 서류"
     criteria = inputs.get("selectionCriteria") or "신청 자격, 사업 목적 적합성, 제출 서류의 충실성 등을 종합적으로 검토합니다."
     reference_note = " 참고자료의 주요 내용을 반영하여 세부 일정과 운영 방식은 담당 부서 확인 후 확정합니다." if references else ""
+    ai_prompt = inputs.get("aiPrompt", "").strip()
+    ai_target = inputs.get("aiTarget", "").strip()
+
+    def body_for(heading: str) -> str:
+        body = _default_section_body(
+            heading,
+            inputs,
+            target=target,
+            capacity=capacity,
+            benefit=benefit,
+            documents=documents,
+            criteria=criteria,
+        ) + reference_note
+        if ai_prompt and (not ai_target or ai_target in heading or heading in ai_target):
+            body += f" 요청사항({ai_prompt})을 반영하여 제출용 문체로 구체화하되, 확인되지 않은 수치와 일정은 제출 전 확인 항목으로 남깁니다."
+        return body
+
     return {
         "documentType": template_id,
         "title": title,
@@ -664,15 +681,7 @@ def _mock_notice_document(
         "sections": [
             {
                 "heading": f"{idx}. {heading}",
-                "body": _default_section_body(
-                    heading,
-                    inputs,
-                    target=target,
-                    capacity=capacity,
-                    benefit=benefit,
-                    documents=documents,
-                    criteria=criteria,
-                ) + reference_note,
+                "body": body_for(heading),
             }
             for idx, heading in enumerate(template["sections"], start=1)
         ],
