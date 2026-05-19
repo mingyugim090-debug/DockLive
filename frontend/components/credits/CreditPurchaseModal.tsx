@@ -74,6 +74,9 @@ export function CreditPurchaseModal({
 
     (async () => {
       try {
+        if (!clientKey) {
+          throw new Error('missing_toss_client_key');
+        }
         const { loadTossPayments } = await import('@tosspayments/tosspayments-sdk');
         if (cancelled) return;
 
@@ -103,19 +106,30 @@ export function CreditPurchaseModal({
     return () => {
       cancelled = true;
     };
-  }, [step, selectedPkg, clientKey]);
+  }, [step, selectedPkg, clientKey, userId]);
 
   const handlePay = async () => {
     if (!widgetsRef.current || !selectedPkg || paying) return;
+    if (!userId) {
+      setError('로그인 세션을 확인한 뒤 다시 시도해 주세요.');
+      return;
+    }
     setPaying(true);
 
-    // orderId format: livedock_{userId}_{base36Timestamp}_{random6}  (≤ 64 chars)
-    const orderId = `livedock_${userId}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
     try {
+      const orderRes = await fetch('/api/payments/order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: selectedPkg.amount, userId }),
+      });
+      if (!orderRes.ok) {
+        throw new Error('order_create_failed');
+      }
+      const order = (await orderRes.json()) as { orderId: string; orderName: string };
+
       await widgetsRef.current.requestPayment({
-        orderId,
-        orderName: `LiveDock 크레딧 ${selectedPkg.credits}개`,
+        orderId: order.orderId,
+        orderName: order.orderName,
         successUrl: `${window.location.origin}/app/payments/success`,
         failUrl: `${window.location.origin}/app/payments/fail`,
         customerEmail: userEmail,

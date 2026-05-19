@@ -16,6 +16,11 @@ Set in Vercel:
 NEXT_PUBLIC_API_URL=https://your-backend.example.com
 NEXT_PUBLIC_INSFORGE_BASE_URL=https://your-app.region.insforge.app
 NEXT_PUBLIC_INSFORGE_ANON_KEY=your_insforge_anon_key
+INSFORGE_BASE_URL=https://your-app.region.insforge.app
+INSFORGE_API_KEY=your_insforge_api_key
+NEXT_PUBLIC_TOSS_CLIENT_KEY=your_toss_client_key
+TOSS_SECRET_KEY=your_toss_secret_key
+PAYMENT_ORDER_SECRET=random_32_bytes_or_longer
 ```
 
 ## Backend Environment
