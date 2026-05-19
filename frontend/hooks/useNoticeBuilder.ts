@@ -14,9 +14,8 @@ export type NoticeBuilderStep = 'template' | 'info' | 'generate' | 'preview' | '
 
 export const noticeSteps: Array<{ id: NoticeBuilderStep; label: string }> = [
   { id: 'template', label: '공고문 유형 선택' },
-  { id: 'info', label: '기본 정보 입력' },
+  { id: 'preview', label: 'HWPX 초안 편집' },
   { id: 'generate', label: 'AI 초안 생성' },
-  { id: 'preview', label: '문서 미리보기' },
   { id: 'download', label: '다운로드' },
 ];
 
@@ -31,11 +30,110 @@ function downloadExportResponse(exported: ExportResponse) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
+function linesToText(lines: string[]) {
+  return lines.filter(Boolean).join('\n');
+}
+
+export function createDraftFromTemplate(template: NoticeTemplate): NoticeDocument {
+  const row = (label: string) => template.sample.overviewRows.find(([name]) => name.includes(label))?.[1] ?? '';
+  return normalizeNoticeDocument({
+    documentType: template.id,
+    title: template.sample.title,
+    organization: template.sample.organization,
+    purpose: template.purpose,
+    applicationMethod: row('신청') || row('제출') || '붙임 서식을 작성하여 담당 부서 이메일 또는 접수 시스템으로 제출합니다.',
+    schedule: {
+      applicationPeriod: row('기간') || '2026. 6. 1.(월) ~ 6. 20.(금) 18:00',
+      eventPeriod: row('운영') || row('사업') || '선정 이후 별도 안내',
+    },
+    contact: {
+      department: '담당 부서',
+      phone: '02-000-0000',
+      email: 'notice@example.go.kr',
+    },
+    sections: template.sample.sections.map((section) => ({
+      heading: section.heading,
+      body: linesToText(section.body),
+    })),
+    attachments: template.sample.attachments,
+  });
+}
+
+export function normalizeNoticeDocument(document: Partial<NoticeDocument> | null | undefined): NoticeDocument {
+  const fallback = getNoticeTemplate('startup_camp_notice');
+  const base = createPlainTemplateDraft(fallback);
+  return {
+    ...base,
+    ...document,
+    documentType: document?.documentType || base.documentType,
+    title: document?.title || base.title,
+    organization: document?.organization || base.organization,
+    purpose: document?.purpose || base.purpose,
+    applicationMethod: document?.applicationMethod || base.applicationMethod,
+    schedule: {
+      applicationPeriod: document?.schedule?.applicationPeriod || base.schedule.applicationPeriod,
+      eventPeriod: document?.schedule?.eventPeriod || base.schedule.eventPeriod,
+    },
+    contact: {
+      department: document?.contact?.department || base.contact.department,
+      phone: document?.contact?.phone || base.contact.phone,
+      email: document?.contact?.email || base.contact.email,
+    },
+    sections: document?.sections?.length ? document.sections : base.sections,
+    attachments: document?.attachments?.length ? document.attachments : base.attachments,
+  };
+}
+
+function createPlainTemplateDraft(template: NoticeTemplate): NoticeDocument {
+  return {
+    documentType: template.id,
+    title: template.sample.title,
+    organization: template.sample.organization,
+    purpose: template.purpose,
+    applicationMethod: '붙임 서식을 작성하여 담당 부서 이메일 또는 접수 시스템으로 제출합니다.',
+    schedule: {
+      applicationPeriod: '2026. 6. 1.(월) ~ 6. 20.(금) 18:00',
+      eventPeriod: '선정 이후 별도 안내',
+    },
+    contact: {
+      department: '담당 부서',
+      phone: '02-000-0000',
+      email: 'notice@example.go.kr',
+    },
+    sections: template.sample.sections.map((section) => ({ heading: section.heading, body: linesToText(section.body) })),
+    attachments: template.sample.attachments,
+  };
+}
+
+function documentToInputs(document: NoticeDocument, existing: Record<string, string>): Record<string, string> {
+  const byHeading = (keyword: string) => document.sections.find((section) => section.heading.includes(keyword))?.body ?? '';
+  return {
+    ...existing,
+    title: document.title,
+    organization: document.organization,
+    target: existing.target || byHeading('대상') || byHeading('자격'),
+    capacity: existing.capacity || byHeading('인원') || byHeading('규모'),
+    applicationPeriod: document.schedule.applicationPeriod,
+    eventPeriod: document.schedule.eventPeriod,
+    applicationMethod: document.applicationMethod,
+    selectionCriteria: existing.selectionCriteria || byHeading('선정') || byHeading('평가'),
+    benefit: existing.benefit || byHeading('지원'),
+    documents: existing.documents || byHeading('서류'),
+    department: document.contact.department,
+    phone: document.contact.phone,
+    email: document.contact.email,
+    attachments: document.attachments.join('\n'),
+  };
+}
+
 export function useNoticeBuilder(initialTemplateId?: string | null) {
-  const [currentStep, setCurrentStep] = useState<NoticeBuilderStep>(initialTemplateId ? 'info' : 'template');
-  const [selectedTemplateId, setSelectedTemplateId] = useState(initialTemplateId || 'startup_camp_notice');
+  const initialTemplate = getNoticeTemplate(initialTemplateId || 'startup_camp_notice');
+  const [currentStep, setCurrentStep] = useState<NoticeBuilderStep>(initialTemplateId ? 'preview' : 'template');
+  const [selectedTemplateId, setSelectedTemplateId] = useState(initialTemplate.id);
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
-  const [draftDocument, setDraftDocument] = useState<NoticeDocument | null>(null);
+  const [draftDocument, setDraftDocument] = useState<NoticeDocument | null>(
+    initialTemplateId ? createDraftFromTemplate(initialTemplate) : null,
+  );
   const [warnings, setWarnings] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -45,12 +143,14 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
   const stepIndex = noticeSteps.findIndex((step) => step.id === currentStep);
 
   const selectTemplate = useCallback((template: NoticeTemplate | string) => {
-    const templateId = typeof template === 'string' ? template : template.id;
-    setSelectedTemplateId(templateId);
-    setDraftDocument(null);
+    const resolved = typeof template === 'string' ? getNoticeTemplate(template) : template;
+    const draft = createDraftFromTemplate(resolved);
+    setSelectedTemplateId(resolved.id);
+    setInputValues(documentToInputs(draft, {}));
+    setDraftDocument(draft);
     setWarnings([]);
     setError(null);
-    setCurrentStep('info');
+    setCurrentStep('preview');
   }, []);
 
   const setInputValue = useCallback((id: string, value: string) => {
@@ -63,43 +163,48 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
   );
 
   const generateDraft = useCallback(async () => {
-    if (missingRequired.length > 0) {
-      setError('필수 정보를 먼저 입력해 주세요.');
-      setCurrentStep('info');
-      return;
-    }
+    const baseDraft = normalizeNoticeDocument(draftDocument ?? createDraftFromTemplate(selectedTemplate));
+    const payloadInputs = documentToInputs(baseDraft, inputValues);
     setIsGenerating(true);
     setError(null);
     setWarnings([]);
     setCurrentStep('generate');
     try {
-      const response = await generateNoticeDocument(selectedTemplateId, inputValues);
-      setDraftDocument(response.data);
+      const response = await generateNoticeDocument(selectedTemplateId, payloadInputs);
+      const normalized = normalizeNoticeDocument(response.data);
+      setDraftDocument(normalized);
+      setInputValues(documentToInputs(normalized, payloadInputs));
       setWarnings(response.warnings ?? []);
       setCurrentStep('preview');
     } catch (err) {
       setError(err instanceof Error ? err.message : '공고문 초안 생성에 실패했습니다.');
-      setCurrentStep('info');
+      setDraftDocument(baseDraft);
+      setCurrentStep('preview');
     } finally {
       setIsGenerating(false);
     }
-  }, [inputValues, missingRequired.length, selectedTemplateId]);
+  }, [draftDocument, inputValues, selectedTemplate, selectedTemplateId]);
 
   const updateDraft = useCallback((updater: (document: NoticeDocument) => NoticeDocument) => {
-    setDraftDocument((current) => (current ? updater(current) : current));
+    setDraftDocument((current) => {
+      const next = normalizeNoticeDocument(updater(normalizeNoticeDocument(current)));
+      setInputValues((values) => documentToInputs(next, values));
+      return next;
+    });
   }, []);
 
   const download = useCallback(async (format: 'HWPX' | 'PDF' | 'DOCX') => {
     if (!draftDocument) return;
+    const normalized = normalizeNoticeDocument(draftDocument);
     setExporting(format);
     setError(null);
     try {
       const exported =
         format === 'HWPX'
-          ? await exportNoticeHwpx(draftDocument)
+          ? await exportNoticeHwpx(normalized)
           : format === 'PDF'
-            ? await exportNoticePdf(draftDocument)
-            : await exportNoticeDocx(draftDocument);
+            ? await exportNoticePdf(normalized)
+            : await exportNoticeDocx(normalized);
       downloadExportResponse(exported);
       setCurrentStep('download');
     } catch (err) {
