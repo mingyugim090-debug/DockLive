@@ -288,6 +288,7 @@ export interface HwpxTemplateAnalysisResponse {
   title: string;
   organization: string;
   summary: string;
+  preview_image?: string | null;
   blocks: HwpxTemplateBlock[];
   fields: HwpxTemplateField[];
   sections: HwpxTemplateSection[];

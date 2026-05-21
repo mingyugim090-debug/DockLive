@@ -308,6 +308,7 @@ class HwpxTemplateAnalysisResponse(BaseModel):
     title: str = ""
     organization: str = ""
     summary: str = ""
+    preview_image: Optional[str] = None
     blocks: list[HwpxTemplateBlock] = Field(default_factory=list)
     fields: list[HwpxTemplateField] = Field(default_factory=list)
     sections: list[HwpxTemplateSection] = Field(default_factory=list)

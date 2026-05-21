@@ -1,3 +1,4 @@
+import base64
 import html
 import re
 import zipfile
@@ -64,6 +65,7 @@ def analyze_hwpx_template_bytes(content: bytes, source_filename: str) -> dict:
     warnings: list[str] = []
     with zipfile.ZipFile(PathLikeBytes(content), "r") as zf:
         names = zf.namelist()
+        preview_image = _extract_preview_image(zf, names)
         section_names = sorted(
             name
             for name in names
@@ -99,6 +101,7 @@ def analyze_hwpx_template_bytes(content: bytes, source_filename: str) -> dict:
         "fields": fields[:80],
         "sections": sections[:40],
         "attachments": _guess_attachments(all_text, fields),
+        "preview_image": preview_image,
         "stats": {
             "paragraphs": sum(1 for block in blocks if block["type"] == "paragraph"),
             "tables": sum(1 for block in blocks if block["type"] == "table"),
@@ -107,6 +110,16 @@ def analyze_hwpx_template_bytes(content: bytes, source_filename: str) -> dict:
         },
         "warnings": warnings,
     }
+
+
+def _extract_preview_image(zf: zipfile.ZipFile, names: list[str]) -> str | None:
+    for name in ("Preview/PrvImage.png", "Preview/PrvImage.jpg", "Preview/PrvImage.jpeg"):
+        if name not in names:
+            continue
+        content_type = "image/png" if name.lower().endswith(".png") else "image/jpeg"
+        encoded = base64.b64encode(zf.read(name)).decode("ascii")
+        return f"data:{content_type};base64,{encoded}"
+    return None
 
 
 class PathLikeBytes:
@@ -139,7 +152,8 @@ def _parse_section(root: ElementTree.Element, section_index: int) -> list[dict]:
         tables = [node for node in child.iter() if _local(node.tag) == "tbl"]
         if tables:
             for table in tables:
-                rows = _parse_table(table)
+                table_width = _table_width(table)
+                rows = _parse_table(table, table_width)
                 table_text = _table_to_text(rows)
                 if _is_forbidden_text(table_text):
                     metadata_started = True
@@ -155,7 +169,7 @@ def _parse_section(root: ElementTree.Element, section_index: int) -> list[dict]:
                             "section_index": section_index,
                             "text": table_text,
                             "rows": rows,
-                            "style": {"width": "100%"},
+                            "style": {"width": "100%", "hwpx_width": table_width},
                         }
                     )
             continue
@@ -183,22 +197,22 @@ def _parse_section(root: ElementTree.Element, section_index: int) -> list[dict]:
     return blocks
 
 
-def _parse_table(table: ElementTree.Element) -> list[list[dict]]:
+def _parse_table(table: ElementTree.Element, table_width: int = 0) -> list[list[dict]]:
     rows: list[list[dict]] = []
-    for tr in [node for node in table.iter() if _local(node.tag) == "tr"]:
+    for tr in [node for node in list(table) if _local(node.tag) == "tr"]:
         cells: list[dict] = []
         direct_cells = [child for child in list(tr) if _local(child.tag) == "tc"]
         for tc in direct_cells:
             cell_addr = _cell_addr(tc)
             cell_span = _cell_span(tc)
-            text_parts = [_paragraph_text(p) for p in tc.iter() if _local(p.tag) == "p"]
-            text = _normalize_text(" ".join(part for part in text_parts if part))
+            text = _text_excluding_nested_tables(tc)
             cells.append(
                 {
                     "id": f"cell-{cell_addr['row']}-{cell_addr['col']}",
                     "text": text,
                     "row_span": cell_span["row"],
                     "col_span": cell_span["col"],
+                    "width": _cell_width_percent(tc, table_width),
                     "align": _table_cell_align(tc),
                     "vertical_align": _table_cell_vertical_align(tc),
                     "editable": _looks_editable_cell(text, len(cells)),
@@ -215,6 +229,21 @@ def _paragraph_text(paragraph: ElementTree.Element) -> str:
         if _local(node.tag) == "t" and node.text:
             parts.append(node.text)
     return _normalize_text("".join(parts))
+
+
+def _text_excluding_nested_tables(node: ElementTree.Element) -> str:
+    parts: list[str] = []
+
+    def visit(current: ElementTree.Element) -> None:
+        if current is not node and _local(current.tag) == "tbl":
+            return
+        if _local(current.tag) == "t" and current.text:
+            parts.append(current.text)
+        for child in list(current):
+            visit(child)
+
+    visit(node)
+    return _normalize_text(" ".join(part for part in parts if part))
 
 
 def _assign_roles(blocks: list[dict]) -> None:
@@ -388,6 +417,21 @@ def _int_attr(node: ElementTree.Element, local_name: str, default: int) -> int:
     return default
 
 
+def _table_width(table: ElementTree.Element) -> int:
+    size = _first_child(table, "sz")
+    return _int_attr(size, "width", 0) if size is not None else 0
+
+
+def _cell_width_percent(cell: ElementTree.Element, table_width: int) -> int | None:
+    if table_width <= 0:
+        return None
+    size = _first_child(cell, "cellSz")
+    width = _int_attr(size, "width", 0) if size is not None else 0
+    if width <= 0:
+        return None
+    return max(1, min(100, round((width / table_width) * 100)))
+
+
 def _first_child(node: ElementTree.Element, local_name: str) -> ElementTree.Element | None:
     for child in list(node):
         if _local(child.tag) == local_name:
@@ -476,7 +520,7 @@ def _paragraph_style(paragraph: ElementTree.Element) -> dict:
 
 
 def _table_cell_align(cell: ElementTree.Element) -> str:
-    text = " ".join(_paragraph_text(p) for p in cell.iter() if _local(p.tag) == "p")
+    text = _text_excluding_nested_tables(cell)
     return "center" if len(text.strip()) <= 20 else "left"
 
 

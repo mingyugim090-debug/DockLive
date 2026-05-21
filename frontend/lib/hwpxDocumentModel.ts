@@ -139,6 +139,7 @@ function convertTemplateBlock(block: HwpxTemplateBlock, index: number): HwpxBloc
           text: sanitizeDocumentText(cell.text),
           rowSpan: cell.row_span,
           colSpan: cell.col_span,
+          width: cell.width,
           align: cell.align ?? (rowIndex === 0 || cellIndex === 0 ? 'center' : 'left'),
           verticalAlign: cell.vertical_align === 'bottom' ? 'bottom' : cell.vertical_align === 'top' ? 'top' : 'middle',
           background: cell.background ?? (rowIndex === 0 || cellIndex === 0 ? '#f1f5f2' : undefined),
@@ -208,4 +209,3 @@ export function findFirstEditableId(model: HwpxDocumentModel): string {
   }
   return model.pages[0]?.blocks[0]?.id ?? '';
 }
-

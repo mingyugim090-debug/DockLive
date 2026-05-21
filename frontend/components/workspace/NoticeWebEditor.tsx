@@ -510,7 +510,17 @@ function UploadedHwpxPreview({
         </div>
       </div>
 
-      {visibleBlocks.map((block) => {
+      {analysis.preview_image ? (
+        <div className="overflow-auto rounded-lg border border-[#DDE5E0] bg-white p-3">
+          <img
+            src={analysis.preview_image}
+            alt={analysis.title || analysis.source_filename}
+            className="mx-auto h-auto max-w-full"
+          />
+        </div>
+      ) : null}
+
+      {analysis.preview_image ? null : visibleBlocks.map((block) => {
         const target = targetForTemplateBlock(block, sectionCount);
         const active = isSameTarget(selected, target);
         return (
@@ -628,7 +638,7 @@ function DocumentModelBlock({
   }
   if (block.type === 'table') {
     return (
-      <table className="my-2 w-full border-collapse text-[12px] leading-5">
+      <table className="my-2 w-full table-fixed border-collapse text-[12px] leading-5">
         <tbody>
           {block.rows.map((row, rowIndex) => (
             <tr key={`${block.id}-row-${rowIndex}`}>
@@ -797,7 +807,7 @@ function UploadedHwpxParagraph({ block }: { block: HwpxTemplateBlock }) {
 
 function UploadedHwpxTable({ block }: { block: HwpxTemplateBlock }) {
   return (
-    <table className="w-full border-collapse text-sm">
+    <table className="w-full table-fixed border-collapse text-sm">
       <tbody>
         {block.rows.map((row, rowIndex) => (
           <tr key={`${block.id}-${rowIndex}`}>
@@ -812,6 +822,11 @@ function UploadedHwpxTable({ block }: { block: HwpxTemplateBlock }) {
                     'border border-[#C5D1CC] px-3 py-2 align-top leading-6',
                     labelLike ? 'bg-[#F3F7F5] font-bold text-[#24312D]' : 'bg-white text-[#142033]',
                   ].join(' ')}
+                  style={{
+                    textAlign: cell.align,
+                    verticalAlign: cell.vertical_align,
+                    width: cell.width ? `${cell.width}%` : undefined,
+                  }}
                 >
                   {cell.text || <span className="text-[#A0AAA5]">입력 필요</span>}
                 </td>

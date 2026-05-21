@@ -213,6 +213,7 @@ class AgentMvpContractTests(unittest.TestCase):
             for cell in row
         ]
 
+        self.assertTrue(str(analysis.get("preview_image", "")).startswith("data:image/"))
         self.assertTrue(any(cell["col_span"] > 1 or cell["row_span"] > 1 for cell in cells))
         self.assertTrue(any(cell["text"] == "" for cell in cells))
 
