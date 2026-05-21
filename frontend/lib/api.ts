@@ -6,6 +6,7 @@ import type {
   ExportResponse,
   HwpxComposeResponse,
   HwpxConvertResponse,
+  HwpxFormSessionResponse,
   NoticeDocument,
   NoticeGenerateResponse,
   HwpxPlaceholderMapResponse,
@@ -294,6 +295,55 @@ export async function analyzeHwpxTemplate(file: File): Promise<HwpxTemplateAnaly
 
   const res = await fetch(`${API_URL}/api/hwpx/analyze-template`, { method: 'POST', body: formData });
   if (!res.ok) throw await readError(res, `HWPX 양식 분석 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function createHwpxFormSession(file: File): Promise<HwpxFormSessionResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await fetchWithTimeout(`${API_URL}/api/hwpx/sessions`, { method: 'POST', body: formData }, 90000);
+  if (!res.ok) throw await readError(res, `HWPX 세션 생성 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function getHwpxFormSession(id: string): Promise<HwpxFormSessionResponse> {
+  const res = await fetch(`${API_URL}/api/hwpx/sessions/${id}`);
+  if (!res.ok) throw await readError(res, `HWPX 세션 조회 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function updateHwpxRegion(
+  sessionId: string,
+  regionId: string,
+  payload: { value: string; prompt?: string },
+): Promise<HwpxFormSessionResponse> {
+  const res = await fetch(`${API_URL}/api/hwpx/sessions/${sessionId}/regions/${regionId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ value: payload.value, prompt: payload.prompt ?? '' }),
+  });
+  if (!res.ok) throw await readError(res, `HWPX 입력 영역 저장 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function draftHwpxRegion(
+  sessionId: string,
+  regionId: string,
+  payload: { baseInput: string; prompt: string },
+): Promise<HwpxFormSessionResponse> {
+  const res = await fetchWithTimeout(`${API_URL}/api/hwpx/sessions/${sessionId}/regions/${regionId}/draft`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ base_input: payload.baseInput, prompt: payload.prompt }),
+  }, 90000);
+  if (!res.ok) throw await readError(res, `AI 초안 생성 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function exportHwpxFormSession(sessionId: string): Promise<ExportResponse> {
+  const res = await fetchWithTimeout(`${API_URL}/api/hwpx/sessions/${sessionId}/export`, { method: 'POST' }, 90000);
+  if (!res.ok) throw await readError(res, `HWPX 다운로드 생성 실패: ${res.status}`);
   return res.json();
 }
 

@@ -3,7 +3,7 @@ import { extractNoticeInfo } from '@/lib/claudeAnalysis';
 
 async function fetchPageText(url: string): Promise<string> {
   const res = await fetch(url, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DockLive/1.0; +https://livedock.insforge.site)' },
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DockLive/1.0; +https://dock-live.vercel.app)' },
     signal: AbortSignal.timeout(10000),
   });
   if (!res.ok) throw new Error(`페이지를 가져오지 못했습니다 (${res.status})`);

@@ -1,0 +1,502 @@
+from __future__ import annotations
+
+import base64
+import json
+import re
+import shutil
+import subprocess
+import sys
+import uuid
+import zipfile
+from copy import deepcopy
+from pathlib import Path
+from typing import Any
+
+from core.errors import AnalysisError
+from models.schemas import utc_now_iso
+from services import storage
+from services.ai_provider import call_json, should_use_mock_ai
+from services.document_ingestion import convert_hwp_to_hwpx
+from services.drafting_service import _require_hwpx_scripts, _run_hwpx_command, _safe_title
+from services.hwpx_template_analysis import analyze_hwpx_template_bytes
+from services.pdf_export_service import convert_hwpx_bytes_to_pdf
+
+HWPX_MEDIA_TYPE = "application/vnd.hancom.hwpx"
+
+
+def create_form_session(raw_content: bytes, filename: str) -> dict[str, Any]:
+    if not filename or not re.search(r"\.(hwp|hwpx)$", filename, re.I):
+        raise AnalysisError("HWP 또는 HWPX 파일만 업로드할 수 있습니다.")
+
+    warnings: list[str] = []
+    source_filename = filename
+    hwpx_content = raw_content
+    if filename.lower().endswith(".hwp") and not filename.lower().endswith(".hwpx"):
+        hwpx_content, conversion_warnings = convert_hwp_to_hwpx(raw_content, filename)
+        warnings.extend(conversion_warnings)
+        source_filename = f"{Path(filename).stem}.hwpx"
+
+    if not hwpx_content.startswith(b"PK"):
+        raise AnalysisError("업로드한 파일이 올바른 HWPX ZIP 패키지가 아닙니다.")
+
+    session_id = f"hwpx-{uuid.uuid4().hex}"
+    analysis = analyze_hwpx_template_bytes(hwpx_content, source_filename)
+    pages, render_warnings = _render_hwpx_pages(hwpx_content, source_filename, analysis.get("preview_image"))
+    warnings.extend(render_warnings)
+    regions = _extract_editable_regions(hwpx_content, max(1, len(pages)))
+    if not regions:
+        warnings.append("편집 가능한 입력 영역을 자동으로 찾지 못했습니다. 문서 전체 요약 영역을 대신 제공합니다.")
+        regions = [_fallback_region()]
+
+    stored = storage.save_source_file(session_id, source_filename, hwpx_content, HWPX_MEDIA_TYPE)
+    now = utc_now_iso()
+    session = {
+        "id": session_id,
+        "source_filename": source_filename,
+        "canonical_hwpx_storage_path": (stored or {}).get("storage_path"),
+        "source_hwpx_base64": base64.b64encode(hwpx_content).decode("ascii"),
+        "analysis": {
+            "id": session_id,
+            "title": analysis.get("title") or Path(source_filename).stem,
+            "organization": analysis.get("organization") or "",
+            "summary": analysis.get("summary") or "",
+            "stats": analysis.get("stats") or {},
+        },
+        "pages": pages,
+        "regions": regions,
+        "status": "analyzed",
+        "warnings": list(dict.fromkeys(warnings + analysis.get("warnings", []))),
+        "created_at": now,
+        "updated_at": now,
+    }
+    _save_session(session)
+    return _public_session(session)
+
+
+def get_form_session(session_id: str) -> dict[str, Any]:
+    return _public_session(_load_session(session_id))
+
+
+def update_region(session_id: str, region_id: str, value: str = "", prompt: str = "") -> dict[str, Any]:
+    session = _load_session(session_id)
+    region = _find_region(session, region_id)
+    region["value"] = value
+    region["prompt"] = prompt
+    region["draft_status"] = "revised" if value.strip() else "empty"
+    session["status"] = "editing"
+    session["updated_at"] = utc_now_iso()
+    _save_session(session)
+    return _public_session(session)
+
+
+def draft_region(session_id: str, region_id: str, base_input: str = "", prompt: str = "") -> dict[str, Any]:
+    session = _load_session(session_id)
+    region = _find_region(session, region_id)
+    generated = _generate_region_text(session, region, base_input, prompt)
+    region["value"] = generated
+    region["prompt"] = prompt
+    region["draft_status"] = "drafted"
+    session["status"] = "editing"
+    session["updated_at"] = utc_now_iso()
+    _save_session(session)
+    return _public_session(session)
+
+
+def export_form_session(session_id: str) -> tuple[str, bytes, dict[str, Any]]:
+    session = _load_session(session_id)
+    source = base64.b64decode(session.get("source_hwpx_base64") or "")
+    if not source.startswith(b"PK"):
+        raise AnalysisError("원본 HWPX 파일을 세션에서 찾지 못했습니다.")
+
+    scripts = _require_hwpx_scripts("fix_namespaces.py", "validate.py", "verify_hwpx.py", "text_extract.py")
+    tmpdir = _tmp_root() / f"form_export_{uuid.uuid4().hex}"
+    tmpdir.mkdir(parents=True, exist_ok=False)
+    try:
+        source_path = tmpdir / "source.hwpx"
+        output_path = tmpdir / "result.hwpx"
+        verify_path = tmpdir / "verify.json"
+        source_path.write_bytes(source)
+        _clone_with_region_replacements(source_path, output_path, session["regions"])
+
+        python_bin = sys.executable or "python"
+        _run_hwpx_command([python_bin, str(scripts["fix_namespaces.py"]), str(output_path)])
+        _run_hwpx_command([python_bin, str(scripts["validate.py"]), str(output_path)])
+        verify_report: dict[str, Any] = {}
+        try:
+            _run_hwpx_command(
+                [
+                    python_bin,
+                    str(scripts["verify_hwpx.py"]),
+                    "--source",
+                    str(source_path),
+                    "--result",
+                    str(output_path),
+                    "--json",
+                    str(verify_path),
+                ]
+            )
+            if verify_path.exists():
+                verify_report = json.loads(verify_path.read_text(encoding="utf-8"))
+        except subprocess.CalledProcessError as exc:
+            raise AnalysisError(f"HWPX 구조 검증 실패: {(exc.stderr or exc.stdout or str(exc))[:700]}") from exc
+
+        extracted = ""
+        try:
+            text_result = _run_hwpx_command([python_bin, str(scripts["text_extract.py"]), str(output_path), "--include-tables"])
+            extracted = text_result.stdout or ""
+        except Exception:
+            extracted = _zip_text_excerpt(output_path)
+
+        inserted = [r.get("value", "").strip() for r in session["regions"] if r.get("value", "").strip()]
+        missing = [text[:40] for text in inserted if text[:20] not in extracted]
+        if missing:
+            raise AnalysisError("다운로드 검증 실패: 입력한 내용 일부를 HWPX에서 확인하지 못했습니다.")
+
+        filename = f"{_safe_title(session.get('analysis', {}).get('title') or session['source_filename'])}_completed.hwpx"
+        content = output_path.read_bytes()
+        summary = {
+            "validation_passed": True,
+            "structure_preserved": verify_report.get("status") in {"PASS", "WARN", None},
+            "verify_report": verify_report,
+            "text_chars": len(extracted),
+            "warnings": verify_report.get("warnings", []),
+            "generation_method": "source-clone-region-replacement",
+        }
+        storage.save_export_file(session_id, filename, content, HWPX_MEDIA_TYPE, "hwpx_form_session", validation_summary=summary)
+        session["status"] = "exported"
+        session["updated_at"] = utc_now_iso()
+        _save_session(session)
+        return filename, content, summary
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def _render_hwpx_pages(content: bytes, filename: str, preview_image: str | None) -> tuple[list[dict[str, Any]], list[str]]:
+    warnings: list[str] = []
+    try:
+        _, pdf_content, _ = convert_hwpx_bytes_to_pdf(content, Path(filename).stem, filename)
+        import fitz
+
+        doc = fitz.open(stream=pdf_content, filetype="pdf")
+        pages: list[dict[str, Any]] = []
+        for index, page in enumerate(doc):
+            pix = page.get_pixmap(matrix=fitz.Matrix(1.6, 1.6), alpha=False)
+            image = base64.b64encode(pix.tobytes("png")).decode("ascii")
+            pages.append({"page_index": index, "image_base64": f"data:image/png;base64,{image}", "width": pix.width, "height": pix.height})
+        if pages:
+            return pages, warnings
+    except Exception as exc:
+        warnings.append(f"HWPX 페이지 렌더링은 PDF 변환기를 사용할 수 없어 preview 이미지로 대체했습니다: {str(exc)[:180]}")
+
+    if preview_image:
+        return [{"page_index": 0, "image_base64": preview_image, "width": 900, "height": 1200}], warnings
+
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200">'
+        '<rect width="100%" height="100%" fill="#fff"/>'
+        '<text x="450" y="560" text-anchor="middle" font-size="28" fill="#334155">HWPX preview unavailable</text>'
+        '<text x="450" y="610" text-anchor="middle" font-size="18" fill="#64748b">Edit regions are available in the side panel.</text>'
+        "</svg>"
+    )
+    encoded = base64.b64encode(svg.encode("utf-8")).decode("ascii")
+    return [{"page_index": 0, "image_base64": f"data:image/svg+xml;base64,{encoded}", "width": 900, "height": 1200}], warnings
+
+
+def _extract_editable_regions(content: bytes, page_count: int) -> list[dict[str, Any]]:
+    regions: list[dict[str, Any]] = []
+    with zipfile.ZipFile(_Bytes(content), "r") as zf:
+        section_names = sorted(name for name in zf.namelist() if name.startswith("Contents/section") and name.endswith(".xml"))
+        for section_path in section_names:
+            root = _xml_root(zf.read(section_path))
+            table_index = 0
+            paragraph_index = 0
+            for para in _children(root, "p"):
+                tables = [node for node in para.iter() if _local(node.tag) == "tbl"]
+                if tables:
+                    for table in tables:
+                        regions.extend(_table_regions(section_path, table, table_index, len(regions), page_count))
+                        table_index += 1
+                    continue
+                text = _node_text(para)
+                if _looks_like_writing_paragraph(text):
+                    regions.append(_region(section_path, "paragraph", len(regions), page_count, text, text, {"paragraph_index": paragraph_index}))
+                paragraph_index += 1
+    return regions[:120]
+
+
+def _table_regions(section_path: str, table: Any, table_index: int, start_order: int, page_count: int) -> list[dict[str, Any]]:
+    rows = _children(table, "tr")
+    regions: list[dict[str, Any]] = []
+    for row_index, row in enumerate(rows):
+        cells = _children(row, "tc")
+        texts = [_node_text(cell) for cell in cells]
+        for cell_index, cell in enumerate(cells):
+            text = texts[cell_index].strip()
+            prev = texts[cell_index - 1].strip() if cell_index > 0 else ""
+            if not _looks_editable_cell(text, prev, cell_index):
+                continue
+            label = _label_for_cell(prev, text, row_index, cell_index)
+            kind = "textarea" if _is_long_text_label(label) else "text"
+            order = start_order + len(regions)
+            source_ref = {
+                "type": "table_cell",
+                "section_path": section_path,
+                "table_index": table_index,
+                "row": _int_attr(_first_child(cell, "cellAddr"), "rowAddr", row_index),
+                "col": _int_attr(_first_child(cell, "cellAddr"), "colAddr", cell_index),
+            }
+            regions.append(_region(section_path, kind, order, page_count, label, "" if _is_placeholder(text) else text, source_ref))
+    return regions
+
+
+def _region(section_path: str, kind: str, order: int, page_count: int, label: str, value: str, source_ref: dict[str, Any]) -> dict[str, Any]:
+    page_index = min(page_count - 1, order // 14)
+    slot = order % 14
+    return {
+        "id": f"region-{uuid.uuid5(uuid.NAMESPACE_URL, section_path + json.dumps(source_ref, sort_keys=True)).hex[:16]}",
+        "kind": kind,
+        "label": _clean_label(label) or f"입력 영역 {order + 1}",
+        "page_index": page_index,
+        "bbox": {"x": 7.0, "y": 7.0 + slot * 6.2, "width": 86.0, "height": 5.4 if kind == "text" else 9.5},
+        "value": value.strip(),
+        "prompt": "",
+        "draft_status": "empty",
+        "source_ref": source_ref,
+    }
+
+
+def _generate_region_text(session: dict[str, Any], region: dict[str, Any], base_input: str, prompt: str) -> str:
+    fallback = "\n".join(part for part in [base_input.strip(), prompt.strip()] if part).strip()
+    if should_use_mock_ai():
+        return fallback or region.get("value") or ""
+    system_prompt = "You write concise Korean application-form content. Return JSON only."
+    user_prompt = json.dumps(
+        {
+            "document": session.get("analysis", {}),
+            "field_label": region.get("label"),
+            "current_value": region.get("value", ""),
+            "base_input": base_input,
+            "user_prompt": prompt,
+            "rules": ["Do not invent personal data, dates, amounts, or signatures.", "Write only content for this field."],
+        },
+        ensure_ascii=False,
+    )
+    try:
+        data = call_json("draft", system_prompt, user_prompt, max_tokens=1400)
+        return str(data.get("content") or data.get("text") or fallback or region.get("value") or "").strip()
+    except Exception:
+        return fallback or region.get("value") or ""
+
+
+def _clone_with_region_replacements(source_path: Path, output_path: Path, regions: list[dict[str, Any]]) -> None:
+    replacements_by_section: dict[str, list[dict[str, Any]]] = {}
+    for region in regions:
+        value = str(region.get("value") or "").strip()
+        source_ref = region.get("source_ref") or {}
+        section_path = source_ref.get("section_path")
+        if value and section_path:
+            replacements_by_section.setdefault(section_path, []).append(region)
+
+    with zipfile.ZipFile(source_path, "r") as zin:
+        with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zout:
+            for item in zin.infolist():
+                data = zin.read(item.filename)
+                if item.filename in replacements_by_section:
+                    data = _replace_section_xml(data, replacements_by_section[item.filename])
+                if item.filename == "mimetype":
+                    zout.writestr(item, data, compress_type=zipfile.ZIP_STORED)
+                else:
+                    zout.writestr(item, data)
+
+
+def _replace_section_xml(data: bytes, regions: list[dict[str, Any]]) -> bytes:
+    root = _xml_root(data)
+    for region in regions:
+        source_ref = region.get("source_ref") or {}
+        value = str(region.get("value") or "")
+        if source_ref.get("type") == "table_cell":
+            _replace_table_cell(root, source_ref, value)
+        elif source_ref.get("type") == "paragraph":
+            _replace_paragraph(root, source_ref, value)
+    from lxml import etree
+
+    return etree.tostring(root, encoding="utf-8", xml_declaration=True, standalone=True)
+
+
+def _replace_table_cell(root: Any, source_ref: dict[str, Any], value: str) -> None:
+    tables = [node for node in root.iter() if _local(node.tag) == "tbl"]
+    table_index = int(source_ref.get("table_index") or 0)
+    if table_index >= len(tables):
+        return
+    target_row = int(source_ref.get("row") or 0)
+    target_col = int(source_ref.get("col") or 0)
+    for row in _children(tables[table_index], "tr"):
+        for cell in _children(row, "tc"):
+            addr = _first_child(cell, "cellAddr")
+            if _int_attr(addr, "rowAddr", -1) == target_row and _int_attr(addr, "colAddr", -1) == target_col:
+                _set_first_text(cell, value)
+                return
+
+
+def _replace_paragraph(root: Any, source_ref: dict[str, Any], value: str) -> None:
+    index = int(source_ref.get("paragraph_index") or 0)
+    paragraphs = _children(root, "p")
+    if index < len(paragraphs):
+        _set_first_text(paragraphs[index], value)
+
+
+def _set_first_text(node: Any, value: str) -> None:
+    text_nodes = [child for child in node.iter() if _local(child.tag) == "t"]
+    if text_nodes:
+        text_nodes[0].text = value
+        for extra in text_nodes[1:]:
+            extra.text = ""
+        return
+    from lxml import etree
+
+    hp_ns = "http://www.hancom.co.kr/hwpml/2011/paragraph"
+    run = next((child for child in node.iter() if _local(child.tag) == "run"), None)
+    if run is not None:
+        text_node = etree.SubElement(run, f"{{{hp_ns}}}t")
+        text_node.text = value
+
+
+def _public_session(session: dict[str, Any]) -> dict[str, Any]:
+    public = deepcopy(session)
+    public.pop("source_hwpx_base64", None)
+    return public
+
+
+def _save_session(session: dict[str, Any]) -> None:
+    storage.save_workflow(session["id"], session)
+
+
+def _load_session(session_id: str) -> dict[str, Any]:
+    session = storage.load_workflow(session_id)
+    if not session:
+        raise AnalysisError("HWPX 편집 세션을 찾지 못했습니다.")
+    return session
+
+
+def _find_region(session: dict[str, Any], region_id: str) -> dict[str, Any]:
+    for region in session.get("regions", []):
+        if region.get("id") == region_id:
+            return region
+    raise AnalysisError("선택한 HWPX 입력 영역을 찾지 못했습니다.")
+
+
+def _tmp_root() -> Path:
+    root = Path(__file__).resolve().parents[2] / "outputs" / "tmp"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+class _Bytes:
+    def __init__(self, content: bytes):
+        from io import BytesIO
+
+        self._buffer = BytesIO(content)
+
+    def read(self, *args):
+        return self._buffer.read(*args)
+
+    def seek(self, *args):
+        return self._buffer.seek(*args)
+
+    def tell(self):
+        return self._buffer.tell()
+
+    def seekable(self):
+        return True
+
+
+def _xml_root(data: bytes) -> Any:
+    from lxml import etree
+
+    return etree.fromstring(data, parser=etree.XMLParser(remove_blank_text=False, recover=False))
+
+
+def _local(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1] if "}" in tag else tag
+
+
+def _children(node: Any, name: str) -> list[Any]:
+    return [child for child in list(node) if _local(child.tag) == name]
+
+
+def _first_child(node: Any, name: str) -> Any | None:
+    for child in list(node):
+        if _local(child.tag) == name:
+            return child
+    return None
+
+
+def _node_text(node: Any) -> str:
+    return re.sub(r"\s+", " ", "".join(child.text or "" for child in node.iter() if _local(child.tag) == "t")).strip()
+
+
+def _int_attr(node: Any | None, name: str, fallback: int) -> int:
+    if node is None:
+        return fallback
+    try:
+        return int(node.get(name) or fallback)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _looks_editable_cell(text: str, prev: str, cell_index: int) -> bool:
+    if cell_index == 0 and text and not _is_placeholder(text):
+        return False
+    if _is_placeholder(text) or not text:
+        return True
+    if prev and len(prev) <= 40 and not _is_placeholder(prev):
+        return True
+    return _is_long_text_label(prev)
+
+
+def _is_placeholder(text: str) -> bool:
+    value = text.strip()
+    return not value or value in {"입력 필요", "작성 필요", "기재", "해당 없음"} or "입력" in value or "작성" in value
+
+
+def _label_for_cell(prev: str, text: str, row: int, col: int) -> str:
+    if prev and len(prev) <= 80:
+        return prev
+    if text and not _is_placeholder(text):
+        return text[:40]
+    return f"{row + 1}행 {col + 1}열"
+
+
+def _is_long_text_label(label: str) -> bool:
+    return any(token in label for token in ("소개", "동기", "계획", "내용", "목표", "방법", "사유", "자기", "활동"))
+
+
+def _looks_like_writing_paragraph(text: str) -> bool:
+    return 8 <= len(text) <= 120 and _is_long_text_label(text)
+
+
+def _clean_label(label: str) -> str:
+    return re.sub(r"[:：\s]+$", "", re.sub(r"\s+", " ", label)).strip()
+
+
+def _fallback_region() -> dict[str, Any]:
+    return {
+        "id": "region-document-summary",
+        "kind": "textarea",
+        "label": "문서 입력 내용",
+        "page_index": 0,
+        "bbox": {"x": 8.0, "y": 10.0, "width": 84.0, "height": 12.0},
+        "value": "",
+        "prompt": "",
+        "draft_status": "empty",
+        "source_ref": {},
+    }
+
+
+def _zip_text_excerpt(path: Path) -> str:
+    texts: list[str] = []
+    with zipfile.ZipFile(path, "r") as zf:
+        for name in zf.namelist():
+            if name.startswith("Contents/") and name.endswith(".xml"):
+                texts.append(re.sub(r"<[^>]+>", " ", zf.read(name).decode("utf-8", errors="replace")))
+    return "\n".join(texts)[:5000]

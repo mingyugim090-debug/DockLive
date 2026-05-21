@@ -317,6 +317,53 @@ class HwpxTemplateAnalysisResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class HwpxRenderPage(BaseModel):
+    page_index: int
+    image_base64: str
+    width: int
+    height: int
+
+
+class HwpxEditableRegion(BaseModel):
+    id: str
+    kind: Literal["text", "textarea", "checkbox", "signature"] = "text"
+    label: str
+    page_index: int = 0
+    bbox: dict[str, float] = Field(default_factory=dict)
+    value: str = ""
+    prompt: str = ""
+    draft_status: Literal["empty", "drafted", "revised"] = "empty"
+    source_ref: dict[str, Any] = Field(default_factory=dict)
+
+
+class HwpxFormSession(BaseModel):
+    id: str
+    source_filename: str
+    canonical_hwpx_storage_path: Optional[str] = None
+    analysis: dict[str, Any] = Field(default_factory=dict)
+    pages: list[HwpxRenderPage] = Field(default_factory=list)
+    regions: list[HwpxEditableRegion] = Field(default_factory=list)
+    status: Literal["analyzed", "editing", "exported"] = "analyzed"
+    warnings: list[str] = Field(default_factory=list)
+    created_at: str
+    updated_at: str
+
+
+class HwpxFormSessionResponse(BaseModel):
+    success: bool = True
+    data: HwpxFormSession
+
+
+class HwpxRegionUpdateRequest(BaseModel):
+    value: str = ""
+    prompt: str = ""
+
+
+class HwpxRegionDraftRequest(BaseModel):
+    base_input: str = ""
+    prompt: str = ""
+
+
 class HwpxConvertResponse(ExportResponse):
     source_filename: str
     conversion_method: str

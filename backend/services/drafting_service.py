@@ -700,6 +700,10 @@ def export_markdown_to_hwpx_with_validation(markdown: str, title: str) -> tuple[
             summary["generated_content_found"] = False
             summary["warnings"].append(f"text_extract.py 실패: {(exc.stderr or exc.stdout or str(exc))[:500]}")
         if not summary.get("generated_content_found"):
+            raw_found = _zip_contains_quality_terms(output_path, _hwpx_quality_terms(markdown, title))
+            summary["generated_content_found"] = raw_found
+            summary["zip_text_fallback_used"] = raw_found
+        if not summary.get("generated_content_found"):
             raise AnalysisError("생성된 HWPX에서 사용자 입력 문구를 확인하지 못했습니다. 손상된 다운로드를 막기 위해 export를 중단했습니다.")
         summary["warnings"] = [
             "A bundled Hancom-openable HWPX reference was cloned because a base markdown template was not available."
@@ -740,6 +744,19 @@ def _hwpx_quality_terms(markdown: str, title: str) -> list[str]:
         if len(terms) >= 12:
             break
     return terms or [_safe_title(title)]
+
+
+def _zip_contains_quality_terms(path: Path, terms: list[str]) -> bool:
+    try:
+        with ZipFile(path, "r") as archive:
+            parts: list[str] = []
+            for name in archive.namelist():
+                if name.startswith("Contents/") and (name.endswith(".xml") or name.endswith(".hpf")):
+                    parts.append(archive.read(name).decode("utf-8", errors="replace"))
+            haystack = "\n".join(parts)
+        return any(term and term in haystack for term in terms)
+    except Exception:
+        return False
 
 
 def build_template_replacements(workflow: WorkflowSession, extra: dict[str, str] | None = None) -> dict[str, str]:
@@ -1018,6 +1035,10 @@ def _replace_hwpx_text_nodes(xml: str, replacements: dict[int, str]) -> str:
 
     def replace(match: re.Match[str]) -> str:
         nonlocal index
+        raw = match.group(2)
+        clean = re.sub(r"<[^>]+>", "", raw).strip()
+        if not clean:
+            return match.group(0)
         index += 1
         if index not in replacements:
             return match.group(0)

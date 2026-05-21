@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       headers: {
         'Authorization': `Bearer ${key}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://livedock.insforge.site',
+        'HTTP-Referer': 'https://dock-live.vercel.app',
         'X-Title': 'DockLive',
       },
       body: JSON.stringify({

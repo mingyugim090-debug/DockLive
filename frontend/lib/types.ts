@@ -297,6 +297,47 @@ export interface HwpxTemplateAnalysisResponse {
   warnings: string[];
 }
 
+export interface HwpxRenderPage {
+  page_index: number;
+  image_base64: string;
+  width: number;
+  height: number;
+}
+
+export interface HwpxEditableRegion {
+  id: string;
+  kind: 'text' | 'textarea' | 'checkbox' | 'signature';
+  label: string;
+  page_index: number;
+  bbox: { x: number; y: number; width: number; height: number };
+  value: string;
+  prompt: string;
+  draft_status: 'empty' | 'drafted' | 'revised';
+  source_ref: Record<string, unknown>;
+}
+
+export interface HwpxFormSession {
+  id: string;
+  source_filename: string;
+  canonical_hwpx_storage_path?: string | null;
+  analysis: Record<string, unknown> & {
+    title?: string;
+    organization?: string;
+    summary?: string;
+  };
+  pages: HwpxRenderPage[];
+  regions: HwpxEditableRegion[];
+  status: 'analyzed' | 'editing' | 'exported';
+  warnings: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HwpxFormSessionResponse {
+  success: boolean;
+  data: HwpxFormSession;
+}
+
 export interface HwpxConvertResponse extends ExportResponse {
   source_filename: string;
   conversion_method: string;

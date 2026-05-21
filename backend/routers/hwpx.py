@@ -9,11 +9,27 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from core.errors import AnalysisError
-from models.schemas import ExportResponse, HwpxComposeResponse, HwpxConvertResponse, HwpxStatusResponse, HwpxTemplateAnalysisResponse
+from models.schemas import (
+    ExportResponse,
+    HwpxComposeResponse,
+    HwpxConvertResponse,
+    HwpxFormSessionResponse,
+    HwpxRegionDraftRequest,
+    HwpxRegionUpdateRequest,
+    HwpxStatusResponse,
+    HwpxTemplateAnalysisResponse,
+)
 from services import storage
 from services.document_ingestion import convert_hwp_to_hwpx
 from services.drafting_service import export_markdown_to_hwpx_with_validation, get_hwpx_toolchain_status, hwpx_bytes_to_base64
 from services.hwpx_compose_service import compose_hwpx
+from services.hwpx_form_session import (
+    create_form_session,
+    draft_region,
+    export_form_session,
+    get_form_session,
+    update_region,
+)
 from services.hwpx_template_analysis import analyze_hwpx_template_bytes
 from services.pdf_export_service import PDF_MEDIA_TYPE, convert_hwpx_bytes_to_pdf
 
@@ -60,6 +76,45 @@ async def analyze_hwpx_template(file: UploadFile = File(...)):
         raise AnalysisError(str(exc)) from exc
     analysis["warnings"] = warnings + analysis.get("warnings", [])
     return HwpxTemplateAnalysisResponse(**analysis)
+
+
+@router.post("/hwpx/sessions", response_model=HwpxFormSessionResponse)
+async def create_hwpx_form_session(file: UploadFile = File(...)):
+    if not file.filename:
+        raise AnalysisError("HWP 또는 HWPX 파일을 업로드해 주세요.")
+    session = create_form_session(await file.read(), file.filename)
+    return HwpxFormSessionResponse(data=session)
+
+
+@router.get("/hwpx/sessions/{session_id}", response_model=HwpxFormSessionResponse)
+async def read_hwpx_form_session(session_id: str):
+    return HwpxFormSessionResponse(data=get_form_session(session_id))
+
+
+@router.patch("/hwpx/sessions/{session_id}/regions/{region_id}", response_model=HwpxFormSessionResponse)
+async def update_hwpx_form_region(session_id: str, region_id: str, payload: HwpxRegionUpdateRequest):
+    session = update_region(session_id, region_id, payload.value, payload.prompt)
+    return HwpxFormSessionResponse(data=session)
+
+
+@router.post("/hwpx/sessions/{session_id}/regions/{region_id}/draft", response_model=HwpxFormSessionResponse)
+async def draft_hwpx_form_region(session_id: str, region_id: str, payload: HwpxRegionDraftRequest):
+    session = draft_region(session_id, region_id, payload.base_input, payload.prompt)
+    return HwpxFormSessionResponse(data=session)
+
+
+@router.post("/hwpx/sessions/{session_id}/export", response_model=ExportResponse)
+async def export_hwpx_form_session(session_id: str):
+    filename, content, validation_summary = export_form_session(session_id)
+    return ExportResponse(
+        success=True,
+        filename=filename,
+        content_type=HWPX_MEDIA_TYPE,
+        content=base64.b64encode(content).decode("ascii"),
+        encoding="base64",
+        warnings=validation_summary.get("warnings", []),
+        validation_summary=validation_summary,
+    )
 
 
 @router.post("/hwpx/compose", response_model=HwpxComposeResponse)
