@@ -3,6 +3,7 @@ import type {
   HwpxCheckboxGroupBlock,
   HwpxDocumentModel,
   HwpxPage,
+  HwpxTableCell,
   HwpxTemplateAnalysisResponse,
   HwpxTemplateBlock,
 } from './types';
@@ -94,14 +95,15 @@ export function analysisToHwpxDocumentModel(analysis: HwpxTemplateAnalysisRespon
   let pageIndex = 0;
 
   analysis.blocks.forEach((block, blockIndex) => {
-    const converted = convertTemplateBlock(block, blockIndex);
-    if (!converted) return;
-    const text = 'text' in converted ? converted.text : '';
-    if (converted.type === 'heading' && /개인정보\s*수집|개인정보\s*활용|동의서/.test(text) && pages[pageIndex].blocks.length > 0) {
+    const converted = convertTemplateBlocks(block, blockIndex);
+    if (!converted.length) return;
+    const firstConverted = converted[0];
+    const text = 'text' in firstConverted ? firstConverted.text : '';
+    if (firstConverted.type === 'heading' && isPrivacyHeading(text) && pages[pageIndex].blocks.length > 0) {
       pageIndex += 1;
       pages.push({ id: `uploaded-page-${pageIndex + 1}`, blocks: [] });
     }
-    pages[pageIndex].blocks.push(converted);
+    pages[pageIndex].blocks.push(...converted);
   });
 
   if (!pages.some((page) => page.blocks.length)) {
@@ -126,35 +128,45 @@ export function analysisToHwpxDocumentModel(analysis: HwpxTemplateAnalysisRespon
   });
 }
 
-function convertTemplateBlock(block: HwpxTemplateBlock, index: number): HwpxBlock | null {
-  if (containsForbidden(block.text)) return null;
+function convertTemplateBlocks(block: HwpxTemplateBlock, index: number): HwpxBlock[] {
+  if (containsForbidden(block.text)) return [];
   if (block.type === 'table') {
-    return {
+    const rows: Array<{ cells: HwpxTableCell[] }> = block.rows.map((row, rowIndex) => ({
+      cells: row.map((cell, cellIndex) => ({
+        id: cell.id ?? `${block.id}-r${rowIndex}-c${cellIndex}`,
+        text: sanitizeDocumentText(cell.text),
+        rowSpan: cell.row_span,
+        colSpan: cell.col_span,
+        width: cell.width,
+        align: cell.align ?? (rowIndex === 0 || cellIndex === 0 ? 'center' : 'left'),
+        verticalAlign: cell.vertical_align === 'bottom' ? 'bottom' : cell.vertical_align === 'top' ? 'top' : 'middle',
+        background: cell.background ?? (rowIndex === 0 || cellIndex === 0 ? '#f1f5f2' : undefined),
+        editable: cell.editable ?? cellIndex > 0,
+      })),
+    }));
+    const trailingBlocks: HwpxBlock[] = [];
+    while (rows.length > 1) {
+      const row = rows[rows.length - 1];
+      const onlyCell = row.cells.length === 1 ? row.cells[0] : null;
+      if (!onlyCell || !looksLikeTrailingCertification(onlyCell.text)) break;
+      rows.pop();
+      trailingBlocks.unshift(...certificationBlocks(block.id || `uploaded-table-${index}`, onlyCell.text));
+    }
+    if (!rows.length) return trailingBlocks;
+    return [{
       id: block.id || `uploaded-table-${index}`,
       type: 'table',
       style: { borderCollapse: true, width: '100%' },
-      rows: block.rows.map((row, rowIndex) => ({
-        cells: row.map((cell, cellIndex) => ({
-          id: cell.id ?? `${block.id}-r${rowIndex}-c${cellIndex}`,
-          text: sanitizeDocumentText(cell.text),
-          rowSpan: cell.row_span,
-          colSpan: cell.col_span,
-          width: cell.width,
-          align: cell.align ?? (rowIndex === 0 || cellIndex === 0 ? 'center' : 'left'),
-          verticalAlign: cell.vertical_align === 'bottom' ? 'bottom' : cell.vertical_align === 'top' ? 'top' : 'middle',
-          background: cell.background ?? (rowIndex === 0 || cellIndex === 0 ? '#f1f5f2' : undefined),
-          editable: cell.editable ?? cellIndex > 0,
-        })),
-      })),
-    };
+      rows,
+    }, ...trailingBlocks];
   }
 
   const text = sanitizeDocumentText(block.text);
-  if (!text) return null;
+  if (!text) return [];
   const checkbox = checkboxFromText(block.id, text);
-  if (checkbox) return checkbox;
+  if (checkbox) return [checkbox];
   if (block.type === 'heading' || block.role === 'heading' || block.role === 'title') {
-    return {
+    return [{
       id: block.id || `uploaded-heading-${index}`,
       type: 'heading',
       text,
@@ -165,15 +177,68 @@ function convertTemplateBlock(block: HwpxTemplateBlock, index: number): HwpxBloc
         fontSize: block.style?.fontSize ?? (block.role === 'title' ? 22 : 15),
       },
       editable: true,
-    };
+    }];
   }
-  return {
+  return [{
     id: block.id || `uploaded-paragraph-${index}`,
     type: 'paragraph',
     text,
     style: block.style,
     editable: true,
-  };
+  }];
+}
+
+function isPrivacyHeading(text: string) {
+  return [
+    '\uAC1C\uC778\uC815\uBCF4 \uC218\uC9D1',
+    '\uAC1C\uC778\uC815\uBCF4 \uC774\uC6A9',
+    '\uB3D9\uC758\uC11C',
+  ].some((token) => text.includes(token));
+}
+
+function looksLikeTrailingCertification(text: string) {
+  return [
+    '\uC704 \uAE30\uC7AC',
+    '\uC0AC\uC2E4\uACFC',
+    '\uC11C\uC57D\uD569\uB2C8\uB2E4',
+    '\uADC0\uD558',
+  ].some((token) => text.includes(token));
+}
+
+function certificationBlocks(baseId: string, text: string): HwpxBlock[] {
+  const normalized = sanitizeDocumentText(text);
+  const year = '\uB144';
+  const month = '\uC6D4';
+  const day = '\uC77C';
+  const seoul = '\uC11C\uC6B8';
+  const pledge = '\uC11C\uC57D\uD569\uB2C8\uB2E4.';
+  const representative = '\uB3D9\uC544\uB9AC\\s*\uB300\uD45C\\s*:';
+  const organization = '\uC11C\uC6B8\uACFC\uD559\uAE30\uC220\uB300\uD559\uAD50.+?\uADC0\uD558';
+  const dateMatch = normalized.match(new RegExp(`20\\d{2}\\s*${year}\\s*\\S*\\s*${month}\\s*\\S*\\s*${day}`));
+  const representativeMatch = normalized.match(new RegExp(`${representative}\\s*.+?(?=\\s*${seoul}|$)`));
+  const organizationMatch = normalized.match(new RegExp(organization));
+  const oathEnd = normalized.indexOf(pledge);
+  const oath = oathEnd >= 0 ? normalized.slice(0, oathEnd + pledge.length).trim() : normalized;
+
+  const blocks: HwpxBlock[] = [];
+  if (oath) {
+    blocks.push({
+      id: `${baseId}-certification-oath`,
+      type: 'paragraph',
+      text: oath,
+      style: { align: 'left', fontSize: 13, lineHeight: 1.8, marginTop: 20 },
+      editable: true,
+    });
+  }
+  blocks.push({
+    id: `${baseId}-certification-signature`,
+    type: 'signature',
+    dateText: dateMatch?.[0] ?? '2026 \uB144      \uC6D4      \uC77C',
+    signerLabel: representativeMatch?.[0] ?? '\uB3D9\uC544\uB9AC \uB300\uD45C : 0 0 0 (\uC11C\uBA85 \uB610\uB294 \uC778)',
+    organizationText: organizationMatch?.[0],
+    editable: true,
+  });
+  return blocks;
 }
 
 function checkboxFromText(id: string, text: string): HwpxCheckboxGroupBlock | null {

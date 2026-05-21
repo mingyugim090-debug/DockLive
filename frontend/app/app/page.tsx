@@ -2,7 +2,8 @@
 
 import { useSearchParams } from 'next/navigation';
 import { useMemo, useRef, useState } from 'react';
-import { noticeTemplates, type NoticeTemplate } from '@/data/mockTemplates';
+import { sampleTemplates, type SampleTemplate } from '@/data/sampleTemplates';
+import type { NoticeInputField } from '@/data/mockTemplates';
 import { noticeSteps, useNoticeBuilder } from '@/hooks/useNoticeBuilder';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -13,7 +14,7 @@ export default function NoticeBuilderPage() {
   const searchParams = useSearchParams();
   const initialTemplateId = useMemo(() => searchParams.get('template'), [searchParams]);
   const builder = useNoticeBuilder(initialTemplateId);
-  const [previewTemplate, setPreviewTemplate] = useState<NoticeTemplate | null>(null);
+  const [previewTemplate, setPreviewTemplate] = useState<SampleTemplate | null>(null);
 
   const coreFields = builder.selectedTemplate.fields.filter((field) => field.required);
   const optionalFields = builder.selectedTemplate.fields.filter((field) => !field.required);
@@ -66,7 +67,7 @@ export default function NoticeBuilderPage() {
         <div className="space-y-5">
           <UploadedHwpxCard onFile={builder.selectUploadedFile} />
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {noticeTemplates.map((template) => (
+            {sampleTemplates.map((template) => (
               <Card key={template.id} hover className="flex min-h-[300px] flex-col rounded-2xl">
                 <div className="flex items-start justify-between gap-3">
                   <span className="rounded-full px-3 py-1 text-xs font-bold text-white" style={{ backgroundColor: template.accent }}>
@@ -228,7 +229,7 @@ function FieldGrid({
   values,
   onChange,
 }: {
-  fields: NoticeTemplate['fields'];
+  fields: NoticeInputField[];
   values: Record<string, string>;
   onChange: (id: string, value: string) => void;
 }) {

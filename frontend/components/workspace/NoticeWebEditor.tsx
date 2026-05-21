@@ -210,7 +210,14 @@ export function NoticeWebEditor({
               </div>
             ) : null}
             {templateAnalysis ? (
-              safeDocument.documentModel ? (
+              templateAnalysis.preview_image ? (
+                <UploadedHwpxPreview
+                  analysis={templateAnalysis}
+                  selected={selected}
+                  onSelect={setSelected}
+                  sectionCount={safeDocument.sections.length}
+                />
+              ) : safeDocument.documentModel ? (
                 <DocumentModelPreview
                   model={safeDocument.documentModel}
                   selected={selected}
@@ -218,12 +225,12 @@ export function NoticeWebEditor({
                   onChange={(documentModel) => update((draft) => ({ ...draft, documentModel }))}
                 />
               ) : (
-              <UploadedHwpxPreview
-                analysis={templateAnalysis}
-                selected={selected}
-                onSelect={setSelected}
-                sectionCount={safeDocument.sections.length}
-              />
+                <UploadedHwpxPreview
+                  analysis={templateAnalysis}
+                  selected={selected}
+                  onSelect={setSelected}
+                  sectionCount={safeDocument.sections.length}
+                />
               )
             ) : (
               safeDocument.documentModel ? (
