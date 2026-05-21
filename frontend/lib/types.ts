@@ -441,3 +441,27 @@ export interface NoticeGenerateResponse {
   preview_markdown: string;
   warnings: string[];
 }
+
+export interface NoticeAnalysisResult {
+  noticeName: string;
+  organization: string;
+  applicationPeriod: string;
+  deadline: string;
+  eligibility: string;
+  targetAudience: string;
+  supportContent: string;
+  requiredDocuments: string[];
+  evaluationCriteria: string;
+  submissionMethod: string;
+  notes: string;
+  requiredWritingItems: string[];
+  itemsNeedingConfirmation: string[];
+}
+
+export interface QuestionField {
+  id: string;
+  label: string;
+  placeholder: string;
+  required: boolean;
+  type: 'text' | 'textarea' | 'tel' | 'email';
+}

@@ -12,9 +12,39 @@ import {
   exportNoticePdf,
   generateNoticeDocument,
 } from '@/lib/api';
-import type { ExportResponse, HwpxTemplateAnalysisResponse, NoticeDocument } from '@/lib/types';
+import type {
+  ExportResponse,
+  HwpxTemplateAnalysisResponse,
+  NoticeAnalysisResult,
+  NoticeDocument,
+  QuestionField,
+} from '@/lib/types';
 
-export type NoticeBuilderStep = 'template' | 'info' | 'generate' | 'preview' | 'download';
+export type { NoticeAnalysisResult, QuestionField };
+
+// ---------------------------------------------------------------------------
+// Step types
+// ---------------------------------------------------------------------------
+
+export type AgentWorkflowStep = 'input' | 'analysis' | 'questions' | 'draft' | 'review' | 'download';
+export type NoticeBuilderStep = AgentWorkflowStep; // backward-compat alias
+
+export const agentSteps: Array<{ id: AgentWorkflowStep; label: string }> = [
+  { id: 'input', label: '공고 입력' },
+  { id: 'analysis', label: 'AI 분석' },
+  { id: 'questions', label: '정보 보완' },
+  { id: 'draft', label: '초안 생성' },
+  { id: 'review', label: '제출본 검토' },
+  { id: 'download', label: '다운로드' },
+];
+
+// Keep old export name as alias so existing imports don't break
+export const noticeSteps = agentSteps;
+
+// ---------------------------------------------------------------------------
+// AI target type (used by NoticeWebEditor)
+// ---------------------------------------------------------------------------
+
 export type NoticeAiTarget =
   | { type: 'title' }
   | { type: 'summary' }
@@ -27,12 +57,11 @@ export type NoticeAiTarget =
   | { type: 'contact' }
   | { type: 'attachments' };
 
-export const noticeSteps: Array<{ id: NoticeBuilderStep; label: string }> = [
-  { id: 'template', label: '공고문 유형 선택' },
-  { id: 'preview', label: 'HWPX 초안 편집' },
-  { id: 'generate', label: 'AI 초안 생성' },
-  { id: 'download', label: '다운로드' },
-];
+// NoticeAnalysisResult and QuestionField are imported from @/lib/types and re-exported above.
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function downloadExportResponse(exported: ExportResponse) {
   const bytes = Uint8Array.from(atob(exported.content), (char) => char.charCodeAt(0));
@@ -53,6 +82,10 @@ function isHwpxLikeFile(file: File) {
   return /\.(hwp|hwpx)$/i.test(file.name);
 }
 
+function isPdfFile(file: File) {
+  return /\.pdf$/i.test(file.name);
+}
+
 function inferTemplateIdFromFile(fileName: string) {
   const lower = fileName.toLowerCase();
   if (lower.includes('장학')) return 'scholarship_notice';
@@ -66,8 +99,35 @@ function inferTemplateIdFromFile(fileName: string) {
 }
 
 function titleFromFile(file: File) {
-  return file.name.replace(/\.(hwp|hwpx)$/i, '').replace(/[_+]+/g, ' ').trim() || '업로드한 HWPX 신청서';
+  return file.name.replace(/\.(hwp|hwpx|pdf)$/i, '').replace(/[_+]+/g, ' ').trim() || '업로드한 문서';
 }
+
+function hwpxAnalysisToNoticeAnalysis(
+  analysis: HwpxTemplateAnalysisResponse,
+  fileName: string,
+): NoticeAnalysisResult {
+  const fieldValue = (keywords: string[]) =>
+    analysis.fields.find((f) => keywords.some((k) => f.label.includes(k)))?.value ?? '';
+  return {
+    noticeName: analysis.title || fileName.replace(/\.(hwp|hwpx)$/i, ''),
+    organization: analysis.organization || '',
+    applicationPeriod: fieldValue(['신청 기간', '접수 기간', '공고 기간']),
+    deadline: fieldValue(['마감', '제출 기한', '마감일']),
+    eligibility: fieldValue(['신청 자격', '지원 자격', '참여 자격']),
+    targetAudience: fieldValue(['모집 대상', '신청 대상', '참여 대상']),
+    supportContent: fieldValue(['지원 내용', '혜택', '제공 내용']),
+    requiredDocuments: analysis.attachments,
+    evaluationCriteria: fieldValue(['평가 기준', '선정 기준', '평가']),
+    submissionMethod: fieldValue(['접수 방법', '신청 방법', '제출 방법']),
+    notes: fieldValue(['유의사항', '주의사항', '안내 사항']),
+    requiredWritingItems: analysis.sections.map((s) => s.heading).filter(Boolean).slice(0, 8),
+    itemsNeedingConfirmation: analysis.warnings,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Draft creation helpers (exported for use in tests / other modules)
+// ---------------------------------------------------------------------------
 
 export function createDraftFromTemplate(template: NoticeTemplate): NoticeDocument {
   const documentModel = template.sample.documentModel ? sanitizeHwpxDocumentModel(template.sample.documentModel) : undefined;
@@ -103,7 +163,7 @@ export function createDraftFromUploadedFile(file: File, template: NoticeTemplate
     title,
     organization: template.sample.organization,
     purpose: template.purpose,
-    applicationMethod: '업로드한 원본 HWPX 양식의 안내에 따라 제출합니다.',
+    applicationMethod: '업로드한 원본 양식의 안내에 따라 제출합니다.',
     schedule: {
       applicationPeriod: '원본 공고문 확인 필요',
       eventPeriod: '원본 공고문 확인 필요',
@@ -281,9 +341,9 @@ function mergeGeneratedTarget(base: NoticeDocument, generated: NoticeDocument, t
   if (target.type === 'contact') {
     return { ...base, contact: generated.contact };
   }
-    if (target.type === 'attachments') {
-      return { ...base, attachments: generated.attachments.length ? generated.attachments : base.attachments };
-    }
+  if (target.type === 'attachments') {
+    return { ...base, attachments: generated.attachments.length ? generated.attachments : base.attachments };
+  }
   if (target.type === 'block' || target.type === 'cell' || target.type === 'checkbox' || target.type === 'signature') {
     return generated.documentModel ? { ...base, documentModel: generated.documentModel } : base;
   }
@@ -358,9 +418,28 @@ function buildLocalAiDraft(document: NoticeDocument): NoticeDocument {
   };
 }
 
+// Default question fields shown in the "questions" step
+const DEFAULT_QUESTION_FIELDS: QuestionField[] = [
+  { id: 'applicantName', label: '신청자 또는 팀명', placeholder: '예: 홍길동 / OO팀', required: true, type: 'text' },
+  { id: 'affiliation', label: '소속 / 학과 / 기관명', placeholder: '예: OO대학교 경영학과 / OO회사', required: true, type: 'text' },
+  { id: 'participationPurpose', label: '참여 목적 (2~3줄)', placeholder: '이 공고에 참여하려는 목적을 간략히 설명해 주세요.', required: true, type: 'textarea' },
+  { id: 'experience', label: '관련 활동 경험 및 강점', placeholder: '예: 관련 분야 경험, 수상 이력, 보유 기술 등', required: false, type: 'textarea' },
+  { id: 'schedule', label: '참여 가능 일정 확인', placeholder: '공고에 명시된 운영 일정에 참여 가능한지 확인해 주세요.', required: false, type: 'text' },
+  { id: 'contactPhone', label: '연락처', placeholder: '예: 010-0000-0000', required: true, type: 'tel' },
+  { id: 'contactEmail', label: '이메일', placeholder: '예: applicant@example.com', required: true, type: 'email' },
+];
+
+// ---------------------------------------------------------------------------
+// Main hook
+// ---------------------------------------------------------------------------
+
 export function useNoticeBuilder(initialTemplateId?: string | null) {
   const initialTemplate = getNoticeTemplate(initialTemplateId || 'startup_camp_notice');
-  const [currentStep, setCurrentStep] = useState<NoticeBuilderStep>(initialTemplateId ? 'preview' : 'template');
+
+  // Step state — if initialTemplateId supplied (direct link), open review immediately
+  const [currentStep, setCurrentStep] = useState<AgentWorkflowStep>(initialTemplateId ? 'review' : 'input');
+
+  // Template / document state
   const [selectedTemplateId, setSelectedTemplateId] = useState(initialTemplate.id);
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
   const [draftDocument, setDraftDocument] = useState<NoticeDocument | null>(
@@ -369,13 +448,30 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
   const [sourceFiles, setSourceFiles] = useState<File[]>([]);
   const [sourceFileName, setSourceFileName] = useState<string | null>(null);
   const [templateAnalysis, setTemplateAnalysis] = useState<HwpxTemplateAnalysisResponse | null>(null);
+
+  // Agent workflow state
+  const [analysisResult, setAnalysisResult] = useState<NoticeAnalysisResult | null>(null);
+  const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
+
+  // UI state
   const [warnings, setWarnings] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [exporting, setExporting] = useState<'HWPX' | 'PDF' | 'DOCX' | null>(null);
 
   const selectedTemplate = useMemo(() => getNoticeTemplate(selectedTemplateId), [selectedTemplateId]);
-  const stepIndex = noticeSteps.findIndex((step) => step.id === currentStep);
+  const stepIndex = agentSteps.findIndex((step) => step.id === currentStep);
+  const missingRequired = useMemo(
+    () => selectedTemplate.fields.filter((field) => field.required && !inputValues[field.id]?.trim()),
+    [inputValues, selectedTemplate.fields],
+  );
+
+  // Question fields (static for now; can be dynamically derived from analysisResult in future)
+  const questionFields = useMemo((): QuestionField[] => DEFAULT_QUESTION_FIELDS, []);
+
+  // -------------------------------------------------------------------------
+  // Template shortcut — goes directly to review (sample 체험 path)
+  // -------------------------------------------------------------------------
 
   const selectTemplate = useCallback((template: NoticeTemplate | string) => {
     const resolved = typeof template === 'string' ? getNoticeTemplate(template) : template;
@@ -386,10 +482,16 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
     setSourceFiles([]);
     setSourceFileName(null);
     setTemplateAnalysis(null);
+    setAnalysisResult(null);
+    setUserAnswers({});
     setWarnings([]);
     setError(null);
-    setCurrentStep('preview');
+    setCurrentStep('review');
   }, []);
+
+  // -------------------------------------------------------------------------
+  // HWPX upload — goes through analysis step
+  // -------------------------------------------------------------------------
 
   const selectUploadedFile = useCallback(async (file: File) => {
     if (!isHwpxLikeFile(file)) {
@@ -397,73 +499,266 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
       return;
     }
     const resolved = getNoticeTemplate(inferTemplateIdFromFile(file.name));
-    const pendingDraft = createDraftFromUploadedFile(file, resolved);
     setSourceFiles([file]);
     setSourceFileName(file.name);
     setSelectedTemplateId(resolved.id);
-    setInputValues(documentToInputs(pendingDraft, {}));
-    setDraftDocument(pendingDraft);
-    setWarnings(['업로드한 HWPX 양식을 분석하는 중입니다. 원본 표와 문단 구조를 화면에 반영합니다.']);
+    setUserAnswers({});
+    setWarnings([]);
     setError(null);
-    setCurrentStep('preview');
+    setIsGenerating(true);
+    setCurrentStep('analysis');
+
+    // Set a basic draft immediately so review step has something to show
+    const fallbackDraft = createDraftFromUploadedFile(file, resolved);
+    setDraftDocument(fallbackDraft);
+    setInputValues(documentToInputs(fallbackDraft, {}));
+
     try {
-      const analysis = await analyzeHwpxTemplate(file);
-      const draft = createDraftFromUploadedAnalysis(file, resolved, analysis);
-      setTemplateAnalysis(analysis);
-      setInputValues(documentToInputs(draft, {}));
-      setDraftDocument(draft);
-      setWarnings([
-        '업로드한 원본 양식 구조를 화면에 반영했습니다. 다운로드 시 같은 원본 HWPX가 자동작성 엔진에 전달됩니다.',
-        ...analysis.warnings,
-      ]);
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/hwpx/analyze-notice', { method: 'POST', body: formData });
+      const json = await res.json() as { success: boolean; data?: NoticeAnalysisResult; warnings?: string[]; error?: string };
+      if (json.success && json.data) {
+        setAnalysisResult(json.data);
+        setWarnings([
+          'HWPX 양식을 분석했습니다. 아래 결과를 확인하고 정보 보완 단계로 이동하세요.',
+          ...(json.warnings ?? []),
+        ]);
+      } else {
+        throw new Error(json.error ?? 'HWPX 분석에 실패했습니다.');
+      }
     } catch (err) {
-      const draft = createDraftFromUploadedFile(file, resolved);
       setTemplateAnalysis(null);
-      setInputValues(documentToInputs(draft, {}));
-      setDraftDocument(draft);
-      setWarnings([
-        err instanceof Error ? err.message : 'HWPX 양식 분석에 실패해 기본 편집 화면으로 전환했습니다.',
-        '다운로드 시 원본 HWPX는 그대로 자동작성 엔진에 전달됩니다.',
-      ]);
+      setAnalysisResult({
+        noticeName: titleFromFile(file),
+        organization: '',
+        applicationPeriod: '',
+        deadline: '',
+        eligibility: '',
+        targetAudience: '',
+        supportContent: '',
+        requiredDocuments: [],
+        evaluationCriteria: '',
+        submissionMethod: '',
+        notes: '',
+        requiredWritingItems: [],
+        itemsNeedingConfirmation: ['HWPX 양식을 자동 분석하지 못했습니다. 아래 질문에 직접 입력해 주세요.'],
+      });
+      setWarnings(['HWPX 양식 분석에 실패했습니다. 정보 보완 단계에서 직접 입력해 주세요.']);
+      // suppress raw network error from user — err is already logged to console for debugging
+      void err;
+    } finally {
+      setIsGenerating(false);
     }
   }, []);
+
+  // -------------------------------------------------------------------------
+  // Text / URL / PDF input — mock analysis (TODO: connect to API)
+  // -------------------------------------------------------------------------
+
+  const analyzeTextInput = useCallback(async (text: string) => {
+    if (!text.trim()) return;
+    setIsGenerating(true);
+    setError(null);
+    setWarnings([]);
+    setCurrentStep('analysis');
+    const draft = createDraftFromTemplate(selectedTemplate);
+    setDraftDocument(draft);
+    setInputValues(documentToInputs(draft, { ...userAnswers }));
+    try {
+      const res = await fetch('/api/analyze/text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      const json = await res.json() as { success: boolean; data?: NoticeAnalysisResult; error?: string };
+      if (json.success && json.data) {
+        setAnalysisResult(json.data);
+      } else {
+        throw new Error(json.error ?? '공고 분석에 실패했습니다.');
+      }
+    } catch (err) {
+      setAnalysisResult({
+        noticeName: '입력한 공고문',
+        organization: '',
+        applicationPeriod: '',
+        deadline: '',
+        eligibility: '',
+        targetAudience: '',
+        supportContent: '',
+        requiredDocuments: [],
+        evaluationCriteria: '',
+        submissionMethod: '',
+        notes: '',
+        requiredWritingItems: ['신청 동기', '활동 계획', '기대 효과'],
+        itemsNeedingConfirmation: [
+          err instanceof Error ? err.message : '공고 분석에 실패했습니다. 아래 단계에서 정보를 직접 입력해 주세요.',
+        ],
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [selectedTemplate, userAnswers]);
+
+  const analyzeUrlInput = useCallback(async (url: string) => {
+    if (!url.trim()) return;
+    setIsGenerating(true);
+    setError(null);
+    setWarnings([]);
+    setCurrentStep('analysis');
+    const draft = createDraftFromTemplate(selectedTemplate);
+    setDraftDocument(draft);
+    setInputValues(documentToInputs(draft, { ...userAnswers }));
+    try {
+      const res = await fetch('/api/analyze/url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      const json = await res.json() as { success: boolean; data?: NoticeAnalysisResult; error?: string };
+      if (json.success && json.data) {
+        setAnalysisResult(json.data);
+      } else {
+        throw new Error(json.error ?? 'URL 분석에 실패했습니다.');
+      }
+    } catch (err) {
+      setAnalysisResult({
+        noticeName: 'URL 공고문',
+        organization: '',
+        applicationPeriod: '',
+        deadline: '',
+        eligibility: '',
+        targetAudience: '',
+        supportContent: '',
+        requiredDocuments: [],
+        evaluationCriteria: '',
+        submissionMethod: '',
+        notes: '',
+        requiredWritingItems: ['신청 동기', '활동 계획', '기대 효과'],
+        itemsNeedingConfirmation: [
+          err instanceof Error ? err.message : 'URL 분석에 실패했습니다. 아래 단계에서 정보를 직접 입력해 주세요.',
+        ],
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [selectedTemplate, userAnswers]);
+
+  const analyzePdfFile = useCallback(async (file: File) => {
+    if (!isPdfFile(file)) {
+      setError('PDF 파일만 업로드할 수 있습니다.');
+      return;
+    }
+    setIsGenerating(true);
+    setError(null);
+    setWarnings([]);
+    setSourceFiles([file]);
+    setSourceFileName(file.name);
+    setCurrentStep('analysis');
+    const draft = createDraftFromTemplate(selectedTemplate);
+    setDraftDocument(draft);
+    setInputValues(documentToInputs(draft, { ...userAnswers }));
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/analyze', { method: 'POST', body: formData });
+      const json = await res.json() as { success: boolean; data?: NoticeAnalysisResult; warnings?: string[]; error?: string };
+      if (json.success && json.data) {
+        setAnalysisResult(json.data);
+        if (json.warnings?.length) setWarnings(json.warnings);
+      } else {
+        throw new Error(json.error ?? 'PDF 분석에 실패했습니다.');
+      }
+    } catch (err) {
+      setAnalysisResult({
+        noticeName: titleFromFile(file),
+        organization: '',
+        applicationPeriod: '',
+        deadline: '',
+        eligibility: '',
+        targetAudience: '',
+        supportContent: '',
+        requiredDocuments: [],
+        evaluationCriteria: '',
+        submissionMethod: '',
+        notes: '',
+        requiredWritingItems: ['신청 동기', '활동 계획', '기대 효과'],
+        itemsNeedingConfirmation: [
+          err instanceof Error ? err.message : 'PDF 분석에 실패했습니다. 아래 단계에서 정보를 직접 입력해 주세요.',
+        ],
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [selectedTemplate, userAnswers]);
+
+  // -------------------------------------------------------------------------
+  // Save user answers from questions step
+  // -------------------------------------------------------------------------
+
+  const saveUserAnswers = useCallback((answers: Record<string, string>) => {
+    setUserAnswers(answers);
+    setInputValues((current) => ({ ...current, ...answers }));
+  }, []);
+
+  // -------------------------------------------------------------------------
+  // Generate draft
+  // -------------------------------------------------------------------------
 
   const setInputValue = useCallback((id: string, value: string) => {
     setInputValues((current) => ({ ...current, [id]: value }));
   }, []);
 
-  const missingRequired = useMemo(
-    () => selectedTemplate.fields.filter((field) => field.required && !inputValues[field.id]?.trim()),
-    [inputValues, selectedTemplate.fields],
-  );
-
   const generateDraft = useCallback(async () => {
     const baseDraft = normalizeNoticeDocument(draftDocument ?? createDraftFromTemplate(selectedTemplate));
-    const payloadInputs = documentToInputs(baseDraft, inputValues);
+    const payloadInputs = { ...documentToInputs(baseDraft, inputValues), ...userAnswers };
     setIsGenerating(true);
     setError(null);
     setWarnings([]);
-    setCurrentStep('generate');
+    setCurrentStep('draft');
     try {
       const response = await generateNoticeDocument(selectedTemplateId, payloadInputs, sourceFiles);
       const normalized = normalizeNoticeDocument(response.data);
       setDraftDocument(normalized);
       setInputValues(documentToInputs(normalized, payloadInputs));
       setWarnings(response.warnings ?? []);
-      setCurrentStep('preview');
-    } catch (err) {
+      setCurrentStep('review');
+    } catch {
+      // Primary backend failed — try Claude-based local generation
+      try {
+        const claudeRes = await fetch('/api/notices/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ template_id: selectedTemplateId, inputs: payloadInputs }),
+        });
+        if (claudeRes.ok) {
+          const claudeJson = await claudeRes.json() as { success: boolean; data?: NoticeDocument; warnings?: string[] };
+          if (claudeJson.success && claudeJson.data) {
+            const normalized = normalizeNoticeDocument(claudeJson.data);
+            setDraftDocument(normalized);
+            setInputValues(documentToInputs(normalized, payloadInputs));
+            setWarnings(claudeJson.warnings ?? []);
+            setCurrentStep('review');
+            return;
+          }
+        }
+      } catch {
+        // Claude also failed — fall through to local fallback
+      }
+
       const fallbackDraft = normalizeNoticeDocument(buildLocalAiDraft(baseDraft));
       setDraftDocument(fallbackDraft);
       setInputValues(documentToInputs(fallbackDraft, payloadInputs));
-      setWarnings([
-        err instanceof Error ? err.message : 'AI 서버 응답을 받지 못해 현재 초안을 기준으로 자동 보강했습니다.',
-        '서버 응답이 복구되면 같은 버튼으로 다시 AI 초안 생성을 시도할 수 있습니다.',
-      ]);
-      setCurrentStep('preview');
+      setWarnings(['AI 초안 생성에 실패해 기본 초안으로 전환했습니다. 오른쪽 패널에서 직접 내용을 채워 주세요.']);
+      setCurrentStep('review');
     } finally {
       setIsGenerating(false);
     }
-  }, [draftDocument, inputValues, selectedTemplate, selectedTemplateId, sourceFiles]);
+  }, [draftDocument, inputValues, userAnswers, selectedTemplate, selectedTemplateId, sourceFiles]);
+
+  // -------------------------------------------------------------------------
+  // AI request from within the review editor
+  // -------------------------------------------------------------------------
 
   const applyAiRequest = useCallback(async ({
     prompt,
@@ -514,6 +809,10 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
     });
   }, []);
 
+  // -------------------------------------------------------------------------
+  // Download
+  // -------------------------------------------------------------------------
+
   const download = useCallback(async (format: 'HWPX' | 'PDF' | 'DOCX') => {
     if (!draftDocument) return;
     const normalized = normalizeNoticeDocument(draftDocument);
@@ -537,16 +836,26 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
     }
   }, [draftDocument, inputValues, sourceFiles]);
 
+  // -------------------------------------------------------------------------
+  // Reset
+  // -------------------------------------------------------------------------
+
   const reset = useCallback(() => {
-    setCurrentStep('template');
+    setCurrentStep('input');
     setInputValues({});
     setDraftDocument(null);
     setSourceFiles([]);
     setSourceFileName(null);
     setTemplateAnalysis(null);
+    setAnalysisResult(null);
+    setUserAnswers({});
     setWarnings([]);
     setError(null);
   }, []);
+
+  // -------------------------------------------------------------------------
+  // Return
+  // -------------------------------------------------------------------------
 
   return {
     currentStep,
@@ -557,6 +866,9 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
     draftDocument,
     sourceFileName,
     templateAnalysis,
+    analysisResult,
+    questionFields,
+    userAnswers,
     warnings,
     error,
     isGenerating,
@@ -566,6 +878,10 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
     selectTemplate,
     selectUploadedFile,
     setInputValue,
+    analyzeTextInput,
+    analyzeUrlInput,
+    analyzePdfFile,
+    saveUserAnswers,
     generateDraft,
     applyAiRequest,
     updateDraft,
