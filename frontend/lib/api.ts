@@ -10,6 +10,7 @@ import type {
   NoticeGenerateResponse,
   HwpxPlaceholderMapResponse,
   HwpxStatusResponse,
+  HwpxTemplateAnalysisResponse,
   WorkflowResponse,
 } from './types';
 
@@ -284,6 +285,15 @@ export async function composeHwpxDocument(
 
   const res = await fetch(`${API_URL}/api/hwpx/compose`, { method: 'POST', body: formData });
   if (!res.ok) throw await readError(res, `HWPX 자동 작성 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function analyzeHwpxTemplate(file: File): Promise<HwpxTemplateAnalysisResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await fetch(`${API_URL}/api/hwpx/analyze-template`, { method: 'POST', body: formData });
+  if (!res.ok) throw await readError(res, `HWPX 양식 분석 실패: ${res.status}`);
   return res.json();
 }
 

@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/Button';
-import type { NoticeDocument } from '@/lib/types';
+import type { HwpxTemplateAnalysisResponse, HwpxTemplateBlock, NoticeDocument } from '@/lib/types';
 import type { NoticeAiTarget } from '@/hooks/useNoticeBuilder';
 
 type SelectedTarget =
@@ -30,6 +30,7 @@ export function NoticeWebEditor({
   warnings,
   exporting,
   sourceFileName,
+  templateAnalysis,
   onChange,
   onBackToInfo,
   onRegenerate,
@@ -40,6 +41,7 @@ export function NoticeWebEditor({
   warnings: string[];
   exporting: ExportFormat | null;
   sourceFileName?: string | null;
+  templateAnalysis?: HwpxTemplateAnalysisResponse | null;
   onChange: (document: NoticeDocument) => void;
   onBackToInfo: () => void;
   onRegenerate: () => void;
@@ -163,6 +165,15 @@ export function NoticeWebEditor({
                 <span>{sourceFileName}</span>
               </div>
             ) : null}
+            {templateAnalysis ? (
+              <UploadedHwpxPreview
+                analysis={templateAnalysis}
+                selected={selected}
+                onSelect={setSelected}
+                sectionCount={safeDocument.sections.length}
+              />
+            ) : (
+              <>
             <EditableBlock selected={selected.type === 'title'} onClick={() => setSelected({ type: 'title' })} className="text-center">
               <p className="text-xs text-[#65736E]">{safeDocument.organization} 공고 제2026-01호</p>
               <h3 className="mt-5 text-2xl font-extrabold leading-tight">{safeDocument.title}</h3>
@@ -290,6 +301,8 @@ export function NoticeWebEditor({
               <br />
               {safeDocument.organization}
             </footer>
+              </>
+            )}
           </article>
         </section>
 
@@ -396,6 +409,131 @@ export function NoticeWebEditor({
       </div>
     </div>
   );
+}
+
+function UploadedHwpxPreview({
+  analysis,
+  selected,
+  onSelect,
+  sectionCount,
+}: {
+  analysis: HwpxTemplateAnalysisResponse;
+  selected: SelectedTarget;
+  onSelect: (target: SelectedTarget) => void;
+  sectionCount: number;
+}) {
+  const visibleBlocks = analysis.blocks.filter((block) => block.text || block.rows.length);
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-[#DDE5E0] bg-[#F8FBFA] px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold text-[#3A7A68]">원본 양식 분석</p>
+            <h3 className="mt-1 text-xl font-extrabold leading-tight">{analysis.title}</h3>
+            {analysis.organization ? <p className="mt-1 text-sm font-bold text-[#65736E]">{analysis.organization}</p> : null}
+          </div>
+          <div className="flex flex-wrap gap-1.5 text-[11px] font-bold text-[#65736E]">
+            <span className="rounded-full bg-white px-2.5 py-1 shadow-sm">표 {analysis.stats.tables ?? 0}</span>
+            <span className="rounded-full bg-white px-2.5 py-1 shadow-sm">섹션 {analysis.stats.sections ?? 0}</span>
+            <span className="rounded-full bg-white px-2.5 py-1 shadow-sm">입력칸 {analysis.stats.fields ?? 0}</span>
+          </div>
+        </div>
+      </div>
+
+      {visibleBlocks.map((block) => {
+        const target = targetForTemplateBlock(block, sectionCount);
+        const active = isSameTarget(selected, target);
+        return (
+          <div
+            key={block.id}
+            role="button"
+            tabIndex={0}
+            onClick={() => onSelect(target)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onSelect(target);
+              }
+            }}
+            className={[
+              'block w-full cursor-pointer rounded-lg border p-3 text-left transition',
+              active ? 'border-[#245D50] bg-[#F5FAF8] shadow-[0_0_0_3px_rgba(36,93,80,0.10)]' : 'border-transparent hover:border-[#DDE7E2]',
+            ].join(' ')}
+          >
+            {block.type === 'table' ? <UploadedHwpxTable block={block} /> : <UploadedHwpxParagraph block={block} />}
+          </div>
+        );
+      })}
+
+      {analysis.attachments.length ? (
+        <section className="mt-8">
+          <h3 className="border-b border-[#DDE5E0] pb-2 text-lg font-extrabold">붙임 문서 목록</h3>
+          <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm leading-8">
+            {analysis.attachments.map((item) => <li key={item}>{item}</li>)}
+          </ol>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+function UploadedHwpxParagraph({ block }: { block: HwpxTemplateBlock }) {
+  const isTitle = block.role === 'title';
+  const isHeading = block.role === 'heading';
+  if (isTitle) {
+    return <h3 className="text-center text-2xl font-extrabold leading-tight">{block.text}</h3>;
+  }
+  if (isHeading) {
+    return <h3 className="border-b border-[#DDE5E0] pb-2 text-lg font-extrabold">{block.text}</h3>;
+  }
+  return <p className="whitespace-pre-wrap text-sm leading-8">{block.text}</p>;
+}
+
+function UploadedHwpxTable({ block }: { block: HwpxTemplateBlock }) {
+  return (
+    <table className="w-full border-collapse text-sm">
+      <tbody>
+        {block.rows.map((row, rowIndex) => (
+          <tr key={`${block.id}-${rowIndex}`}>
+            {row.map((cell, cellIndex) => {
+              const labelLike = cellIndex % 2 === 0 && cell.text.length <= 36;
+              return (
+                <td
+                  key={`${block.id}-${rowIndex}-${cellIndex}`}
+                  rowSpan={cell.row_span}
+                  colSpan={cell.col_span}
+                  className={[
+                    'border border-[#C5D1CC] px-3 py-2 align-top leading-6',
+                    labelLike ? 'bg-[#F3F7F5] font-bold text-[#24312D]' : 'bg-white text-[#142033]',
+                  ].join(' ')}
+                >
+                  {cell.text || <span className="text-[#A0AAA5]">입력 필요</span>}
+                </td>
+              );
+            })}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function targetForTemplateBlock(block: HwpxTemplateBlock, sectionCount: number): SelectedTarget {
+  const text = block.text;
+  if (block.role === 'title') return { type: 'title' };
+  if (text.includes('문의') || text.includes('연락처') || text.includes('이메일')) return { type: 'contact' };
+  if (text.includes('붙임') || text.includes('첨부') || text.includes('제출 서류')) return { type: 'attachments' };
+  if (text.includes('기간') || text.includes('일정') || text.includes('접수') || text.includes('방법')) return { type: 'schedule' };
+  if (block.role === 'heading' && sectionCount > 0) {
+    return { type: 'section', index: Math.min(block.section_index, sectionCount - 1) };
+  }
+  return { type: 'summary' };
+}
+
+function isSameTarget(left: SelectedTarget, right: SelectedTarget) {
+  if (left.type !== right.type) return false;
+  return left.type !== 'section' || right.type !== 'section' || left.index === right.index;
 }
 
 function EditableBlock({

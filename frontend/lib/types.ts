@@ -245,6 +245,49 @@ export interface HwpxComposeResponse extends ExportResponse {
   confirmation_required: string[];
 }
 
+export interface HwpxTemplateCell {
+  text: string;
+  row_span: number;
+  col_span: number;
+}
+
+export interface HwpxTemplateBlock {
+  id: string;
+  type: 'paragraph' | 'table';
+  role: string;
+  section_index: number;
+  text: string;
+  rows: HwpxTemplateCell[][];
+}
+
+export interface HwpxTemplateField {
+  id: string;
+  label: string;
+  value: string;
+  required: boolean;
+  block_id: string;
+}
+
+export interface HwpxTemplateSection {
+  heading: string;
+  body: string;
+  block_ids: string[];
+}
+
+export interface HwpxTemplateAnalysisResponse {
+  success: boolean;
+  source_filename: string;
+  title: string;
+  organization: string;
+  summary: string;
+  blocks: HwpxTemplateBlock[];
+  fields: HwpxTemplateField[];
+  sections: HwpxTemplateSection[];
+  attachments: string[];
+  stats: Record<string, number>;
+  warnings: string[];
+}
+
 export interface HwpxConvertResponse extends ExportResponse {
   source_filename: string;
   conversion_method: string;

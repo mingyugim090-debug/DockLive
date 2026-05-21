@@ -265,6 +265,49 @@ class HwpxComposeResponse(ExportResponse):
     confirmation_required: list[str] = Field(default_factory=list)
 
 
+class HwpxTemplateCell(BaseModel):
+    text: str = ""
+    row_span: int = 1
+    col_span: int = 1
+
+
+class HwpxTemplateBlock(BaseModel):
+    id: str
+    type: Literal["paragraph", "table"]
+    role: str = "body"
+    section_index: int = 0
+    text: str = ""
+    rows: list[list[HwpxTemplateCell]] = Field(default_factory=list)
+
+
+class HwpxTemplateField(BaseModel):
+    id: str
+    label: str
+    value: str = ""
+    required: bool = False
+    block_id: str
+
+
+class HwpxTemplateSection(BaseModel):
+    heading: str
+    body: str = ""
+    block_ids: list[str] = Field(default_factory=list)
+
+
+class HwpxTemplateAnalysisResponse(BaseModel):
+    success: bool = True
+    source_filename: str
+    title: str = ""
+    organization: str = ""
+    summary: str = ""
+    blocks: list[HwpxTemplateBlock] = Field(default_factory=list)
+    fields: list[HwpxTemplateField] = Field(default_factory=list)
+    sections: list[HwpxTemplateSection] = Field(default_factory=list)
+    attachments: list[str] = Field(default_factory=list)
+    stats: dict[str, int] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class HwpxConvertResponse(ExportResponse):
     source_filename: str
     conversion_method: str

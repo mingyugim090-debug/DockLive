@@ -135,6 +135,7 @@ export default function NoticeBuilderPage() {
             warnings={builder.warnings}
             exporting={builder.exporting}
             sourceFileName={builder.sourceFileName}
+            templateAnalysis={builder.templateAnalysis}
             onChange={(document) => builder.updateDraft(() => document)}
             onBackToInfo={() => builder.setCurrentStep('info')}
             onRegenerate={builder.generateDraft}

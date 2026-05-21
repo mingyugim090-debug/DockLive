@@ -9,11 +9,12 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from core.errors import AnalysisError
-from models.schemas import ExportResponse, HwpxComposeResponse, HwpxConvertResponse, HwpxStatusResponse
+from models.schemas import ExportResponse, HwpxComposeResponse, HwpxConvertResponse, HwpxStatusResponse, HwpxTemplateAnalysisResponse
 from services import storage
 from services.document_ingestion import convert_hwp_to_hwpx
 from services.drafting_service import export_markdown_to_hwpx_with_validation, get_hwpx_toolchain_status, hwpx_bytes_to_base64
 from services.hwpx_compose_service import compose_hwpx
+from services.hwpx_template_analysis import analyze_hwpx_template_bytes
 from services.pdf_export_service import PDF_MEDIA_TYPE, convert_hwpx_bytes_to_pdf
 
 router = APIRouter()
@@ -37,6 +38,28 @@ class HwpxPdfRequest(BaseModel):
 @router.get("/hwpx/status", response_model=HwpxStatusResponse)
 async def get_hwpx_status():
     return HwpxStatusResponse(**get_hwpx_toolchain_status())
+
+
+@router.post("/hwpx/analyze-template", response_model=HwpxTemplateAnalysisResponse)
+async def analyze_hwpx_template(file: UploadFile = File(...)):
+    """Extract a screen-friendly outline from an uploaded HWP/HWPX form."""
+    if not file.filename:
+        raise AnalysisError("HWP 또는 HWPX 양식 파일을 업로드해 주세요.")
+
+    raw_template = await file.read()
+    lower_name = file.filename.lower()
+    warnings: list[str] = []
+    if lower_name.endswith(".hwp") and not lower_name.endswith(".hwpx"):
+        raw_template, warnings = convert_hwp_to_hwpx(raw_template, file.filename)
+    elif not lower_name.endswith(".hwpx"):
+        raise AnalysisError("HWP 또는 HWPX 양식 파일만 업로드할 수 있습니다.")
+
+    try:
+        analysis = analyze_hwpx_template_bytes(raw_template, file.filename)
+    except ValueError as exc:
+        raise AnalysisError(str(exc)) from exc
+    analysis["warnings"] = warnings + analysis.get("warnings", [])
+    return HwpxTemplateAnalysisResponse(**analysis)
 
 
 @router.post("/hwpx/compose", response_model=HwpxComposeResponse)

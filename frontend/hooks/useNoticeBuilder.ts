@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { getNoticeTemplate, type NoticeTemplate } from '@/data/mockTemplates';
 import {
+  analyzeHwpxTemplate,
   composeHwpxDocument,
   exportHwpxToPdf,
   exportNoticeDocx,
@@ -10,7 +11,7 @@ import {
   exportNoticePdf,
   generateNoticeDocument,
 } from '@/lib/api';
-import type { ExportResponse, NoticeDocument } from '@/lib/types';
+import type { ExportResponse, HwpxTemplateAnalysisResponse, NoticeDocument } from '@/lib/types';
 
 export type NoticeBuilderStep = 'template' | 'info' | 'generate' | 'preview' | 'download';
 export type NoticeAiTarget =
@@ -113,6 +114,40 @@ export function createDraftFromUploadedFile(file: File, template: NoticeTemplate
       { heading: '5. 제출 전 확인사항', body: '개인정보, 서명·날인, 증빙서류, 마감일은 제출 전 직접 확인해야 합니다.' },
     ],
     attachments: template.sample.attachments,
+  });
+}
+
+export function createDraftFromUploadedAnalysis(
+  file: File,
+  template: NoticeTemplate,
+  analysis: HwpxTemplateAnalysisResponse,
+): NoticeDocument {
+  const fieldValue = (keywords: string[]) =>
+    analysis.fields.find((field) => keywords.some((keyword) => field.label.includes(keyword)))?.value ?? '';
+  const sectionDrafts = analysis.sections.length
+    ? analysis.sections.slice(0, 12).map((section, index) => ({
+        heading: section.heading.match(/^\d+\./) ? section.heading : `${index + 1}. ${section.heading}`,
+        body: section.body || '원본 양식에서 추출한 섹션입니다. 오른쪽 패널에서 제출용 내용을 채워 주세요.',
+      }))
+    : createDraftFromUploadedFile(file, template).sections;
+
+  return normalizeNoticeDocument({
+    documentType: `uploaded:${template.id}`,
+    title: analysis.title || titleFromFile(file),
+    organization: analysis.organization || template.sample.organization,
+    purpose: analysis.summary || template.purpose,
+    applicationMethod: fieldValue(['접수', '신청 방법', '제출 방법', '방법']) || '업로드한 원본 HWPX 양식의 안내에 따라 제출합니다.',
+    schedule: {
+      applicationPeriod: fieldValue(['신청 기간', '접수 기간', '공고 기간', '기간']) || '원본 양식에서 확인 필요',
+      eventPeriod: fieldValue(['운영 기간', '사업 기간', '교육 기간', '일정']) || '원본 양식에서 확인 필요',
+    },
+    contact: {
+      department: fieldValue(['문의', '담당', '부서']) || '원본 양식에서 확인 필요',
+      phone: fieldValue(['연락처', '전화']),
+      email: fieldValue(['이메일', '메일']),
+    },
+    sections: sectionDrafts,
+    attachments: analysis.attachments.length ? analysis.attachments : template.sample.attachments,
   });
 }
 
@@ -310,6 +345,7 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
   );
   const [sourceFiles, setSourceFiles] = useState<File[]>([]);
   const [sourceFileName, setSourceFileName] = useState<string | null>(null);
+  const [templateAnalysis, setTemplateAnalysis] = useState<HwpxTemplateAnalysisResponse | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -326,26 +362,47 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
     setDraftDocument(draft);
     setSourceFiles([]);
     setSourceFileName(null);
+    setTemplateAnalysis(null);
     setWarnings([]);
     setError(null);
     setCurrentStep('preview');
   }, []);
 
-  const selectUploadedFile = useCallback((file: File) => {
+  const selectUploadedFile = useCallback(async (file: File) => {
     if (!isHwpxLikeFile(file)) {
       setError('업로드 편집은 HWPX 또는 HWP 양식 파일만 지원합니다.');
       return;
     }
     const resolved = getNoticeTemplate(inferTemplateIdFromFile(file.name));
-    const draft = createDraftFromUploadedFile(file, resolved);
-    setSelectedTemplateId(resolved.id);
-    setInputValues(documentToInputs(draft, {}));
-    setDraftDocument(draft);
+    const pendingDraft = createDraftFromUploadedFile(file, resolved);
     setSourceFiles([file]);
     setSourceFileName(file.name);
-    setWarnings(['업로드한 원본 양식은 다운로드 시 HWPX 자동작성 엔진에 전달되어 가능한 한 서식을 보존합니다.']);
+    setSelectedTemplateId(resolved.id);
+    setInputValues(documentToInputs(pendingDraft, {}));
+    setDraftDocument(pendingDraft);
+    setWarnings(['업로드한 HWPX 양식을 분석하는 중입니다. 원본 표와 문단 구조를 화면에 반영합니다.']);
     setError(null);
     setCurrentStep('preview');
+    try {
+      const analysis = await analyzeHwpxTemplate(file);
+      const draft = createDraftFromUploadedAnalysis(file, resolved, analysis);
+      setTemplateAnalysis(analysis);
+      setInputValues(documentToInputs(draft, {}));
+      setDraftDocument(draft);
+      setWarnings([
+        '업로드한 원본 양식 구조를 화면에 반영했습니다. 다운로드 시 같은 원본 HWPX가 자동작성 엔진에 전달됩니다.',
+        ...analysis.warnings,
+      ]);
+    } catch (err) {
+      const draft = createDraftFromUploadedFile(file, resolved);
+      setTemplateAnalysis(null);
+      setInputValues(documentToInputs(draft, {}));
+      setDraftDocument(draft);
+      setWarnings([
+        err instanceof Error ? err.message : 'HWPX 양식 분석에 실패해 기본 편집 화면으로 전환했습니다.',
+        '다운로드 시 원본 HWPX는 그대로 자동작성 엔진에 전달됩니다.',
+      ]);
+    }
   }, []);
 
   const setInputValue = useCallback((id: string, value: string) => {
@@ -463,6 +520,7 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
     setDraftDocument(null);
     setSourceFiles([]);
     setSourceFileName(null);
+    setTemplateAnalysis(null);
     setWarnings([]);
     setError(null);
   }, []);
@@ -475,6 +533,7 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
     inputValues,
     draftDocument,
     sourceFileName,
+    templateAnalysis,
     warnings,
     error,
     isGenerating,
