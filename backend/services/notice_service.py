@@ -17,12 +17,17 @@ from services.pdf_export_service import convert_hwpx_bytes_to_pdf
 
 
 FORBIDDEN_NOTICE_TERMS = [
+    "LiveDock 자동작성 내용",
     "LiveDock: 자동작성 내용",
     "DockLive: 자동작성 내용",
     "자동작성 초안",
     "요약",
     "JSON 문자열",
     "추가 입력 필요",
+    "문서 제목:",
+    "{'",
+    "'학과'",
+    "'개인정보 수집",
     "내부 상태값",
     "generated_fields",
     "documentType",
@@ -30,6 +35,7 @@ FORBIDDEN_NOTICE_TERMS = [
     "validation_summary",
     "sections",
     "contact",
+    "metadata",
 ]
 
 CANONICAL_NOTICE_SECTION_HEADINGS = [
@@ -239,6 +245,9 @@ def _export_notice_document_to_hwpx(document: NoticeDocument) -> tuple[str, byte
 
 
 def _build_notice_section_xml(document: NoticeDocument) -> str:
+    if document.documentModel:
+        return _build_document_model_section_xml(document)
+
     scripts_dir = Path(__file__).resolve().parents[1] / "hwpx_toolchain" / "scripts"
     if str(scripts_dir) not in sys.path:
         sys.path.insert(0, str(scripts_dir))
@@ -414,6 +423,124 @@ def _build_notice_section_xml(document: NoticeDocument) -> str:
         )
     )
 
+    parts.append("</hs:sec>")
+    return "\n".join(parts)
+
+
+def _build_document_model_section_xml(document: NoticeDocument) -> str:
+    scripts_dir = Path(__file__).resolve().parents[1] / "hwpx_toolchain" / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    from hwpx_helpers import (
+        NS_DECL,
+        extract_secpr_and_colpr,
+        make_empty_line,
+        make_first_para,
+        make_text_para,
+        next_id,
+        reset_id,
+        xml_escape,
+    )
+
+    reference = Path(__file__).resolve().parents[1] / "hwpx_toolchain" / "templates" / "reference.hwpx"
+    secpr, colpr = extract_secpr_and_colpr(reference)
+    reset_id()
+    model = _clean_document_model(document.documentModel or {})
+
+    def model_table(block: dict) -> str:
+        rows = block.get("rows") or []
+        max_cols = max((sum(int(cell.get("colSpan") or 1) for cell in row.get("cells", [])) for row in rows), default=1)
+        body_width = 42520
+        col_widths = [body_width // max_cols] * max_cols
+        col_widths[-1] += body_width - sum(col_widths)
+        p_id = next_id()
+        tbl_id = next_id()
+        table_rows: list[str] = []
+        for row_idx, row in enumerate(rows):
+            col_addr = 0
+            cell_xml: list[str] = []
+            for cell in row.get("cells", []):
+                text = _clean_document_text(str(cell.get("text") or ""))
+                col_span = max(1, int(cell.get("colSpan") or 1))
+                row_span = max(1, int(cell.get("rowSpan") or 1))
+                is_header = row_idx == 0 or bool(cell.get("background"))
+                border_fill = "4" if is_header else "3"
+                char_pr = "25" if is_header else "20"
+                para_pr = "25" if is_header else "24"
+                width = sum(col_widths[col_addr: col_addr + col_span]) if col_addr < len(col_widths) else body_width
+                cell_pid = next_id()
+                cell_xml.append(
+                    f'<hp:tc name="" header="{1 if is_header else 0}" hasMargin="0" protect="0" editable="0" dirty="1" borderFillIDRef="{border_fill}">'
+                    f'<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER" '
+                    f'linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0">'
+                    f'<hp:p paraPrIDRef="{para_pr}" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0" id="{cell_pid}">'
+                    f'<hp:run charPrIDRef="{char_pr}"><hp:t>{xml_escape(text or " ")}</hp:t></hp:run>'
+                    f'</hp:p></hp:subList>'
+                    f'<hp:cellAddr colAddr="{col_addr}" rowAddr="{row_idx}"/>'
+                    f'<hp:cellSpan colSpan="{col_span}" rowSpan="{row_span}"/>'
+                    f'<hp:cellSz width="{width}" height="2300"/>'
+                    f'<hp:cellMargin left="220" right="220" top="120" bottom="120"/>'
+                    f'</hp:tc>'
+                )
+                col_addr += col_span
+            table_rows.append("<hp:tr>" + "".join(cell_xml) + "</hp:tr>")
+
+        return (
+            f'<hp:p id="{p_id}" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
+            f'<hp:run charPrIDRef="0">'
+            f'<hp:tbl id="{tbl_id}" zOrder="0" numberingType="TABLE" textWrap="TOP_AND_BOTTOM" '
+            f'textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" pageBreak="CELL" repeatHeader="0" '
+            f'rowCnt="{len(rows)}" colCnt="{max_cols}" cellSpacing="0" borderFillIDRef="3" noAdjust="0">'
+            f'<hp:sz width="{body_width}" widthRelTo="ABSOLUTE" height="{2300 * max(1, len(rows))}" heightRelTo="ABSOLUTE" protect="0"/>'
+            f'<hp:pos treatAsChar="1" affectLSpacing="0" flowWithText="1" allowOverlap="0" '
+            f'holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="COLUMN" vertAlign="TOP" horzAlign="LEFT" vertOffset="0" horzOffset="0"/>'
+            f'<hp:outMargin left="0" right="0" top="0" bottom="0"/>'
+            f'<hp:inMargin left="0" right="0" top="0" bottom="0"/>'
+            f'{"".join(table_rows)}</hp:tbl></hp:run></hp:p>'
+        )
+
+    def block_xml(block: dict) -> list[str]:
+        block_type = block.get("type")
+        if block_type == "heading":
+            level = int(block.get("level") or 2)
+            charpr = "7" if level == 1 else "25"
+            parapr = "19" if level == 1 else "25"
+            return [make_text_para(_clean_document_text(str(block.get("text") or "")), charpr=charpr, parapr=parapr)]
+        if block_type == "paragraph":
+            text = _clean_document_text(str(block.get("text") or ""))
+            return [make_text_para(line, charpr="20", parapr="24") for line in _split_body_lines(text)]
+        if block_type == "table":
+            return [model_table(block)]
+        if block_type == "checkboxGroup":
+            label = _clean_document_text(str(block.get("label") or ""))
+            lines = [make_text_para(label, charpr="25", parapr="25")] if label else []
+            for option in block.get("options") or []:
+                mark = "☑" if option.get("checked") else "□"
+                lines.append(make_text_para(f"{mark} {_clean_document_text(str(option.get('label') or ''))}", charpr="20", parapr="24"))
+            return lines
+        if block_type == "signature":
+            lines = [
+                make_text_para(_clean_document_text(str(block.get("dateText") or "")), charpr="20", parapr="20"),
+                make_text_para(_clean_document_text(str(block.get("signerLabel") or "")), charpr="20", parapr="20"),
+            ]
+            organization = _clean_document_text(str(block.get("organizationText") or ""))
+            if organization:
+                lines.append(make_text_para(organization, charpr="19", parapr="20"))
+            return lines
+        if block_type == "spacer":
+            return [make_empty_line(charpr="8", parapr="24")]
+        return []
+
+    parts = [
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>',
+        f"<hs:sec {NS_DECL}>",
+        make_first_para(secpr, colpr, charpr="8", parapr="24"),
+    ]
+    for page_index, page in enumerate(model.get("pages") or []):
+        if page_index:
+            parts.append(make_empty_line(charpr="8", parapr="24"))
+        for block in page.get("blocks") or []:
+            parts.extend(block_xml(block))
     parts.append("</hs:sec>")
     return "\n".join(parts)
 
@@ -742,8 +869,63 @@ def _assert_clean_notice_text(text: str, label: str) -> None:
     for term in FORBIDDEN_NOTICE_TERMS:
         if term in text:
             raise AnalysisError(f"{label}에 내부 문구가 포함되어 export를 중단했습니다: {term}")
-    if re.search(r"\{\s*\"(?:documentType|sections|generated_fields)\"", text):
+    if re.search(r"\{\s*['\"](?:documentType|sections|generated_fields|contact|metadata)['\"]", text):
         raise AnalysisError(f"{label}에 JSON 문자열이 포함되어 export를 중단했습니다.")
+
+
+def _clean_document_text(text: str) -> str:
+    value = text or ""
+    for term in FORBIDDEN_NOTICE_TERMS:
+        value = value.replace(term, "")
+    value = re.sub(r"\{\s*['\"](?:documentType|sections|generated_fields|contact|metadata)['\"][\s\S]*$", "", value)
+    value = re.sub(r"```(?:json)?[\s\S]*?```", "", value, flags=re.IGNORECASE)
+    return re.sub(r"\n{3,}", "\n\n", value).strip()
+
+
+def _clean_document_model(model: dict[str, Any]) -> dict[str, Any]:
+    cleaned = dict(model or {})
+    cleaned["title"] = _clean_document_text(str(cleaned.get("title") or ""))
+    pages = []
+    for page in cleaned.get("pages") or []:
+        blocks = []
+        for block in page.get("blocks") or []:
+            block = dict(block)
+            block_type = block.get("type")
+            if block_type in {"paragraph", "heading"}:
+                block["text"] = _clean_document_text(str(block.get("text") or ""))
+                if not block["text"]:
+                    continue
+            elif block_type == "table":
+                rows = []
+                for row in block.get("rows") or []:
+                    cells = []
+                    for cell in row.get("cells") or []:
+                        cell = dict(cell)
+                        cell["text"] = _clean_document_text(str(cell.get("text") or ""))
+                        cells.append(cell)
+                    if cells:
+                        rows.append({"cells": cells})
+                block["rows"] = rows
+                if not rows:
+                    continue
+            elif block_type == "checkboxGroup":
+                block["label"] = _clean_document_text(str(block.get("label") or ""))
+                block["options"] = [
+                    {**dict(option), "label": _clean_document_text(str(option.get("label") or ""))}
+                    for option in block.get("options") or []
+                    if _clean_document_text(str(option.get("label") or ""))
+                ]
+                if not block["options"]:
+                    continue
+            elif block_type == "signature":
+                block["dateText"] = _clean_document_text(str(block.get("dateText") or ""))
+                block["signerLabel"] = _clean_document_text(str(block.get("signerLabel") or ""))
+                block["organizationText"] = _clean_document_text(str(block.get("organizationText") or ""))
+            blocks.append(block)
+        if blocks:
+            pages.append({**dict(page), "blocks": blocks})
+    cleaned["pages"] = pages
+    return cleaned
 
 
 def _cell(value: str) -> str:

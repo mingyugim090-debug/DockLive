@@ -292,11 +292,11 @@ def _mock_withus_fields(request_text: str, applicant_context: str, title: str) -
 def _mock_generic_fields(request_text: str, applicant_context: str, title: str, source_excerpt: str) -> dict[str, str]:
     return _normalize_generic_fields(
         {
-            "document_title": title.strip() or _guess_title(source_excerpt) or "HWPX 자동작성 초안",
+            "document_title": title.strip() or _guess_title(source_excerpt) or "HWPX 작성 문서",
             "summary": "사용자 요청사항을 바탕으로 공식 양식에 반영할 신청서 초안을 작성했습니다.",
             "draft_content": (
                 f"요청사항: {request_text.strip()}\n\n"
-                f"신청자/팀 정보: {applicant_context.strip() or '추가 입력 필요'}\n\n"
+                f"신청자/팀 정보: {applicant_context.strip() or '제출 전 확인'}\n\n"
                 "위 내용을 바탕으로 제출 전 확인 가능한 초안을 구성했습니다. 양식의 세부 칸 매핑은 공식 서식을 확인해 보완해야 합니다."
             ),
             "confirmation_required": ["공식 양식의 각 입력 칸에 맞게 자동작성 내용이 들어갔는지 제출 전 확인해 주세요."],
@@ -311,8 +311,8 @@ def _mock_generic_fields(request_text: str, applicant_context: str, title: str, 
 def _render_withus_markdown(fields: dict[str, str]) -> str:
     return "\n".join(
         [
-            "# LiveDock 자동작성 내용",
-            f"문서 제목: {fields['document_title']}",
+            "# 작성 내용",
+            fields["document_title"],
             f"동아리명: {fields['team_or_club_name']}",
             f"신청자: {fields['applicant_name']}",
             "",
@@ -345,16 +345,16 @@ def _render_withus_markdown(fields: dict[str, str]) -> str:
 def _render_generic_markdown(fields: dict[str, str]) -> str:
     return "\n".join(
         [
-            "# LiveDock 자동작성 내용",
-            f"문서 제목: {fields['document_title']}",
+            "# 작성 내용",
+            fields["document_title"],
             "",
-            "## 요약",
+            "## 개요",
             fields["summary"],
             "",
-            "## 신청자/팀 정보",
-            fields["applicant_context"] or "추가 입력 필요",
+            "## 신청자 정보",
+            fields["applicant_context"] or "제출 전 확인",
             "",
-            "## 자동작성 초안",
+            "## 본문",
             fields["draft_content"],
         ]
     )
@@ -362,9 +362,9 @@ def _render_generic_markdown(fields: dict[str, str]) -> str:
 
 def _copy_known_application_form(source_path: Path, output_path: Path, fields: dict[str, str]) -> None:
     """Preserve a known club/application HWPX form and replace field-level text."""
-    title = _compact(fields.get("document_title") or "동아리 신청서 자동작성 초안", 80)
-    generated_note = "사용자 요청을 바탕으로 학교 제출용 신청서 문체에 맞춰 자동작성한 초안입니다."
-    confirmation = "본 문서는 자동작성 초안입니다. 제출 전 이름, 소속, 연락처, 지도교수, 실제 일정과 금액을 확인해 주세요."
+    title = _compact(fields.get("document_title") or "동아리 신청서", 80)
+    generated_note = "사용자 요청을 바탕으로 학교 제출용 신청서 문체에 맞춰 작성한 내용입니다."
+    confirmation = "제출 전 이름, 소속, 연락처, 지도교수, 실제 일정과 금액을 확인해 주세요."
     submission_date = fields.get("submission_date") or _today_korean()
     signature = fields.get("representative_signature") or "동아리 대표 : 확인 필요 (서명 또는 인)"
 
@@ -755,7 +755,7 @@ def _normalize_withus_fields(raw: dict, request_text: str, applicant_context: st
         if value is not None:
             fields[key] = _compact(str(value), 900)
 
-    inferred_title = title.strip() or _infer_document_title(request_text) or "동아리 신청서 자동작성 초안"
+    inferred_title = title.strip() or _infer_document_title(request_text) or "동아리 신청서"
     fields["document_title"] = _compact(fields.get("document_title") or inferred_title, 90)
     fields["team_or_club_name"] = _compact(fields.get("team_or_club_name") or _infer_club_name(request_text) or "확인 필요", 40)
 
@@ -806,7 +806,7 @@ def _mock_withus_fields(request_text: str, applicant_context: str, title: str) -
     fields = dict(WITHUS_FIELD_DEFAULTS)
     fields.update(
         {
-            "document_title": title.strip() or _infer_document_title(request_text) or "축구 동아리 신청서 자동작성 초안",
+            "document_title": title.strip() or _infer_document_title(request_text) or "축구 동아리 신청서",
             "team_or_club_name": _infer_club_name(request_text) or "축구 동아리",
             "applicant_name": "",
             "university": "",
@@ -883,7 +883,7 @@ def _quality_application_copy(request_text: str) -> dict[str, str]:
 
 def _infer_document_title(text: str) -> str:
     if "축구" in text:
-        return "축구 동아리 신청서 자동작성 초안"
+        return "축구 동아리 신청서"
     return ""
 
 

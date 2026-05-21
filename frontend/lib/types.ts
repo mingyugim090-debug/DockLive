@@ -249,15 +249,23 @@ export interface HwpxTemplateCell {
   text: string;
   row_span: number;
   col_span: number;
+  id?: string;
+  align?: 'left' | 'center' | 'right';
+  vertical_align?: 'top' | 'middle' | 'bottom';
+  width?: number;
+  background?: string;
+  editable?: boolean;
 }
 
 export interface HwpxTemplateBlock {
   id: string;
-  type: 'paragraph' | 'table';
+  type: 'paragraph' | 'table' | 'checkboxGroup' | 'heading' | 'spacer' | 'signature';
   role: string;
   section_index: number;
   text: string;
   rows: HwpxTemplateCell[][];
+  style?: HwpxTextStyle;
+  options?: HwpxCheckboxOption[];
 }
 
 export interface HwpxTemplateField {
@@ -310,6 +318,109 @@ export interface NoticeContact {
   email: string;
 }
 
+export interface HwpxTextStyle {
+  align?: 'left' | 'center' | 'right';
+  fontSize?: number;
+  bold?: boolean;
+  lineHeight?: number;
+  marginTop?: number;
+  marginBottom?: number;
+}
+
+export interface HwpxParagraphBlock {
+  id: string;
+  type: 'paragraph';
+  text: string;
+  style?: HwpxTextStyle;
+  editable: boolean;
+}
+
+export interface HwpxHeadingBlock {
+  id: string;
+  type: 'heading';
+  text: string;
+  level: 1 | 2 | 3;
+  style?: Pick<HwpxTextStyle, 'align' | 'fontSize' | 'bold'>;
+  editable: boolean;
+}
+
+export interface HwpxTableCell {
+  id: string;
+  text: string;
+  rowSpan?: number;
+  colSpan?: number;
+  width?: number;
+  align?: 'left' | 'center' | 'right';
+  verticalAlign?: 'top' | 'middle' | 'bottom';
+  background?: string;
+  editable: boolean;
+}
+
+export interface HwpxTableBlock {
+  id: string;
+  type: 'table';
+  rows: Array<{ cells: HwpxTableCell[] }>;
+  style?: {
+    borderCollapse?: boolean;
+    width?: string;
+  };
+}
+
+export interface HwpxCheckboxOption {
+  id: string;
+  label: string;
+  checked: boolean;
+}
+
+export interface HwpxCheckboxGroupBlock {
+  id: string;
+  type: 'checkboxGroup';
+  label?: string;
+  options: HwpxCheckboxOption[];
+  editable: boolean;
+}
+
+export interface HwpxSpacerBlock {
+  id: string;
+  type: 'spacer';
+  height: number;
+}
+
+export interface HwpxSignatureBlock {
+  id: string;
+  type: 'signature';
+  dateText: string;
+  signerLabel: string;
+  organizationText?: string;
+  editable: boolean;
+}
+
+export type HwpxBlock =
+  | HwpxParagraphBlock
+  | HwpxHeadingBlock
+  | HwpxTableBlock
+  | HwpxCheckboxGroupBlock
+  | HwpxSpacerBlock
+  | HwpxSignatureBlock;
+
+export interface HwpxPage {
+  id: string;
+  blocks: HwpxBlock[];
+}
+
+export interface HwpxDocumentModel {
+  id: string;
+  title: string;
+  sourceFileName?: string;
+  pages: HwpxPage[];
+  metadata: {
+    templateId?: string;
+    documentType: string;
+    createdAt: string;
+    updatedAt: string;
+  };
+}
+
 export interface NoticeDocument {
   documentType: string;
   title: string;
@@ -320,6 +431,7 @@ export interface NoticeDocument {
   schedule: NoticeSchedule;
   contact: NoticeContact;
   attachments: string[];
+  documentModel?: HwpxDocumentModel;
 }
 
 export interface NoticeGenerateResponse {

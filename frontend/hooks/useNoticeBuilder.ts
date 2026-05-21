@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { getNoticeTemplate, type NoticeTemplate } from '@/data/mockTemplates';
+import { analysisToHwpxDocumentModel, sanitizeHwpxDocumentModel } from '@/lib/hwpxDocumentModel';
 import {
   analyzeHwpxTemplate,
   composeHwpxDocument,
@@ -18,6 +19,10 @@ export type NoticeAiTarget =
   | { type: 'title' }
   | { type: 'summary' }
   | { type: 'section'; index: number }
+  | { type: 'block'; blockId: string }
+  | { type: 'cell'; blockId: string; cellId: string }
+  | { type: 'checkbox'; blockId: string; optionId?: string }
+  | { type: 'signature'; blockId: string }
   | { type: 'schedule' }
   | { type: 'contact' }
   | { type: 'attachments' };
@@ -65,6 +70,7 @@ function titleFromFile(file: File) {
 }
 
 export function createDraftFromTemplate(template: NoticeTemplate): NoticeDocument {
+  const documentModel = template.sample.documentModel ? sanitizeHwpxDocumentModel(template.sample.documentModel) : undefined;
   const row = (label: string) => template.sample.overviewRows.find(([name]) => name.includes(label))?.[1] ?? '';
   return normalizeNoticeDocument({
     documentType: template.id,
@@ -86,6 +92,7 @@ export function createDraftFromTemplate(template: NoticeTemplate): NoticeDocumen
       body: linesToText(section.body),
     })),
     attachments: template.sample.attachments,
+    documentModel,
   });
 }
 
@@ -114,6 +121,13 @@ export function createDraftFromUploadedFile(file: File, template: NoticeTemplate
       { heading: '5. 제출 전 확인사항', body: '개인정보, 서명·날인, 증빙서류, 마감일은 제출 전 직접 확인해야 합니다.' },
     ],
     attachments: template.sample.attachments,
+    documentModel: template.sample.documentModel ? sanitizeHwpxDocumentModel({
+      ...template.sample.documentModel,
+      id: `uploaded-pending-${Date.now()}`,
+      title,
+      sourceFileName: file.name,
+      metadata: { ...template.sample.documentModel.metadata, documentType: `uploaded:${template.id}` },
+    }) : undefined,
   });
 }
 
@@ -148,6 +162,7 @@ export function createDraftFromUploadedAnalysis(
     },
     sections: sectionDrafts,
     attachments: analysis.attachments.length ? analysis.attachments : template.sample.attachments,
+    documentModel: analysisToHwpxDocumentModel(analysis, file.name),
   });
 }
 
@@ -173,6 +188,7 @@ export function normalizeNoticeDocument(document: Partial<NoticeDocument> | null
     },
     sections: document?.sections?.length ? document.sections : base.sections,
     attachments: document?.attachments?.length ? document.attachments : base.attachments,
+    documentModel: document?.documentModel ? sanitizeHwpxDocumentModel(document.documentModel) : base.documentModel,
   };
 }
 
@@ -194,6 +210,7 @@ function createPlainTemplateDraft(template: NoticeTemplate): NoticeDocument {
     },
     sections: template.sample.sections.map((section) => ({ heading: section.heading, body: linesToText(section.body) })),
     attachments: template.sample.attachments,
+    documentModel: template.sample.documentModel ? sanitizeHwpxDocumentModel(template.sample.documentModel) : undefined,
   };
 }
 
@@ -264,8 +281,11 @@ function mergeGeneratedTarget(base: NoticeDocument, generated: NoticeDocument, t
   if (target.type === 'contact') {
     return { ...base, contact: generated.contact };
   }
-  if (target.type === 'attachments') {
-    return { ...base, attachments: generated.attachments.length ? generated.attachments : base.attachments };
+    if (target.type === 'attachments') {
+      return { ...base, attachments: generated.attachments.length ? generated.attachments : base.attachments };
+    }
+  if (target.type === 'block' || target.type === 'cell' || target.type === 'checkbox' || target.type === 'signature') {
+    return generated.documentModel ? { ...base, documentModel: generated.documentModel } : base;
   }
 
   const baseSection = base.sections[target.index];
@@ -293,6 +313,9 @@ async function exportUploadedHwpx(
   inputs: Record<string, string>,
   format: 'HWPX' | 'PDF',
 ): Promise<ExportResponse> {
+  if (document.documentModel) {
+    return format === 'HWPX' ? exportNoticeHwpx(document) : exportNoticePdf(document);
+  }
   const composed = await composeHwpxDocument(
     sourceFile,
     buildComposeRequest(document, inputs),

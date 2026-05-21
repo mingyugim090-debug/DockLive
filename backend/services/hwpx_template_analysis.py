@@ -31,6 +31,24 @@ FIELD_LABEL_KEYWORDS = (
     "문의",
 )
 
+FORBIDDEN_TERMS = (
+    "LiveDock 자동작성 내용",
+    "LiveDock: 자동작성 내용",
+    "DockLive: 자동작성 내용",
+    "자동작성 초안",
+    "요약",
+    "추가 입력 필요",
+    "문서 제목:",
+    "JSON 문자열",
+    "{'",
+    "'학과'",
+    "'개인정보 수집",
+    "documentType",
+    "sections",
+    "contact",
+    "metadata",
+)
+
 
 def analyze_hwpx_template_bytes(content: bytes, source_filename: str) -> dict:
     """Return a screen-friendly representation of an uploaded HWPX form.
@@ -114,6 +132,7 @@ class PathLikeBytes:
 
 def _parse_section(root: ElementTree.Element, section_index: int) -> list[dict]:
     blocks: list[dict] = []
+    metadata_started = False
     for child in list(root):
         if _local(child.tag) != "p":
             continue
@@ -122,6 +141,11 @@ def _parse_section(root: ElementTree.Element, section_index: int) -> list[dict]:
             for table in tables:
                 rows = _parse_table(table)
                 table_text = _table_to_text(rows)
+                if _is_forbidden_text(table_text):
+                    metadata_started = True
+                    continue
+                if metadata_started:
+                    continue
                 if rows:
                     blocks.append(
                         {
@@ -131,20 +155,29 @@ def _parse_section(root: ElementTree.Element, section_index: int) -> list[dict]:
                             "section_index": section_index,
                             "text": table_text,
                             "rows": rows,
+                            "style": {"width": "100%"},
                         }
                     )
             continue
 
         text = _paragraph_text(child)
+        if _is_forbidden_text(text):
+            metadata_started = True
+            continue
+        if metadata_started:
+            continue
         if text:
+            block_type = "checkboxGroup" if _looks_like_checkbox_line(text) else "paragraph"
             blocks.append(
                 {
                     "id": f"s{section_index}-b{len(blocks)}",
-                    "type": "paragraph",
+                    "type": block_type,
                     "role": "body",
                     "section_index": section_index,
                     "text": text,
                     "rows": [],
+                    "style": _paragraph_style(child),
+                    "options": _checkbox_options(text) if block_type == "checkboxGroup" else [],
                 }
             )
     return blocks
@@ -161,9 +194,13 @@ def _parse_table(table: ElementTree.Element) -> list[list[dict]]:
             if text or len(direct_cells) > 1:
                 cells.append(
                     {
+                        "id": f"cell-{len(rows)}-{len(cells)}",
                         "text": text,
                         "row_span": _int_attr(tc, "rowSpan", 1),
                         "col_span": _int_attr(tc, "colSpan", 1),
+                        "align": _table_cell_align(tc),
+                        "vertical_align": _table_cell_vertical_align(tc),
+                        "editable": _looks_editable_cell(text, len(cells)),
                     }
                 )
         if cells:
@@ -189,14 +226,20 @@ def _assign_roles(blocks: list[dict]) -> None:
                 block["role"] = "title"
                 title_assigned = True
             continue
-        if block["type"] == "paragraph":
+        if block["type"] in {"paragraph", "checkboxGroup"}:
             if not title_assigned and _looks_like_title(text):
                 block["role"] = "title"
+                block["type"] = "heading"
+                block["style"] = {**block.get("style", {}), "align": "center", "bold": True, "fontSize": 22}
                 title_assigned = True
             elif SECTION_RE.match(text) or _looks_like_section_heading(text):
                 block["role"] = "heading"
+                block["type"] = "heading"
+                block["style"] = {**block.get("style", {}), "bold": True, "fontSize": 16}
             elif len(text) <= 60 and any(keyword in text for keyword in ("붙임", "문의", "안내", "개요")):
                 block["role"] = "heading"
+                block["type"] = "heading"
+                block["style"] = {**block.get("style", {}), "bold": True, "fontSize": 15}
 
 
 def _extract_fields(blocks: list[dict]) -> list[dict]:
@@ -355,3 +398,62 @@ def _normalize_text(value: str) -> str:
 def _compact(text: str, limit: int) -> str:
     value = _normalize_text(text)
     return value[:limit].rstrip()
+
+
+def _is_forbidden_text(value: str) -> bool:
+    if not value:
+        return False
+    if any(term in value for term in FORBIDDEN_TERMS):
+        return True
+    return bool(re.search(r"\{\s*['\"](?:documentType|sections|contact|metadata)['\"]", value))
+
+
+def _looks_like_checkbox_line(value: str) -> bool:
+    return bool(re.search(r"[□☐☑■]", value))
+
+
+def _checkbox_options(value: str) -> list[dict]:
+    parts = [part.strip() for part in re.split(r"(?=[□☐☑■])", value) if part.strip()]
+    return [
+        {
+            "id": f"option-{idx}",
+            "label": re.sub(r"^[□☐☑■]\s*", "", part).strip(),
+            "checked": part.startswith(("☑", "■")),
+        }
+        for idx, part in enumerate(parts)
+    ]
+
+
+def _paragraph_style(paragraph: ElementTree.Element) -> dict:
+    text = _paragraph_text(paragraph)
+    style: dict = {"align": "left", "fontSize": 12, "bold": False}
+    if len(text) <= 80 and _looks_like_title(text):
+        style.update({"align": "center", "fontSize": 22, "bold": True})
+    elif _looks_like_section_heading(text) or SECTION_RE.match(text):
+        style.update({"fontSize": 15, "bold": True})
+    return style
+
+
+def _table_cell_align(cell: ElementTree.Element) -> str:
+    text = " ".join(_paragraph_text(p) for p in cell.iter() if _local(p.tag) == "p")
+    return "center" if len(text.strip()) <= 20 else "left"
+
+
+def _table_cell_vertical_align(cell: ElementTree.Element) -> str:
+    for key, value in cell.attrib.items():
+        if _local(key).lower() == "vertalign":
+            lowered = value.lower()
+            if "bottom" in lowered:
+                return "bottom"
+            if "top" in lowered:
+                return "top"
+    return "middle"
+
+
+def _looks_editable_cell(text: str, cell_index: int) -> bool:
+    clean = text.strip()
+    if not clean:
+        return True
+    if cell_index == 0 and len(clean) <= 30:
+        return False
+    return any(keyword in clean for keyword in ("입력", "작성", "확인 필요", "OO", "000")) or cell_index % 2 == 1

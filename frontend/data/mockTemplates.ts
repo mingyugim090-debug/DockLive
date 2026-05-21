@@ -1,3 +1,6 @@
+import type { HwpxDocumentModel } from '@/lib/types';
+import { getHwpxTemplateModel } from './hwpxDocumentModels';
+
 export type NoticeFieldType = 'text' | 'textarea' | 'date' | 'email' | 'tel';
 
 export interface NoticeInputField {
@@ -32,6 +35,7 @@ export interface NoticeTemplateSample {
   overviewRows: Array<[string, string]>;
   sections: Array<{ heading: string; body: string[] }>;
   attachments: string[];
+  documentModel?: HwpxDocumentModel;
 }
 
 const commonFields: NoticeInputField[] = [
@@ -69,7 +73,7 @@ function template(
     accent,
     fields: commonFields,
     previewSections: ['공고 안내문', '참가 신청서', '1. 사업 개요', '2. 신청 자격', '3. 선정 방법', '4. 신청 방법', '문의처', '붙임 문서'],
-    sample,
+    sample: { ...sample, documentModel: getHwpxTemplateModel(id) },
   };
 }
 

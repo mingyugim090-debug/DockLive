@@ -269,15 +269,23 @@ class HwpxTemplateCell(BaseModel):
     text: str = ""
     row_span: int = 1
     col_span: int = 1
+    id: Optional[str] = None
+    align: Optional[Literal["left", "center", "right"]] = None
+    vertical_align: Optional[Literal["top", "middle", "bottom"]] = None
+    width: Optional[int] = None
+    background: Optional[str] = None
+    editable: bool = True
 
 
 class HwpxTemplateBlock(BaseModel):
     id: str
-    type: Literal["paragraph", "table"]
+    type: Literal["paragraph", "table", "checkboxGroup", "heading", "spacer", "signature"]
     role: str = "body"
     section_index: int = 0
     text: str = ""
     rows: list[list[HwpxTemplateCell]] = Field(default_factory=list)
+    style: dict[str, Any] = Field(default_factory=dict)
+    options: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class HwpxTemplateField(BaseModel):
@@ -340,6 +348,7 @@ class NoticeDocument(BaseModel):
     schedule: NoticeSchedule = Field(default_factory=NoticeSchedule)
     contact: NoticeContact = Field(default_factory=NoticeContact)
     attachments: list[str] = Field(default_factory=list)
+    documentModel: Optional[dict[str, Any]] = None
 
 
 class NoticeGenerateRequest(BaseModel):

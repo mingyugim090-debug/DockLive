@@ -31,7 +31,7 @@ export default function NoticeBuilderPage() {
               샘플 공고문을 왼쪽 HWPX 화면에서 바로 수정하고, 필요한 순간 AI 초안 생성으로 내용을 보강한 뒤 HWPX, DOCX, PDF로 내려받을 수 있습니다.
             </p>
           </div>
-          <Button variant="secondary" onClick={builder.reset}>새 공고문 작성</Button>
+          <Button variant="secondary" onClick={builder.reset}>공고문 만들기</Button>
         </div>
       </section>
 
@@ -85,7 +85,7 @@ export default function NoticeBuilderPage() {
                     샘플 보기
                   </Button>
                   <Button type="button" className="flex-1 px-3" onClick={() => builder.selectTemplate(template)}>
-                    초안 열기
+                    이 초안으로 작성하기
                   </Button>
                 </div>
               </Card>

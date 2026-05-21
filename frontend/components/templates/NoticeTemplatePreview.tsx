@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import type { NoticeTemplate } from '@/data/mockTemplates';
+import type { HwpxBlock, HwpxDocumentModel } from '@/lib/types';
 
 type TemplateTrait = {
   badge: string;
@@ -312,6 +313,9 @@ function ProcessAndEvaluationBlock({ trait }: { trait: TemplateTrait }) {
 function SampleHwpxPage({ template }: { template: NoticeTemplate }) {
   const { sample } = template;
   const trait = getTrait(template);
+  if (sample.documentModel) {
+    return <DocumentModelSample model={sample.documentModel} />;
+  }
   return (
     <div className="mx-auto w-full max-w-[600px]">
       <div className="rounded-t-sm border border-b-0 border-[#D5DDD8] bg-[#EEF3F0] px-4 py-2 text-[11px] font-semibold text-[#52615B]">
@@ -368,6 +372,87 @@ function SampleHwpxPage({ template }: { template: NoticeTemplate }) {
       </article>
     </div>
   );
+}
+
+function DocumentModelSample({ model }: { model: HwpxDocumentModel }) {
+  return (
+    <div className="mx-auto w-full max-w-[620px]">
+      <div className="rounded-t-sm border border-b-0 border-[#D5DDD8] bg-[#EEF3F0] px-4 py-2 text-[11px] font-semibold text-[#52615B]">
+        {model.sourceFileName ?? `${model.title}.hwpx`}
+      </div>
+      <article className="max-h-[76vh] w-full overflow-y-auto border border-[#C9D2CD] bg-white px-8 py-10 text-[#202833] shadow-[0_28px_80px_rgba(36,49,45,0.18)] sm:px-12">
+        {model.pages.map((page, pageIndex) => (
+          <section key={page.id} className={pageIndex > 0 ? 'mt-10 border-t border-dashed border-[#C9D2CD] pt-10' : ''}>
+            {page.blocks.map((block) => <MiniHwpxBlock key={block.id} block={block} />)}
+          </section>
+        ))}
+      </article>
+    </div>
+  );
+}
+
+function MiniHwpxBlock({ block }: { block: HwpxBlock }) {
+  if (block.type === 'spacer') return <div style={{ height: block.height }} />;
+  if (block.type === 'heading') {
+    const Tag = block.level === 1 ? 'h3' : block.level === 2 ? 'h4' : 'h5';
+    return (
+      <Tag
+        className={[
+          'mb-3 mt-4 font-extrabold leading-snug',
+          block.level === 1 ? 'text-[22px]' : block.level === 2 ? 'text-[14px]' : 'text-[12px]',
+          block.style?.align === 'center' ? 'text-center' : block.style?.align === 'right' ? 'text-right' : 'text-left',
+        ].join(' ')}
+      >
+        {block.text}
+      </Tag>
+    );
+  }
+  if (block.type === 'paragraph') {
+    return <p className={`mb-2 whitespace-pre-wrap text-[12px] leading-6 ${block.style?.align === 'center' ? 'text-center' : ''}`}>{block.text}</p>;
+  }
+  if (block.type === 'table') {
+    return (
+      <table className="my-4 w-full border-collapse text-[11px] leading-5">
+        <tbody>
+          {block.rows.map((row, rowIndex) => (
+            <tr key={`${block.id}-${rowIndex}`}>
+              {row.cells.map((cell) => (
+                <td
+                  key={cell.id}
+                  rowSpan={cell.rowSpan}
+                  colSpan={cell.colSpan}
+                  className="border border-[#AEB8B2] px-2 py-1.5 align-top"
+                  style={{ backgroundColor: cell.background, textAlign: cell.align }}
+                >
+                  {cell.text || <span className="text-[#A0AAA5]">입력 필요</span>}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
+  if (block.type === 'checkboxGroup') {
+    return (
+      <section className="my-4 border border-[#AEB8B2] px-3 py-2 text-[11px] leading-6">
+        {block.label ? <p className="mb-1 font-extrabold">{block.label}</p> : null}
+        {block.options.map((option) => (
+          <p key={option.id}><span className="mr-2 font-bold">{option.checked ? '☑' : '□'}</span>{option.label}</p>
+        ))}
+      </section>
+    );
+  }
+  if (block.type === 'signature') {
+    return (
+      <footer className="mt-7 text-center text-[12px] font-bold">
+        <p>{block.dateText}</p>
+        <p className="mt-3">{block.signerLabel}</p>
+        {block.organizationText ? <p className="mt-5">{block.organizationText}</p> : null}
+      </footer>
+    );
+  }
+  return null;
 }
 
 export function NoticeTemplatePreviewModal({ template, onClose }: { template: NoticeTemplate | null; onClose: () => void }) {

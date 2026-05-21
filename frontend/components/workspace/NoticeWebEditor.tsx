@@ -3,13 +3,25 @@
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/Button';
-import type { HwpxTemplateAnalysisResponse, HwpxTemplateBlock, NoticeDocument } from '@/lib/types';
+import { findFirstEditableId, sanitizeHwpxDocumentModel } from '@/lib/hwpxDocumentModel';
+import type {
+  HwpxBlock,
+  HwpxDocumentModel,
+  HwpxTableBlock,
+  HwpxTemplateAnalysisResponse,
+  HwpxTemplateBlock,
+  NoticeDocument,
+} from '@/lib/types';
 import type { NoticeAiTarget } from '@/hooks/useNoticeBuilder';
 
 type SelectedTarget =
   | { type: 'title' }
   | { type: 'summary' }
   | { type: 'section'; index: number }
+  | { type: 'block'; blockId: string }
+  | { type: 'cell'; blockId: string; cellId: string }
+  | { type: 'checkbox'; blockId: string; optionId?: string }
+  | { type: 'signature'; blockId: string }
   | { type: 'schedule' }
   | { type: 'contact' }
   | { type: 'attachments' };
@@ -49,22 +61,27 @@ export function NoticeWebEditor({
   onAiRequest?: (payload: { prompt: string; scope: 'selected' | 'all'; target: NoticeAiTarget }) => Promise<void>;
 }) {
   const safeDocument = normalizeDocument(document);
-  const [selected, setSelected] = useState<SelectedTarget>({ type: 'section', index: 0 });
+  const [selected, setSelected] = useState<SelectedTarget>(
+    safeDocument.documentModel ? { type: 'block', blockId: findFirstEditableId(safeDocument.documentModel) } : { type: 'section', index: 0 },
+  );
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiRunning, setAiRunning] = useState(false);
   const selectedSectionIndex = selected.type === 'section' ? selected.index : -1;
   const selectedSection = selected.type === 'section' ? safeDocument.sections[selected.index] : null;
+  const selectedModelItem = safeDocument.documentModel ? findSelectedModelItem(safeDocument.documentModel, selected) : null;
 
   const structureItems = useMemo(
-    () => [
-      { id: 'title', label: '문서 표지/제목' },
-      { id: 'summary', label: '공고 안내문' },
-      ...safeDocument.sections.map((section, index) => ({ id: `section-${index}`, label: section.heading })),
-      { id: 'schedule', label: '일정 및 접수 방법' },
-      { id: 'contact', label: '문의처' },
-      { id: 'attachments', label: '붙임 문서' },
-    ],
-    [safeDocument.sections],
+    () => safeDocument.documentModel
+      ? modelStructureItems(safeDocument.documentModel)
+      : [
+          { id: 'title', label: '문서 표지/제목' },
+          { id: 'summary', label: '공고 안내문' },
+          ...safeDocument.sections.map((section, index) => ({ id: `section-${index}`, label: section.heading })),
+          { id: 'schedule', label: '일정 및 접수 방법' },
+          { id: 'contact', label: '문의처' },
+          { id: 'attachments', label: '붙임 문서' },
+        ],
+    [safeDocument.documentModel, safeDocument.sections],
   );
 
   function update(updater: (draft: NoticeDocument) => NoticeDocument) {
@@ -72,6 +89,24 @@ export function NoticeWebEditor({
   }
 
   function selectFromId(id: string) {
+    if (id.startsWith('cell:')) {
+      const [, blockId, cellId] = id.split(':');
+      setSelected({ type: 'cell', blockId, cellId });
+      return;
+    }
+    if (id.startsWith('checkbox:')) {
+      const [, blockId, optionId] = id.split(':');
+      setSelected({ type: 'checkbox', blockId, optionId });
+      return;
+    }
+    if (id.startsWith('signature:')) {
+      setSelected({ type: 'signature', blockId: id.replace('signature:', '') });
+      return;
+    }
+    if (id.startsWith('block:')) {
+      setSelected({ type: 'block', blockId: id.replace('block:', '') });
+      return;
+    }
     if (id === 'title') setSelected({ type: 'title' });
     else if (id === 'summary') setSelected({ type: 'summary' });
     else if (id === 'schedule') setSelected({ type: 'schedule' });
@@ -83,6 +118,15 @@ export function NoticeWebEditor({
   async function applyAiRequest(request: string, scope: 'selected' | 'all' = 'selected') {
     const command = request.trim();
     if (!command) return;
+
+    if (safeDocument.documentModel && isModelTarget(selected)) {
+      update((draft) => ({
+        ...draft,
+        documentModel: updateModelWithAiCommand(safeDocument.documentModel!, selected, command, scope),
+      }));
+      setAiPrompt('');
+      return;
+    }
 
     if (onAiRequest) {
       setAiRunning(true);
@@ -140,7 +184,7 @@ export function NoticeWebEditor({
           </h2>
           <p className="mt-2 text-sm leading-6 text-[#65736E]">
             {sourceFileName
-              ? `${sourceFileName} 원본은 다운로드 시 자동작성 엔진에 전달됩니다. 기본정보는 직접 입력하고, 긴 서술형 구간은 AI 요청으로 채울 수 있습니다.`
+              ? `${sourceFileName}에서 추출한 문서 모델을 기준으로 미리보기와 다운로드를 생성합니다. 표 셀과 체크박스, 본문 구간을 직접 선택해 수정할 수 있습니다.`
               : '화면의 HWPX 미리보기와 오른쪽 편집 패널은 같은 문서 데이터를 사용합니다. 다운로드할 때도 현재 상태가 그대로 HWPX 생성에 반영됩니다.'}
           </p>
         </div>
@@ -166,13 +210,30 @@ export function NoticeWebEditor({
               </div>
             ) : null}
             {templateAnalysis ? (
+              safeDocument.documentModel ? (
+                <DocumentModelPreview
+                  model={safeDocument.documentModel}
+                  selected={selected}
+                  onSelect={setSelected}
+                  onChange={(documentModel) => update((draft) => ({ ...draft, documentModel }))}
+                />
+              ) : (
               <UploadedHwpxPreview
                 analysis={templateAnalysis}
                 selected={selected}
                 onSelect={setSelected}
                 sectionCount={safeDocument.sections.length}
               />
+              )
             ) : (
+              safeDocument.documentModel ? (
+                <DocumentModelPreview
+                  model={safeDocument.documentModel}
+                  selected={selected}
+                  onSelect={setSelected}
+                  onChange={(documentModel) => update((draft) => ({ ...draft, documentModel }))}
+                />
+              ) : (
               <>
             <EditableBlock selected={selected.type === 'title'} onClick={() => setSelected({ type: 'title' })} className="text-center">
               <p className="text-xs text-[#65736E]">{safeDocument.organization} 공고 제2026-01호</p>
@@ -302,13 +363,21 @@ export function NoticeWebEditor({
               {safeDocument.organization}
             </footer>
               </>
+              )
             )}
           </article>
         </section>
 
         <aside className="space-y-4 xl:sticky xl:top-4 xl:self-start">
           <Panel title="선택 영역 수정">
-            {selected.type === 'title' ? (
+            {safeDocument.documentModel && selectedModelItem ? (
+              <ModelSelectionEditor
+                model={safeDocument.documentModel}
+                selected={selected}
+                selectedItem={selectedModelItem}
+                onChange={(documentModel) => update((draft) => ({ ...draft, documentModel }))}
+              />
+            ) : selected.type === 'title' ? (
               <div className="space-y-3">
                 <TextInput label="공고 제목" value={safeDocument.title} onChange={(value) => update((draft) => ({ ...draft, title: value }))} />
                 <TextInput label="기관명" value={safeDocument.organization} onChange={(value) => update((draft) => ({ ...draft, organization: value }))} />
@@ -381,7 +450,7 @@ export function NoticeWebEditor({
             </div>
             {sourceFileName ? (
               <p className="mt-3 text-xs leading-5 text-[#7B8782]">
-                HWPX 다운로드를 누르면 현재 입력값과 AI 작성 내용을 원본 양식에 반영해 파일을 생성합니다.
+                HWPX 다운로드를 누르면 현재 문서 모델의 표, 문단, 체크박스 상태를 기준으로 파일을 생성합니다.
               </p>
             ) : null}
           </Panel>
@@ -476,6 +545,242 @@ function UploadedHwpxPreview({
       ) : null}
     </div>
   );
+}
+
+function DocumentModelPreview({
+  model,
+  selected,
+  onSelect,
+  onChange,
+}: {
+  model: HwpxDocumentModel;
+  selected: SelectedTarget;
+  onSelect: (target: SelectedTarget) => void;
+  onChange: (model: HwpxDocumentModel) => void;
+}) {
+  return (
+    <div className="space-y-10">
+      {model.pages.map((page, pageIndex) => (
+        <section key={page.id} className={pageIndex > 0 ? 'border-t border-dashed border-[#C9D2CD] pt-10' : ''}>
+          {pageIndex > 0 ? <p className="mb-5 text-center text-xs font-bold text-[#7B8782]">- {pageIndex + 1}쪽 -</p> : null}
+          <div className="space-y-3">
+            {page.blocks.map((block) => (
+              <DocumentModelBlock
+                key={block.id}
+                block={block}
+                selected={selected}
+                onSelect={onSelect}
+                onChange={(nextBlock) => onChange(replaceModelBlock(model, nextBlock))}
+              />
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function DocumentModelBlock({
+  block,
+  selected,
+  onSelect,
+  onChange,
+}: {
+  block: HwpxBlock;
+  selected: SelectedTarget;
+  onSelect: (target: SelectedTarget) => void;
+  onChange: (block: HwpxBlock) => void;
+}) {
+  if (block.type === 'spacer') {
+    return <div style={{ height: block.height }} />;
+  }
+  if (block.type === 'heading') {
+    const active = selected.type === 'block' && selected.blockId === block.id;
+    const Tag = block.level === 1 ? 'h1' : block.level === 2 ? 'h2' : 'h3';
+    return (
+      <button
+        type="button"
+        onClick={() => onSelect({ type: 'block', blockId: block.id })}
+        className={modelSelectableClass(active, block.style?.align)}
+      >
+        <Tag
+          className={[
+            block.level === 1 ? 'text-[24px] leading-tight' : block.level === 2 ? 'text-[16px]' : 'text-[13px]',
+            block.style?.bold === false ? 'font-semibold' : 'font-extrabold',
+          ].join(' ')}
+        >
+          {block.text}
+        </Tag>
+      </button>
+    );
+  }
+  if (block.type === 'paragraph') {
+    const active = selected.type === 'block' && selected.blockId === block.id;
+    return (
+      <button
+        type="button"
+        onClick={() => onSelect({ type: 'block', blockId: block.id })}
+        className={modelSelectableClass(active, block.style?.align)}
+      >
+        <p className="whitespace-pre-wrap text-[13px] leading-7">{block.text}</p>
+      </button>
+    );
+  }
+  if (block.type === 'table') {
+    return (
+      <table className="my-2 w-full border-collapse text-[12px] leading-5">
+        <tbody>
+          {block.rows.map((row, rowIndex) => (
+            <tr key={`${block.id}-row-${rowIndex}`}>
+              {row.cells.map((cell) => {
+                const active = selected.type === 'cell' && selected.cellId === cell.id;
+                return (
+                  <td
+                    key={cell.id}
+                    rowSpan={cell.rowSpan}
+                    colSpan={cell.colSpan}
+                    onClick={() => onSelect({ type: 'cell', blockId: block.id, cellId: cell.id })}
+                    className={[
+                      'cursor-pointer border border-[#AEB8B2] px-2.5 py-2 align-top transition',
+                      cell.background ? '' : 'bg-white',
+                      cell.editable ? 'hover:bg-[#F8FBFA]' : 'font-bold',
+                      active ? 'outline outline-2 outline-[#245D50]' : '',
+                    ].join(' ')}
+                    style={{
+                      backgroundColor: cell.background,
+                      textAlign: cell.align,
+                      verticalAlign: cell.verticalAlign,
+                      width: cell.width ? `${cell.width}%` : undefined,
+                    }}
+                  >
+                    {cell.text ? <span className="whitespace-pre-wrap">{cell.text}</span> : <span className="text-[#9BA7A2]">입력 필요</span>}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
+  if (block.type === 'checkboxGroup') {
+    return (
+      <div className={modelSelectableClass(selected.type === 'checkbox' && selected.blockId === block.id)}>
+        {block.label ? <p className="mb-2 text-[13px] font-extrabold">{block.label}</p> : null}
+        <div className="space-y-1.5 text-[12px] leading-6">
+          {block.options.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => {
+                onSelect({ type: 'checkbox', blockId: block.id, optionId: option.id });
+                onChange({
+                  ...block,
+                  options: block.options.map((item) => item.id === option.id ? { ...item, checked: !item.checked } : item),
+                });
+              }}
+              className="block w-full text-left transition hover:text-[#245D50]"
+            >
+              <span className="mr-2 font-bold">{option.checked ? '☑' : '□'}</span>
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  if (block.type === 'signature') {
+    return (
+      <button
+        type="button"
+        onClick={() => onSelect({ type: 'signature', blockId: block.id })}
+        className={modelSelectableClass(selected.type === 'signature' && selected.blockId === block.id, 'center')}
+      >
+        <p className="text-[13px] font-bold">{block.dateText}</p>
+        <p className="mt-3 text-[13px]">{block.signerLabel}</p>
+        {block.organizationText ? <p className="mt-5 text-[14px] font-extrabold">{block.organizationText}</p> : null}
+      </button>
+    );
+  }
+  return null;
+}
+
+function ModelSelectionEditor({
+  model,
+  selected,
+  selectedItem,
+  onChange,
+}: {
+  model: HwpxDocumentModel;
+  selected: SelectedTarget;
+  selectedItem: SelectedModelItem;
+  onChange: (model: HwpxDocumentModel) => void;
+}) {
+  const updateBlock = (block: HwpxBlock) => onChange(replaceModelBlock(model, block));
+  if (selectedItem.kind === 'cell' && selected.type === 'cell') {
+    return (
+      <TextArea
+        label="표 셀 내용"
+        value={selectedItem.cell.text}
+        onChange={(value) => onChange(updateModelCell(model, selected.blockId, selected.cellId, value))}
+        minHeight="min-h-[130px]"
+      />
+    );
+  }
+  if (selectedItem.kind === 'block' && (selectedItem.block.type === 'paragraph' || selectedItem.block.type === 'heading')) {
+    const textBlock = selectedItem.block;
+    return (
+      <TextArea
+        label={textBlock.type === 'heading' ? '제목' : '본문'}
+        value={textBlock.text}
+        onChange={(value) => updateBlock({ ...textBlock, text: value })}
+        minHeight={textBlock.type === 'heading' ? 'min-h-[80px]' : 'min-h-[150px]'}
+      />
+    );
+  }
+  if (selectedItem.kind === 'block' && selectedItem.block.type === 'checkboxGroup') {
+    const checkboxBlock = selectedItem.block;
+    return (
+      <div className="space-y-3">
+        <TextInput
+          label="체크박스 제목"
+          value={checkboxBlock.label ?? ''}
+          onChange={(value) => updateBlock({ ...checkboxBlock, label: value })}
+        />
+        {checkboxBlock.options.map((option) => (
+          <label key={option.id} className="grid grid-cols-[28px_1fr] items-center gap-2">
+            <input
+              type="checkbox"
+              checked={option.checked}
+              onChange={(event) => updateBlock({
+                ...checkboxBlock,
+                options: checkboxBlock.options.map((item) => item.id === option.id ? { ...item, checked: event.target.checked } : item),
+              })}
+            />
+            <input
+              value={option.label}
+              onChange={(event) => updateBlock({
+                ...checkboxBlock,
+                options: checkboxBlock.options.map((item) => item.id === option.id ? { ...item, label: event.target.value } : item),
+              })}
+              className="h-10 rounded-xl border border-[#DDE7E2] px-3 text-sm outline-none focus:border-[#6A9C89]"
+            />
+          </label>
+        ))}
+      </div>
+    );
+  }
+  if (selectedItem.kind === 'block' && selectedItem.block.type === 'signature') {
+    const signatureBlock = selectedItem.block;
+    return (
+      <div className="space-y-3">
+        <TextInput label="날짜" value={signatureBlock.dateText} onChange={(value) => updateBlock({ ...signatureBlock, dateText: value })} />
+        <TextInput label="서명란" value={signatureBlock.signerLabel} onChange={(value) => updateBlock({ ...signatureBlock, signerLabel: value })} />
+        <TextInput label="기관명" value={signatureBlock.organizationText ?? ''} onChange={(value) => updateBlock({ ...signatureBlock, organizationText: value })} />
+      </div>
+    );
+  }
+  return <p className="text-sm leading-6 text-[#65736E]">수정할 수 있는 문단, 표 셀, 체크박스 또는 서명란을 선택하세요.</p>;
 }
 
 function UploadedHwpxParagraph({ block }: { block: HwpxTemplateBlock }) {
@@ -589,6 +894,134 @@ function TextArea({ label, value, onChange, minHeight }: { label: string; value:
   );
 }
 
+type SelectedModelItem =
+  | { kind: 'block'; block: HwpxBlock }
+  | { kind: 'cell'; block: HwpxTableBlock; cell: HwpxTableBlock['rows'][number]['cells'][number] };
+
+function modelSelectableClass(active: boolean, align: 'left' | 'center' | 'right' = 'left') {
+  return [
+    'block w-full rounded-md border px-2 py-1.5 transition',
+    align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left',
+    active ? 'border-[#245D50] bg-[#F5FAF8] shadow-[0_0_0_3px_rgba(36,93,80,0.10)]' : 'border-transparent hover:border-[#DDE7E2]',
+  ].join(' ');
+}
+
+function isModelTarget(target: SelectedTarget) {
+  return target.type === 'block' || target.type === 'cell' || target.type === 'checkbox' || target.type === 'signature';
+}
+
+function replaceModelBlock(model: HwpxDocumentModel, block: HwpxBlock): HwpxDocumentModel {
+  return sanitizeHwpxDocumentModel({
+    ...model,
+    pages: model.pages.map((page) => ({
+      ...page,
+      blocks: page.blocks.map((item) => item.id === block.id ? block : item),
+    })),
+  });
+}
+
+function updateModelCell(model: HwpxDocumentModel, blockId: string, cellId: string, text: string): HwpxDocumentModel {
+  return sanitizeHwpxDocumentModel({
+    ...model,
+    pages: model.pages.map((page) => ({
+      ...page,
+      blocks: page.blocks.map((block) => {
+        if (block.type !== 'table' || block.id !== blockId) return block;
+        return {
+          ...block,
+          rows: block.rows.map((row) => ({
+            cells: row.cells.map((cell) => cell.id === cellId ? { ...cell, text } : cell),
+          })),
+        };
+      }),
+    })),
+  });
+}
+
+function updateModelWithAiCommand(model: HwpxDocumentModel, selected: SelectedTarget, command: string, scope: 'selected' | 'all'): HwpxDocumentModel {
+  const reviseBlock = (block: HwpxBlock): HwpxBlock => {
+    if (scope === 'selected' && selected.type === 'block' && block.id !== selected.blockId) return block;
+    if (scope === 'selected' && selected.type === 'signature' && block.id !== selected.blockId) return block;
+    if (block.type === 'paragraph') return { ...block, text: reviseText(block.text, command, '선택 문단') };
+    if (block.type === 'heading') return { ...block, text: reviseTitle(block.text, command) };
+    if (block.type === 'signature') {
+      return command.includes('문의') || command.includes('동의')
+        ? { ...block, signerLabel: reviseText(block.signerLabel, command, '서명란') }
+        : block;
+    }
+    if (block.type === 'table') {
+      return {
+        ...block,
+        rows: block.rows.map((row) => ({
+          cells: row.cells.map((cell) => {
+            const targetCell = selected.type === 'cell' && selected.blockId === block.id && selected.cellId === cell.id;
+            if (scope === 'selected' && !targetCell) return cell;
+            return cell.editable ? { ...cell, text: reviseText(cell.text, command, '표 셀') } : cell;
+          }),
+        })),
+      };
+    }
+    if (block.type === 'checkboxGroup') {
+      if (scope === 'selected' && selected.type !== 'checkbox') return block;
+      if (scope === 'selected' && selected.type === 'checkbox' && selected.blockId !== block.id) return block;
+      return command.includes('개인정보') || command.includes('동의')
+        ? {
+            ...block,
+            options: block.options.map((option) => ({
+              ...option,
+              label: option.label.includes('개인정보') ? option.label : `${option.label} 개인정보 처리 목적과 보유 기간을 확인했습니다.`,
+            })),
+          }
+        : block;
+    }
+    return block;
+  };
+
+  return sanitizeHwpxDocumentModel({
+    ...model,
+    pages: model.pages.map((page) => ({ ...page, blocks: page.blocks.map(reviseBlock) })),
+  });
+}
+
+function findSelectedModelItem(model: HwpxDocumentModel, selected: SelectedTarget): SelectedModelItem | null {
+  for (const page of model.pages) {
+    for (const block of page.blocks) {
+      if ((selected.type === 'block' || selected.type === 'checkbox' || selected.type === 'signature') && block.id === selected.blockId) {
+        return { kind: 'block', block };
+      }
+      if (selected.type === 'cell' && block.type === 'table' && block.id === selected.blockId) {
+        const cell = block.rows.flatMap((row) => row.cells).find((item) => item.id === selected.cellId);
+        if (cell) return { kind: 'cell', block, cell };
+      }
+    }
+  }
+  return null;
+}
+
+function modelStructureItems(model: HwpxDocumentModel) {
+  return model.pages.flatMap((page, pageIndex) =>
+    page.blocks.flatMap((block, blockIndex) => {
+      const prefix = model.pages.length > 1 ? `${pageIndex + 1}쪽 ` : '';
+      if (block.type === 'table') {
+        const cells = block.rows
+          .flatMap((row) => row.cells)
+          .filter((cell) => cell.editable)
+          .slice(0, 8)
+          .map((cell) => ({ id: `cell:${block.id}:${cell.id}`, label: `${prefix}표 셀 - ${cell.text.slice(0, 22) || '입력칸'}` }));
+        return [{ id: `block:${block.id}`, label: `${prefix}표 ${blockIndex + 1}` }, ...cells];
+      }
+      if (block.type === 'checkboxGroup') {
+        return [{ id: `checkbox:${block.id}`, label: `${prefix}${block.label || '체크박스'}` }];
+      }
+      if (block.type === 'signature') {
+        return [{ id: `signature:${block.id}`, label: `${prefix}서명란` }];
+      }
+      if (block.type === 'spacer') return [];
+      return [{ id: `block:${block.id}`, label: `${prefix}${block.text.slice(0, 32) || '문단'}` }];
+    }),
+  );
+}
+
 function normalizeDocument(document: NoticeDocument): NoticeDocument {
   return {
     ...document,
@@ -603,6 +1036,7 @@ function normalizeDocument(document: NoticeDocument): NoticeDocument {
     },
     sections: document.sections?.length ? document.sections : [{ heading: '1. 사업 개요', body: '' }],
     attachments: document.attachments?.length ? document.attachments : ['신청서'],
+    documentModel: document.documentModel ? sanitizeHwpxDocumentModel(document.documentModel) : undefined,
   };
 }
 
