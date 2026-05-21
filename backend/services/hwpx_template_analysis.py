@@ -189,20 +189,21 @@ def _parse_table(table: ElementTree.Element) -> list[list[dict]]:
         cells: list[dict] = []
         direct_cells = [child for child in list(tr) if _local(child.tag) == "tc"]
         for tc in direct_cells:
+            cell_addr = _cell_addr(tc)
+            cell_span = _cell_span(tc)
             text_parts = [_paragraph_text(p) for p in tc.iter() if _local(p.tag) == "p"]
             text = _normalize_text(" ".join(part for part in text_parts if part))
-            if text or len(direct_cells) > 1:
-                cells.append(
-                    {
-                        "id": f"cell-{len(rows)}-{len(cells)}",
-                        "text": text,
-                        "row_span": _int_attr(tc, "rowSpan", 1),
-                        "col_span": _int_attr(tc, "colSpan", 1),
-                        "align": _table_cell_align(tc),
-                        "vertical_align": _table_cell_vertical_align(tc),
-                        "editable": _looks_editable_cell(text, len(cells)),
-                    }
-                )
+            cells.append(
+                {
+                    "id": f"cell-{cell_addr['row']}-{cell_addr['col']}",
+                    "text": text,
+                    "row_span": cell_span["row"],
+                    "col_span": cell_span["col"],
+                    "align": _table_cell_align(tc),
+                    "vertical_align": _table_cell_vertical_align(tc),
+                    "editable": _looks_editable_cell(text, len(cells)),
+                }
+            )
         if cells:
             rows.append(cells)
     return rows
@@ -382,6 +383,46 @@ def _int_attr(node: ElementTree.Element, local_name: str, default: int) -> int:
         if _local(key) == local_name:
             try:
                 return max(1, int(value))
+            except ValueError:
+                return default
+    return default
+
+
+def _first_child(node: ElementTree.Element, local_name: str) -> ElementTree.Element | None:
+    for child in list(node):
+        if _local(child.tag) == local_name:
+            return child
+    return None
+
+
+def _cell_span(cell: ElementTree.Element) -> dict[str, int]:
+    span = _first_child(cell, "cellSpan")
+    if span is None:
+        return {
+            "row": _int_attr(cell, "rowSpan", 1),
+            "col": _int_attr(cell, "colSpan", 1),
+        }
+    return {
+        "row": _int_attr(span, "rowSpan", 1),
+        "col": _int_attr(span, "colSpan", 1),
+    }
+
+
+def _cell_addr(cell: ElementTree.Element) -> dict[str, int]:
+    addr = _first_child(cell, "cellAddr")
+    if addr is None:
+        return {"row": 0, "col": 0}
+    return {
+        "row": _zero_based_int_attr(addr, "rowAddr", 0),
+        "col": _zero_based_int_attr(addr, "colAddr", 0),
+    }
+
+
+def _zero_based_int_attr(node: ElementTree.Element, local_name: str, default: int) -> int:
+    for key, value in node.attrib.items():
+        if _local(key) == local_name:
+            try:
+                return max(0, int(value))
             except ValueError:
                 return default
     return default

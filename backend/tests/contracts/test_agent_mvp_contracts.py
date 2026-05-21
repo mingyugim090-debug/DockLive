@@ -68,6 +68,11 @@ except ModuleNotFoundError as exc:  # pragma: no cover - local minimal Python fa
     compose_hwpx = None
     detect_template = None
 
+try:
+    from services.hwpx_template_analysis import analyze_hwpx_template_bytes  # noqa: E402
+except ModuleNotFoundError:
+    analyze_hwpx_template_bytes = None
+
 
 class AgentMvpContractTests(unittest.TestCase):
     def test_ai_provider_uses_mock_when_mock_mode_enabled(self):
@@ -193,6 +198,23 @@ class AgentMvpContractTests(unittest.TestCase):
         self.assertEqual(ingested.source_type, "hwpx")
         self.assertGreater(len(ingested.text), 20)
         self.assertEqual(ingested.source_name, sample.name)
+
+    def test_hwpx_template_analysis_preserves_table_spans_and_blank_cells(self):
+        if analyze_hwpx_template_bytes is None:
+            self.skipTest("backend dependencies are not installed in this Python environment")
+        sample = ROOT / "backend" / "hwpx_toolchain" / "templates" / "reference.hwpx"
+
+        analysis = analyze_hwpx_template_bytes(sample.read_bytes(), sample.name)
+        cells = [
+            cell
+            for block in analysis["blocks"]
+            if block["type"] == "table"
+            for row in block["rows"]
+            for cell in row
+        ]
+
+        self.assertTrue(any(cell["col_span"] > 1 or cell["row_span"] > 1 for cell in cells))
+        self.assertTrue(any(cell["text"] == "" for cell in cells))
 
     def test_markdown_hwpx_export_returns_zip_package(self):
         if export_markdown_to_hwpx is None:
