@@ -341,6 +341,19 @@ export async function draftHwpxRegion(
   return res.json();
 }
 
+export async function addHwpxComponent(
+  sessionId: string,
+  payload: { kind: 'text' | 'textarea' | 'signature' | 'table'; label: string; value?: string },
+): Promise<HwpxFormSessionResponse> {
+  const res = await fetch(`${API_URL}/api/hwpx/sessions/${sessionId}/components`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind: payload.kind, label: payload.label, value: payload.value ?? '' }),
+  });
+  if (!res.ok) throw await readError(res, `HWPX 구성요소 추가 실패: ${res.status}`);
+  return res.json();
+}
+
 export async function exportHwpxFormSession(sessionId: string): Promise<ExportResponse> {
   const res = await fetchWithTimeout(`${API_URL}/api/hwpx/sessions/${sessionId}/export`, { method: 'POST' }, 90000);
   if (!res.ok) throw await readError(res, `HWPX 다운로드 생성 실패: ${res.status}`);

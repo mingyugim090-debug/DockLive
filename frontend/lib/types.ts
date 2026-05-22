@@ -306,8 +306,9 @@ export interface HwpxRenderPage {
 
 export interface HwpxEditableRegion {
   id: string;
-  kind: 'text' | 'textarea' | 'checkbox' | 'signature';
+  kind: 'text' | 'textarea' | 'checkbox' | 'signature' | 'table';
   label: string;
+  display_order: number;
   page_index: number;
   bbox: { x: number; y: number; width: number; height: number };
   value: string;

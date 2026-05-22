@@ -326,8 +326,9 @@ class HwpxRenderPage(BaseModel):
 
 class HwpxEditableRegion(BaseModel):
     id: str
-    kind: Literal["text", "textarea", "checkbox", "signature"] = "text"
+    kind: Literal["text", "textarea", "checkbox", "signature", "table"] = "text"
     label: str
+    display_order: int = 0
     page_index: int = 0
     bbox: dict[str, float] = Field(default_factory=dict)
     value: str = ""
@@ -362,6 +363,12 @@ class HwpxRegionUpdateRequest(BaseModel):
 class HwpxRegionDraftRequest(BaseModel):
     base_input: str = ""
     prompt: str = ""
+
+
+class HwpxComponentCreateRequest(BaseModel):
+    kind: Literal["text", "textarea", "signature", "table"] = "textarea"
+    label: str = ""
+    value: str = ""
 
 
 class HwpxConvertResponse(ExportResponse):

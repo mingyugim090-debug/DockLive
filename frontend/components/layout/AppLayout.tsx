@@ -9,6 +9,7 @@ import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 
 const titles: Array<[string, string]> = [
+  ['/app/templates', 'Templates'],
   ['/app/documents', '문서함'],
   ['/app/billing', 'Billing'],
   ['/app/settings', '설정'],

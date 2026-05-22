@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, type RefObject } from 'react';
 import {
+  addHwpxComponent,
   createHwpxFormSession,
   draftHwpxRegion,
   exportHwpxFormSession,
@@ -11,6 +12,7 @@ import type { ExportResponse, HwpxEditableRegion, HwpxFormSession } from '@/lib/
 import { Button } from '@/components/ui/Button';
 
 type WorkflowStep = 'upload' | 'analysis' | 'edit' | 'generate' | 'review';
+type ComponentKind = 'text' | 'textarea' | 'signature' | 'table';
 
 const workflowSteps: Array<{ id: WorkflowStep; label: string; description: string }> = [
   { id: 'upload', label: '1. HWPX 업로드', description: 'HWP/HWPX 신청서만 업로드' },
@@ -18,6 +20,13 @@ const workflowSteps: Array<{ id: WorkflowStep; label: string; description: strin
   { id: 'edit', label: '3. 섹션 입력', description: '원본 화면을 보며 영역별 수정' },
   { id: 'generate', label: '4. AI 완성본', description: '요청사항 기반 자동 작성' },
   { id: 'review', label: '5. 최종 검토', description: '확인 후 HWPX 다운로드' },
+];
+
+const componentOptions: Array<{ kind: ComponentKind; label: string }> = [
+  { kind: 'table', label: '표' },
+  { kind: 'signature', label: '서명' },
+  { kind: 'text', label: '문구' },
+  { kind: 'textarea', label: '긴 글' },
 ];
 
 function downloadExport(exported: ExportResponse) {
@@ -29,6 +38,35 @@ function downloadExport(exported: ExportResponse) {
   link.download = exported.filename;
   link.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function sortRegions(regions: HwpxEditableRegion[]): HwpxEditableRegion[] {
+  return [...regions].sort((a, b) => {
+    const orderA = Number.isFinite(a.display_order) && a.display_order > 0 ? a.display_order : 9999;
+    const orderB = Number.isFinite(b.display_order) && b.display_order > 0 ? b.display_order : 9999;
+    return orderA - orderB || a.label.localeCompare(b.label, 'ko');
+  });
+}
+
+function regionNumber(region: HwpxEditableRegion, index: number): number {
+  return Number.isFinite(region.display_order) && region.display_order > 0 ? region.display_order : index + 1;
+}
+
+function compactText(value: unknown, fallback = ''): string {
+  const text = typeof value === 'string' ? value : fallback;
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+function truncate(value: string, limit: number): string {
+  return value.length > limit ? `${value.slice(0, limit - 1)}…` : value;
+}
+
+function writingRegions(regions: HwpxEditableRegion[]): HwpxEditableRegion[] {
+  return regions.filter(
+    (region) =>
+      region.kind === 'textarea' ||
+      /소개|동기|계획|내용|목표|방법|사유|자기|활동|지원/.test(region.label),
+  );
 }
 
 export function HwpxFormEditor() {
@@ -43,12 +81,13 @@ export function HwpxFormEditor() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const orderedRegions = useMemo(() => sortRegions(session?.regions ?? []), [session]);
   const selected = useMemo(
-    () => session?.regions.find((region) => region.id === selectedId) ?? session?.regions[0] ?? null,
-    [session, selectedId],
+    () => orderedRegions.find((region) => region.id === selectedId) ?? orderedRegions[0] ?? null,
+    [orderedRegions, selectedId],
   );
   const stepIndex = workflowSteps.findIndex((item) => item.id === step);
-  const completedCount = session?.regions.filter((region) => region.value.trim()).length ?? 0;
+  const completedCount = orderedRegions.filter((region) => region.value.trim()).length;
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
@@ -60,8 +99,9 @@ export function HwpxFormEditor() {
     setError(null);
     try {
       const response = await createHwpxFormSession(file);
+      const firstRegion = sortRegions(response.data.regions)[0] ?? null;
       setSession(response.data);
-      setSelectedId(response.data.regions[0]?.id ?? null);
+      setSelectedId(firstRegion?.id ?? null);
       setBaseInput('');
       setPrompt('');
       setGlobalBaseInput('');
@@ -146,10 +186,17 @@ export function HwpxFormEditor() {
     setBusy('draft');
     setError(null);
     try {
-      await persistRegion(selected, selected.value, prompt);
-      const response = await draftHwpxRegion(session.id, selected.id, { baseInput, prompt });
+      const nextPrompt = prompt || selected.prompt || `${selected.label} 항목을 제출용 문장으로 작성해줘.`;
+      const nextBaseInput = [baseInput, selected.value].filter(Boolean).join('\n\n');
+      await persistRegion(selected, selected.value, nextPrompt);
+      const response = await draftHwpxRegion(session.id, selected.id, {
+        baseInput: nextBaseInput,
+        prompt: nextPrompt,
+      });
+      const updated = response.data.regions.find((region) => region.id === selected.id);
       setSession(response.data);
       setSelectedId(selected.id);
+      setPrompt(updated?.prompt ?? nextPrompt);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'AI 초안 생성에 실패했습니다.');
     } finally {
@@ -164,20 +211,39 @@ export function HwpxFormEditor() {
     try {
       let latest = await persistAllRegions();
       if (!latest) return;
-      const targets = latest.regions.filter((region) => region.kind === 'textarea' || !region.value.trim());
-      const regionsToDraft = targets.length ? targets : latest.regions;
+      const ordered = sortRegions(latest.regions);
+      const targets = ordered.filter((region) => region.kind === 'textarea' || !region.value.trim());
+      const regionsToDraft = targets.length ? targets : ordered;
       for (const region of regionsToDraft) {
         const response = await draftHwpxRegion(latest.id, region.id, {
           baseInput: [globalBaseInput, region.value].filter(Boolean).join('\n\n'),
-          prompt: globalPrompt || `${region.label} 항목을 공고문 문체에 맞게 구체적으로 작성해줘.`,
+          prompt: globalPrompt || region.prompt || `${region.label} 항목을 공고문 문체에 맞게 구체적으로 작성해줘.`,
         });
         latest = response.data;
         setSession(latest);
       }
-      setSelectedId(latest.regions[0]?.id ?? null);
+      setSelectedId(sortRegions(latest.regions)[0]?.id ?? null);
       setStep('review');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'AI 완성본 생성에 실패했습니다.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function addComponent(kind: ComponentKind) {
+    if (!session) return;
+    setBusy('component');
+    setError(null);
+    try {
+      const label = componentOptions.find((item) => item.kind === kind)?.label ?? '추가 영역';
+      const response = await addHwpxComponent(session.id, { kind, label: `추가 ${label}` });
+      const nextRegions = sortRegions(response.data.regions);
+      const created = nextRegions[nextRegions.length - 1] ?? null;
+      setSession(response.data);
+      if (created) selectRegion(created);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '구성요소 추가에 실패했습니다.');
     } finally {
       setBusy(null);
     }
@@ -191,7 +257,7 @@ export function HwpxFormEditor() {
       await persistAllRegions();
       const exported = await exportHwpxFormSession(session.id);
       downloadExport(exported);
-      setSession((current) => current ? { ...current, status: 'exported' } : current);
+      setSession((current) => (current ? { ...current, status: 'exported' } : current));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'HWPX 다운로드 생성에 실패했습니다.');
     } finally {
@@ -205,13 +271,12 @@ export function HwpxFormEditor() {
 
       {error ? <p className="rounded-xl bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{error}</p> : null}
 
-      {step === 'upload' ? (
-        <UploadStep inputRef={inputRef} busy={busy} error={error} onFile={handleFile} />
-      ) : null}
+      {step === 'upload' ? <UploadStep inputRef={inputRef} busy={busy} onFile={handleFile} /> : null}
 
       {session && step === 'analysis' ? (
         <AnalysisStep
           session={session}
+          regions={orderedRegions}
           completedCount={completedCount}
           onBack={() => go('upload')}
           onNext={() => go('edit')}
@@ -221,6 +286,7 @@ export function HwpxFormEditor() {
       {session && step === 'edit' ? (
         <EditStep
           session={session}
+          regions={orderedRegions}
           selected={selected}
           busy={busy}
           baseInput={baseInput}
@@ -241,6 +307,7 @@ export function HwpxFormEditor() {
             }
           }}
           onGenerateSelected={generateSelectedDraft}
+          onAddComponent={addComponent}
           onBack={() => go('analysis')}
           onNext={() => go('generate')}
         />
@@ -249,6 +316,7 @@ export function HwpxFormEditor() {
       {session && step === 'generate' ? (
         <GenerateStep
           session={session}
+          regions={orderedRegions}
           globalBaseInput={globalBaseInput}
           globalPrompt={globalPrompt}
           busy={busy}
@@ -263,6 +331,7 @@ export function HwpxFormEditor() {
       {session && step === 'review' ? (
         <ReviewStep
           session={session}
+          regions={orderedRegions}
           selected={selected}
           busy={busy}
           onSelect={selectRegion}
@@ -331,9 +400,8 @@ function UploadStep({
   busy,
   onFile,
 }: {
-  inputRef: React.RefObject<HTMLInputElement>;
+  inputRef: RefObject<HTMLInputElement>;
   busy: string | null;
-  error: string | null;
   onFile: (file: File | undefined) => void;
 }) {
   return (
@@ -367,21 +435,44 @@ function UploadStep({
 
 function AnalysisStep({
   session,
+  regions,
   completedCount,
   onBack,
   onNext,
 }: {
   session: HwpxFormSession;
+  regions: HwpxEditableRegion[];
   completedCount: number;
   onBack: () => void;
   onNext: () => void;
 }) {
   const stats = session.analysis.stats as Record<string, number> | undefined;
+  const title = compactText(session.analysis.title, session.source_filename) || session.source_filename;
+  const organization = compactText(session.analysis.organization, '기관 미확인') || '기관 미확인';
+  const conciseSummary = truncate(
+    compactText(session.analysis.summary, '업로드한 HWPX의 표 구조, 문단, 입력 영역을 분석했습니다.'),
+    220,
+  );
+  const longRegions = writingRegions(regions);
+  const keyItems = [
+    `${regions.length}개 입력 영역을 원본 순서대로 정리했습니다.`,
+    `${longRegions.length}개 영역은 AI 초안 작성 대상으로 분류했습니다.`,
+    `${stats?.tables ?? 0}개 표와 ${stats?.sections ?? 0}개 섹션을 구조 보존 대상으로 감지했습니다.`,
+  ];
+
   return (
     <section className="rounded-2xl border border-[#DDE7E2] bg-white p-6 shadow-sm">
-      <p className="text-sm font-bold text-[#3A7A68]">AI 분석 결과</p>
-      <h2 className="mt-2 text-2xl font-bold text-[#24312D]">{session.analysis.title || session.source_filename}</h2>
-      <p className="mt-2 text-sm leading-7 text-[#65736E]">{session.analysis.summary || '업로드한 HWPX의 구조와 입력 영역을 분석했습니다.'}</p>
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-sm font-bold text-[#3A7A68]">AI 분석 결과</p>
+          <h2 className="mt-2 text-2xl font-bold text-[#24312D]">{title}</h2>
+          <p className="mt-2 text-sm leading-7 text-[#65736E]">{conciseSummary}</p>
+        </div>
+        <div className="rounded-2xl border border-[#DDE7E2] bg-[#F8FBFA] px-4 py-3 text-sm">
+          <p className="font-bold text-[#24312D]">{organization}</p>
+          <p className="mt-1 text-[#65736E]">{session.source_filename}</p>
+        </div>
+      </div>
 
       {session.warnings.length ? (
         <div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50 px-5 py-4 text-sm leading-6 text-amber-800">
@@ -390,21 +481,36 @@ function AnalysisStep({
       ) : null}
 
       <div className="mt-6 grid gap-4 md:grid-cols-4">
-        <Metric label="파일명" value={session.source_filename} />
-        <Metric label="입력 영역" value={`${session.regions.length}개`} />
+        <Metric label="입력 영역" value={`${regions.length}개`} />
+        <Metric label="긴 글 작성" value={`${longRegions.length}개`} />
         <Metric label="작성 완료" value={`${completedCount}개`} />
         <Metric label="표/섹션" value={`${stats?.tables ?? 0} / ${stats?.sections ?? 0}`} />
       </div>
 
-      <div className="mt-6 rounded-2xl border border-[#E4EBE7] bg-[#F8FBFA] p-4">
-        <p className="text-sm font-bold text-[#24312D]">추출된 입력 영역</p>
-        <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-          {session.regions.slice(0, 18).map((region, index) => (
-            <div key={region.id} className="rounded-xl border border-[#DDE7E2] bg-white px-3 py-2 text-sm">
-              <span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#E7F1ED] text-xs font-bold text-[#245D50]">{index + 1}</span>
-              <span className="font-semibold text-[#24312D]">{region.label}</span>
-            </div>
-          ))}
+      <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <div className="rounded-2xl border border-[#E4EBE7] bg-[#F8FBFA] p-4">
+          <p className="text-sm font-bold text-[#24312D]">핵심 요약</p>
+          <div className="mt-3 space-y-2">
+            {keyItems.map((item) => (
+              <p key={item} className="rounded-xl bg-white px-3 py-2 text-sm leading-6 text-[#40504B]">
+                {item}
+              </p>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-[#E4EBE7] bg-[#F8FBFA] p-4">
+          <p className="text-sm font-bold text-[#24312D]">추출된 입력 영역</p>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            {regions.slice(0, 28).map((region, index) => (
+              <div key={region.id} className="rounded-xl border border-[#DDE7E2] bg-white px-3 py-2 text-sm">
+                <span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#E7F1ED] text-xs font-bold text-[#245D50]">
+                  {regionNumber(region, index)}
+                </span>
+                <span className="font-semibold text-[#24312D]">{region.label}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -418,6 +524,7 @@ function AnalysisStep({
 
 function EditStep(props: {
   session: HwpxFormSession;
+  regions: HwpxEditableRegion[];
   selected: HwpxEditableRegion | null;
   busy: string | null;
   baseInput: string;
@@ -428,17 +535,18 @@ function EditStep(props: {
   onLocalChange: (region: HwpxEditableRegion, value: string, prompt?: string) => void;
   onSaveSelected: () => void;
   onGenerateSelected: () => void;
+  onAddComponent: (kind: ComponentKind) => void;
   onBack: () => void;
   onNext: () => void;
 }) {
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
-      <DocumentPreview session={props.session} selected={props.selected} onSelect={props.onSelect} />
+      <DocumentPreview session={props.session} regions={props.regions} selected={props.selected} onSelect={props.onSelect} />
       <aside className="space-y-4">
         <RegionEditor {...props} />
-        <RegionList session={props.session} selected={props.selected} onSelect={props.onSelect} />
+        <RegionProgress regions={props.regions} selected={props.selected} />
       </aside>
-      <div className="xl:col-span-2 flex justify-end gap-2">
+      <div className="flex justify-end gap-2 xl:col-span-2">
         <Button variant="secondary" onClick={props.onBack}>AI 분석으로</Button>
         <Button onClick={props.onNext} disabled={Boolean(props.busy)}>
           {props.busy === 'save' ? '저장 중...' : 'AI 완성본 생성으로'}
@@ -450,6 +558,7 @@ function EditStep(props: {
 
 function GenerateStep({
   session,
+  regions,
   globalBaseInput,
   globalPrompt,
   busy,
@@ -460,6 +569,7 @@ function GenerateStep({
   onSkip,
 }: {
   session: HwpxFormSession;
+  regions: HwpxEditableRegion[];
   globalBaseInput: string;
   globalPrompt: string;
   busy: string | null;
@@ -469,13 +579,16 @@ function GenerateStep({
   onBack: () => void;
   onSkip: () => void;
 }) {
+  const targets = writingRegions(regions);
   return (
     <section className="rounded-2xl border border-[#DDE7E2] bg-white p-6 shadow-sm">
       <p className="text-sm font-bold text-[#3A7A68]">AI 완성본 자동 생성</p>
-      <h2 className="mt-2 text-2xl font-bold text-[#24312D]">요청사항을 바탕으로 비어 있거나 긴 글 영역을 자동 작성합니다.</h2>
-      <p className="mt-2 text-sm leading-7 text-[#65736E]">
-        현재 입력 영역 {session.regions.length}개를 기준으로 자기소개, 지원동기, 활동계획처럼 긴 글이 필요한 부분을 우선 작성합니다.
-      </p>
+      <h2 className="mt-2 text-2xl font-bold text-[#24312D]">요청사항을 바탕으로 문서 전체 초안을 채웁니다.</h2>
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <Metric label="전체 입력 영역" value={`${session.regions.length}개`} />
+        <Metric label="우선 작성 영역" value={`${targets.length}개`} />
+        <Metric label="현재 상태" value={busy === 'complete' ? '작성 중' : '대기'} />
+      </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
         <label className="block">
@@ -511,6 +624,7 @@ function GenerateStep({
 
 function ReviewStep({
   session,
+  regions,
   selected,
   busy,
   onSelect,
@@ -518,6 +632,7 @@ function ReviewStep({
   onDownload,
 }: {
   session: HwpxFormSession;
+  regions: HwpxEditableRegion[];
   selected: HwpxEditableRegion | null;
   busy: string | null;
   onSelect: (region: HwpxEditableRegion) => void;
@@ -530,14 +645,16 @@ function ReviewStep({
         <p className="text-sm font-bold text-[#3A7A68]">최종 검토</p>
         <h2 className="mt-1 text-2xl font-bold text-[#24312D]">입력값을 확인한 뒤 HWPX로 다운로드하세요.</h2>
         <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-          {session.regions.map((region) => (
+          {regions.map((region, index) => (
             <button
               key={region.id}
               type="button"
               onClick={() => onSelect(region)}
               className="rounded-xl border border-[#E4EBE7] bg-[#F8FBFA] px-3 py-2 text-left text-sm hover:bg-[#F0F7F3]"
             >
-              <p className="font-bold text-[#24312D]">{region.label}</p>
+              <p className="font-bold text-[#24312D]">
+                {regionNumber(region, index)}. {region.label}
+              </p>
               <p className="mt-1 truncate text-xs text-[#65736E]">{region.value || '미입력'}</p>
             </button>
           ))}
@@ -549,18 +666,20 @@ function ReviewStep({
           </Button>
         </div>
       </section>
-      <DocumentPreview session={session} selected={selected} onSelect={onSelect} compact />
+      <DocumentPreview session={session} regions={regions} selected={selected} onSelect={onSelect} compact />
     </div>
   );
 }
 
 function DocumentPreview({
   session,
+  regions,
   selected,
   onSelect,
   compact = false,
 }: {
   session: HwpxFormSession;
+  regions: HwpxEditableRegion[];
   selected: HwpxEditableRegion | null;
   onSelect: (region: HwpxEditableRegion) => void;
   compact?: boolean;
@@ -568,36 +687,56 @@ function DocumentPreview({
   return (
     <section className={[compact ? 'max-h-[720px]' : 'h-[calc(100vh-260px)] min-h-[720px]', 'overflow-auto rounded-2xl border border-[#DDE7E2] bg-[#E2E8E5] p-5'].join(' ')}>
       <div className="mx-auto flex max-w-[920px] flex-col gap-8">
-        {session.pages.map((page) => (
-          <div key={page.page_index} className="relative mx-auto overflow-hidden bg-white shadow-[0_18px_48px_rgba(36,49,45,0.16)]">
-            <img src={page.image_base64} alt={`HWPX page ${page.page_index + 1}`} className="block h-auto w-full max-w-[900px]" />
-            {session.regions
-              .filter((region) => region.page_index === page.page_index)
-              .map((region, index) => {
+        {session.pages.map((page) => {
+          const pageRegions = regions.filter((region) => region.page_index === page.page_index);
+          return (
+            <div key={page.page_index} className="relative mx-auto overflow-hidden bg-white shadow-[0_18px_48px_rgba(36,49,45,0.16)]">
+              <img src={page.image_base64} alt={`HWPX page ${page.page_index + 1}`} className="block h-auto w-full max-w-[900px]" />
+              {pageRegions.map((region, index) => {
                 const active = selected?.id === region.id;
+                const filled = Boolean(region.value.trim());
+                const number = regionNumber(region, regions.findIndex((item) => item.id === region.id));
+                const height = Math.max(region.bbox.height ?? 3.4, active ? 5.2 : 3.4);
                 return (
                   <button
                     key={region.id}
                     type="button"
-                    title={region.label}
+                    title={`${number}. ${region.label}`}
                     onClick={() => onSelect(region)}
                     className={[
-                      'absolute flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-extrabold shadow-sm transition',
+                      'absolute rounded-md text-left transition',
                       active
-                        ? 'border-[#0F5B4D] bg-[#0F5B4D] text-white ring-4 ring-[#0F5B4D]/20'
-                        : 'border-[#245D50] bg-white/90 text-[#245D50] hover:bg-[#E7F1ED]',
+                        ? 'bg-[#0F5B4D]/10 ring-2 ring-[#0F5B4D]'
+                        : filled
+                          ? 'bg-[#F5F0E6]/55 ring-1 ring-[#B58D4D]/70 hover:bg-[#F5F0E6]/75'
+                          : 'bg-transparent hover:bg-[#0F5B4D]/5 hover:ring-1 hover:ring-[#0F5B4D]/50',
                     ].join(' ')}
                     style={{
-                      left: `${Math.max(1, Math.min(94, region.bbox.x))}%`,
-                      top: `${Math.max(1, Math.min(94, region.bbox.y))}%`,
+                      left: `${Math.max(0, Math.min(98, region.bbox.x))}%`,
+                      top: `${Math.max(0, Math.min(95, region.bbox.y))}%`,
+                      width: `${Math.max(16, Math.min(99, region.bbox.width))}%`,
+                      height: `${height}%`,
                     }}
                   >
-                    {index + 1}
+                    <span
+                      className={[
+                        'absolute left-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border text-[11px] font-extrabold shadow-sm',
+                        active ? 'border-[#0F5B4D] bg-[#0F5B4D] text-white' : 'border-[#245D50] bg-white/95 text-[#245D50]',
+                      ].join(' ')}
+                    >
+                      {number}
+                    </span>
+                    {(active || filled) && region.value ? (
+                      <span className="absolute left-12 top-1/2 max-w-[72%] -translate-y-1/2 rounded-md bg-white/90 px-2 py-1 text-[11px] font-semibold leading-4 text-[#24312D] shadow-sm">
+                        {truncate(compactText(region.value), 70)}
+                      </span>
+                    ) : null}
                   </button>
                 );
               })}
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </div>
     </section>
   );
@@ -613,6 +752,7 @@ function RegionEditor({
   onLocalChange,
   onSaveSelected,
   onGenerateSelected,
+  onAddComponent,
 }: {
   selected: HwpxEditableRegion | null;
   busy: string | null;
@@ -623,6 +763,7 @@ function RegionEditor({
   onLocalChange: (region: HwpxEditableRegion, value: string, prompt?: string) => void;
   onSaveSelected: () => void;
   onGenerateSelected: () => void;
+  onAddComponent: (kind: ComponentKind) => void;
 }) {
   return (
     <section className="rounded-2xl border border-[#DDE7E2] bg-white p-5 shadow-sm">
@@ -669,41 +810,57 @@ function RegionEditor({
           </div>
         </div>
       ) : (
-        <p className="mt-3 text-sm leading-6 text-[#65736E]">왼쪽 문서의 번호 마커나 아래 목록에서 입력 영역을 선택하세요.</p>
+        <p className="mt-3 text-sm leading-6 text-[#65736E]">왼쪽 HWPX 화면에서 입력 영역을 선택하세요.</p>
       )}
+
+      <div className="mt-5 border-t border-[#E4EBE7] pt-4">
+        <p className="text-sm font-bold text-[#24312D]">구성요소 배치</p>
+        <div className="mt-3 grid grid-cols-4 gap-2">
+          {componentOptions.map((item) => (
+            <button
+              key={item.kind}
+              type="button"
+              disabled={busy === 'component'}
+              onClick={() => onAddComponent(item.kind)}
+              className="rounded-xl border border-[#DDE7E2] bg-[#F8FBFA] px-2 py-2 text-xs font-bold text-[#245D50] transition hover:bg-[#EDF7F2] disabled:opacity-50"
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
     </section>
   );
 }
 
-function RegionList({
-  session,
+function RegionProgress({
+  regions,
   selected,
-  onSelect,
 }: {
-  session: HwpxFormSession;
+  regions: HwpxEditableRegion[];
   selected: HwpxEditableRegion | null;
-  onSelect: (region: HwpxEditableRegion) => void;
 }) {
   return (
     <section className="rounded-2xl border border-[#DDE7E2] bg-white p-5 shadow-sm">
-      <p className="text-xs font-bold text-[#3A7A68]">입력 영역 목록</p>
+      <p className="text-xs font-bold text-[#3A7A68]">입력 진행 상황</p>
       <div className="mt-3 max-h-[420px] space-y-2 overflow-auto pr-1">
-        {session.regions.map((region, index) => (
-          <button
+        {regions.map((region, index) => (
+          <div
             key={region.id}
-            type="button"
-            onClick={() => onSelect(region)}
             className={[
-              'grid w-full grid-cols-[28px_1fr] gap-2 rounded-xl border px-3 py-2 text-left text-sm transition',
-              selected?.id === region.id ? 'border-[#245D50] bg-[#F0F7F3] text-[#24312D]' : 'border-[#E4EBE7] text-[#65736E] hover:bg-[#F8FBFA]',
+              'grid grid-cols-[28px_1fr_auto] gap-2 rounded-xl border px-3 py-2 text-sm',
+              selected?.id === region.id ? 'border-[#245D50] bg-[#F0F7F3] text-[#24312D]' : 'border-[#E4EBE7] text-[#65736E]',
             ].join(' ')}
           >
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-bold text-[#245D50]">{index + 1}</span>
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-bold text-[#245D50]">
+              {regionNumber(region, index)}
+            </span>
             <span className="min-w-0">
               <span className="block font-bold">{region.label}</span>
               <span className="mt-1 block truncate text-xs">{region.value || '미입력'}</span>
             </span>
-          </button>
+            <span className={['mt-0.5 h-2 w-2 rounded-full', region.value.trim() ? 'bg-[#3A7A68]' : 'bg-[#D7E2DD]'].join(' ')} />
+          </div>
         ))}
       </div>
     </section>

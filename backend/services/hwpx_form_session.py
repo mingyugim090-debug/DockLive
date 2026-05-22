@@ -47,6 +47,7 @@ def create_form_session(raw_content: bytes, filename: str) -> dict[str, Any]:
     if not regions:
         warnings.append("편집 가능한 입력 영역을 자동으로 찾지 못했습니다. 문서 전체 요약 영역을 대신 제공합니다.")
         regions = [_fallback_region()]
+    _normalize_region_layout(regions, max(1, len(pages)))
 
     stored = storage.save_source_file(session_id, source_filename, hwpx_content, HWPX_MEDIA_TYPE)
     now = utc_now_iso()
@@ -83,6 +84,34 @@ def update_region(session_id: str, region_id: str, value: str = "", prompt: str 
     region["value"] = value
     region["prompt"] = prompt
     region["draft_status"] = "revised" if value.strip() else "empty"
+    session["status"] = "editing"
+    session["updated_at"] = utc_now_iso()
+    _save_session(session)
+    return _public_session(session)
+
+
+def add_component(session_id: str, kind: str = "textarea", label: str = "", value: str = "") -> dict[str, Any]:
+    session = _load_session(session_id)
+    component_kind = kind if kind in {"text", "textarea", "signature", "table"} else "textarea"
+    label = (label or _default_component_label(component_kind)).strip()
+    region = {
+        "id": f"component-{uuid.uuid4().hex[:16]}",
+        "kind": component_kind,
+        "label": label,
+        "display_order": len(session.get("regions", [])) + 1,
+        "page_index": max(0, len(session.get("pages") or []) - 1),
+        "bbox": {"x": 1.0, "y": 92.0, "width": 98.0, "height": 5.0},
+        "value": (value or _default_component_value(component_kind)).strip(),
+        "prompt": "",
+        "draft_status": "revised" if value.strip() else "empty",
+        "source_ref": {
+            "type": "append_block",
+            "component": component_kind,
+            "section_path": "Contents/section0.xml",
+        },
+    }
+    session.setdefault("regions", []).append(region)
+    _normalize_region_layout(session["regions"], max(1, len(session.get("pages") or [])))
     session["status"] = "editing"
     session["updated_at"] = utc_now_iso()
     _save_session(session)
@@ -256,6 +285,7 @@ def _region(section_path: str, kind: str, order: int, page_count: int, label: st
         "id": f"region-{uuid.uuid5(uuid.NAMESPACE_URL, section_path + json.dumps(source_ref, sort_keys=True)).hex[:16]}",
         "kind": kind,
         "label": _clean_label(label) or f"입력 영역 {order + 1}",
+        "display_order": order + 1,
         "page_index": page_index,
         "bbox": {"x": 7.0, "y": 7.0 + slot * 6.2, "width": 86.0, "height": 5.4 if kind == "text" else 9.5},
         "value": value.strip(),
@@ -265,10 +295,74 @@ def _region(section_path: str, kind: str, order: int, page_count: int, label: st
     }
 
 
+def _normalize_region_layout(regions: list[dict[str, Any]], page_count: int) -> None:
+    if not regions:
+        return
+    page_count = max(1, page_count)
+    if page_count <= 1:
+        page_size = len(regions)
+    else:
+        page_size = max(1, (len(regions) + page_count - 1) // page_count)
+
+    for index, region in enumerate(regions):
+        page_index = min(page_count - 1, index // page_size)
+        page_position = index % page_size
+        current_page_count = min(page_size, len(regions) - page_index * page_size)
+        denominator = max(current_page_count - 1, 1)
+        y = 4.0 + (page_position / denominator) * 88.0
+        height = 3.6 if region.get("kind") == "text" else 5.2
+        region["display_order"] = index + 1
+        region["page_index"] = page_index
+        region["bbox"] = {
+            "x": 1.0,
+            "y": min(93.0, y),
+            "width": 98.0,
+            "height": height,
+        }
+
+
+def _default_component_label(kind: str) -> str:
+    return {
+        "table": "추가 표",
+        "signature": "서명란",
+        "text": "추가 문구",
+        "textarea": "추가 작성 영역",
+    }.get(kind, "추가 작성 영역")
+
+
+def _default_component_value(kind: str) -> str:
+    if kind == "table":
+        return "항목 | 내용\n--- | ---\n"
+    if kind == "signature":
+        return "2026년    월    일\n성명:                 (서명 또는 인)"
+    if kind == "text":
+        return "추가 문구를 입력하세요."
+    return ""
+
+
+def _fallback_draft_text(session: dict[str, Any], region: dict[str, Any], base_input: str, prompt: str) -> str:
+    label = str(region.get("label") or "해당 항목").strip()
+    current = str(region.get("value") or "").strip()
+    facts = base_input.strip() or current
+    request = prompt.strip()
+    if region.get("kind") in {"text", "checkbox", "signature"}:
+        return facts or current or request or f"{label} 입력값"
+
+    title = str(session.get("analysis", {}).get("title") or "신청서").strip()
+    lines = [
+        f"{title}의 {label} 항목에 맞춰 작성한 초안입니다.",
+        facts or "사용자가 제공한 기본 정보를 바탕으로 목적과 필요성을 구체적으로 정리합니다.",
+    ]
+    if request:
+        lines.append(f"요청사항을 반영하여 {request} 방향으로 문장을 다듬었습니다.")
+    lines.append("제출 전 실제 경험, 일정, 금액, 성명처럼 사실 확인이 필요한 내용은 한 번 더 확인해 주세요.")
+    return "\n".join(lines)
+
+
 def _generate_region_text(session: dict[str, Any], region: dict[str, Any], base_input: str, prompt: str) -> str:
-    fallback = "\n".join(part for part in [base_input.strip(), prompt.strip()] if part).strip()
+    fallback = _fallback_draft_text(session, region, base_input, prompt)
     if should_use_mock_ai():
-        return fallback or region.get("value") or ""
+        return fallback
     system_prompt = "You write concise Korean application-form content. Return JSON only."
     user_prompt = json.dumps(
         {
@@ -283,18 +377,21 @@ def _generate_region_text(session: dict[str, Any], region: dict[str, Any], base_
     )
     try:
         data = call_json("draft", system_prompt, user_prompt, max_tokens=1400)
-        return str(data.get("content") or data.get("text") or fallback or region.get("value") or "").strip()
+        return str(data.get("content") or data.get("text") or fallback).strip()
     except Exception:
-        return fallback or region.get("value") or ""
+        return fallback
 
 
 def _clone_with_region_replacements(source_path: Path, output_path: Path, regions: list[dict[str, Any]]) -> None:
     replacements_by_section: dict[str, list[dict[str, Any]]] = {}
+    appends_by_section: dict[str, list[dict[str, Any]]] = {}
     for region in regions:
         value = str(region.get("value") or "").strip()
         source_ref = region.get("source_ref") or {}
         section_path = source_ref.get("section_path")
-        if value and section_path:
+        if source_ref.get("type") == "append_block" and (value or region.get("label")):
+            appends_by_section.setdefault(section_path or "Contents/section0.xml", []).append(region)
+        elif value and section_path:
             replacements_by_section.setdefault(section_path, []).append(region)
 
     with zipfile.ZipFile(source_path, "r") as zin:
@@ -303,6 +400,8 @@ def _clone_with_region_replacements(source_path: Path, output_path: Path, region
                 data = zin.read(item.filename)
                 if item.filename in replacements_by_section:
                     data = _replace_section_xml(data, replacements_by_section[item.filename])
+                if item.filename in appends_by_section:
+                    data = _append_regions_to_section_xml(data, appends_by_section[item.filename])
                 if item.filename == "mimetype":
                     zout.writestr(item, data, compress_type=zipfile.ZIP_STORED)
                 else:
@@ -321,6 +420,81 @@ def _replace_section_xml(data: bytes, regions: list[dict[str, Any]]) -> bytes:
     from lxml import etree
 
     return etree.tostring(root, encoding="utf-8", xml_declaration=True, standalone=True)
+
+
+def _append_regions_to_section_xml(data: bytes, regions: list[dict[str, Any]]) -> bytes:
+    root = _xml_root(data)
+    template = _paragraph_template(root)
+    next_id = _next_paragraph_id(root)
+    for region in regions:
+        for line in _append_component_lines(region):
+            para = deepcopy(template) if template is not None else _make_simple_paragraph(next_id)
+            next_id += 1
+            para.set("id", str(next_id))
+            _remove_section_properties(para)
+            _set_first_text(para, line)
+            root.append(para)
+    from lxml import etree
+
+    return etree.tostring(root, encoding="utf-8", xml_declaration=True, standalone=True)
+
+
+def _paragraph_template(root: Any) -> Any | None:
+    paragraphs = _children(root, "p")
+    for para in reversed(paragraphs):
+        if not any(_local(node.tag) == "tbl" for node in para.iter()):
+            return para
+    return paragraphs[-1] if paragraphs else None
+
+
+def _next_paragraph_id(root: Any) -> int:
+    ids: list[int] = []
+    for para in _children(root, "p"):
+        try:
+            ids.append(int(para.get("id") or 0))
+        except ValueError:
+            continue
+    return max(ids or [899000])
+
+
+def _append_component_lines(region: dict[str, Any]) -> list[str]:
+    label = str(region.get("label") or "추가 영역").strip()
+    value = str(region.get("value") or "").strip()
+    kind = str(region.get("kind") or "textarea")
+    if kind == "table":
+        rows = [line.strip() for line in value.splitlines() if line.strip() and set(line.strip()) != {"-"}]
+        return [f"{label}:"] + rows if rows else [label]
+    if kind == "signature":
+        return [label] + ([value] if value else ["성명:                 (서명 또는 인)"])
+    if value:
+        return [f"{label}: {value}"]
+    return [label]
+
+
+def _remove_section_properties(node: Any) -> None:
+    for child in list(node.iter()):
+        if _local(child.tag) in {"secPr", "colPr"}:
+            parent = child.getparent()
+            if parent is not None:
+                parent.remove(child)
+
+
+def _make_simple_paragraph(paragraph_id: int) -> Any:
+    from lxml import etree
+
+    hp_ns = "http://www.hancom.co.kr/hwpml/2011/paragraph"
+    para = etree.Element(
+        f"{{{hp_ns}}}p",
+        id=str(paragraph_id),
+        paraPrIDRef="1",
+        styleIDRef="0",
+        pageBreak="0",
+        columnBreak="0",
+        merged="0",
+    )
+    run = etree.SubElement(para, f"{{{hp_ns}}}run", charPrIDRef="0")
+    etree.SubElement(run, f"{{{hp_ns}}}t")
+    return para
 
 
 def _replace_table_cell(root: Any, source_ref: dict[str, Any], value: str) -> None:
@@ -484,6 +658,7 @@ def _fallback_region() -> dict[str, Any]:
         "id": "region-document-summary",
         "kind": "textarea",
         "label": "문서 입력 내용",
+        "display_order": 1,
         "page_index": 0,
         "bbox": {"x": 8.0, "y": 10.0, "width": 84.0, "height": 12.0},
         "value": "",

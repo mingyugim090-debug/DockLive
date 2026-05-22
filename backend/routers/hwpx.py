@@ -12,6 +12,7 @@ from core.errors import AnalysisError
 from models.schemas import (
     ExportResponse,
     HwpxComposeResponse,
+    HwpxComponentCreateRequest,
     HwpxConvertResponse,
     HwpxFormSessionResponse,
     HwpxRegionDraftRequest,
@@ -24,6 +25,7 @@ from services.document_ingestion import convert_hwp_to_hwpx
 from services.drafting_service import export_markdown_to_hwpx_with_validation, get_hwpx_toolchain_status, hwpx_bytes_to_base64
 from services.hwpx_compose_service import compose_hwpx
 from services.hwpx_form_session import (
+    add_component,
     create_form_session,
     draft_region,
     export_form_session,
@@ -100,6 +102,12 @@ async def update_hwpx_form_region(session_id: str, region_id: str, payload: Hwpx
 @router.post("/hwpx/sessions/{session_id}/regions/{region_id}/draft", response_model=HwpxFormSessionResponse)
 async def draft_hwpx_form_region(session_id: str, region_id: str, payload: HwpxRegionDraftRequest):
     session = draft_region(session_id, region_id, payload.base_input, payload.prompt)
+    return HwpxFormSessionResponse(data=session)
+
+
+@router.post("/hwpx/sessions/{session_id}/components", response_model=HwpxFormSessionResponse)
+async def add_hwpx_form_component(session_id: str, payload: HwpxComponentCreateRequest):
+    session = add_component(session_id, payload.kind, payload.label, payload.value)
     return HwpxFormSessionResponse(data=session)
 
 

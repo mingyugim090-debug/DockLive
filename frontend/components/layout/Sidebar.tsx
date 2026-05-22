@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 
 const items = [
   { href: '/app', label: 'Workspace', icon: '문' },
+  { href: '/app/templates', label: 'Templates', icon: '템', child: true },
   { href: '/app/documents', label: 'Documents', icon: '함' },
   { href: '/app/billing', label: 'Billing', icon: '원' },
   { href: '/app/settings', label: 'Settings', icon: '설' },
@@ -47,6 +48,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                 onClick={onClose}
                 className={[
                   'flex items-center gap-3 rounded-full px-4 py-3 text-sm font-semibold transition',
+                  item.child ? 'ml-7' : '',
                   active
                     ? 'bg-[#E7F1ED] text-[#245D50]'
                     : 'text-[#65736E] hover:bg-[#F3F7F5] hover:text-[#24312D]',
