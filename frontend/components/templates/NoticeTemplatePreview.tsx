@@ -36,11 +36,11 @@ export function NoticeTemplatePreviewModal({
               닫기
             </Button>
             <Link
-              href={`/app?template=${template.id}`}
+              href="/app/templates"
               className="inline-flex items-center justify-center rounded-full bg-[#245D50] px-5 py-2.5 text-sm font-semibold text-white transition hover:brightness-105"
               onClick={onClose}
             >
-              이 초안으로 작성하기
+              이 샘플로 제작하기
             </Link>
           </div>
         </div>

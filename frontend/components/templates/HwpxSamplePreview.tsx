@@ -451,7 +451,7 @@ export function HwpxSamplePreview({ template }: { template: SampleTemplate }) {
         <span className="text-[11px] font-semibold text-[#52615B]">{template.fileName}</span>
         {!hasPdf && (
           <span className="ml-auto rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[9px] font-semibold text-[#92400E]">
-            HTML 미리보기
+            HWPX 구조 미리보기
           </span>
         )}
       </div>

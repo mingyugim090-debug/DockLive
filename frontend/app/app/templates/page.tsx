@@ -1,46 +1,29 @@
-import Link from 'next/link';
-import { sampleTemplates } from '@/data/sampleTemplates';
+import { GovernmentNoticeTemplateStudio } from '@/components/templates/GovernmentNoticeTemplateStudio';
 
 export default function TemplatesPage() {
   return (
-    <div className="space-y-6">
-      <section className="rounded-2xl border border-[#DDE7E2] bg-white p-6 shadow-sm">
-        <p className="text-sm font-bold text-[#3A7A68]">Workspace Templates</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-normal text-[#24312D]">자주 쓰는 HWPX 템플릿</h1>
-        <p className="mt-3 max-w-3xl text-sm leading-7 text-[#65736E]">
-          업로드 기반 HWPX 자동작성 흐름과 별도로, 공고문 유형별 기본 템플릿을 Workspace 아래에서 관리합니다.
-        </p>
+    <div className="space-y-5">
+      <section className="rounded-lg border border-[#DDE4EA] bg-white p-5 shadow-panel">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-sm font-bold text-[#2563EB]">Templates</p>
+            <h1 className="mt-2 text-3xl font-extrabold tracking-normal text-[#172033]">샘플 HWPX 기반 공고문 제작</h1>
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-[#64748B]">
+              공공기관 담당자가 샘플 공고문 구조를 확인하고, 실제 요청사항을 입력해 HWPX 제출본을 준비하는 작업 화면입니다.
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center text-xs font-bold text-[#475569]">
+            {['샘플 선택', '구조 확인', '제작 입력'].map((step, index) => (
+              <div key={step} className="rounded-md border border-[#E3E8EF] bg-[#F8FAFC] px-3 py-2">
+                <span className="block text-[#2563EB]">{index + 1}</span>
+                {step}
+              </div>
+            ))}
+          </div>
+        </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {sampleTemplates.map((template) => (
-          <article key={template.id} className="rounded-2xl border border-[#DDE7E2] bg-white p-5 shadow-sm">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-bold text-[#3A7A68]">{template.category}</p>
-                <h2 className="mt-2 text-lg font-extrabold text-[#24312D]">{template.name}</h2>
-              </div>
-              <span className="rounded-full bg-[#E7F1ED] px-3 py-1 text-xs font-bold text-[#245D50]">HWPX</span>
-            </div>
-            <p className="mt-3 min-h-[72px] text-sm leading-6 text-[#65736E]">{template.description}</p>
-            <div className="mt-4 rounded-xl border border-[#E4EBE7] bg-[#F8FBFA] p-3">
-              <p className="text-xs font-bold text-[#65736E]">주요 입력 필드</p>
-              <p className="mt-2 text-sm leading-6 text-[#24312D]">{template.editableFields.slice(0, 5).join(', ')}</p>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Link
-                href={`/app?template=${template.id}`}
-                className="inline-flex items-center justify-center rounded-full bg-[#245D50] px-4 py-2 text-sm font-semibold text-white transition hover:brightness-105"
-              >
-                Workspace에서 시작
-              </Link>
-              <span className="inline-flex items-center justify-center rounded-full border border-[#DDE7E2] bg-white px-4 py-2 text-sm font-semibold text-[#65736E]">
-                {template.fileName}
-              </span>
-            </div>
-          </article>
-        ))}
-      </section>
+      <GovernmentNoticeTemplateStudio />
     </div>
   );
 }
