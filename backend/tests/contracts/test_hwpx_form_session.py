@@ -30,7 +30,9 @@ class HwpxFormSessionTests(unittest.TestCase):
 
         self.assertTrue(session["id"].startswith("hwpx-"))
         self.assertGreaterEqual(len(session["pages"]), 1)
-        self.assertGreaterEqual(len(session["regions"]), 1)
+        self.assertGreaterEqual(len(session["regions"]), 50)
+        self.assertTrue(any(region["source_ref"].get("type") == "table_cell" for region in session["regions"]))
+        self.assertTrue(any("서명" in region["value"] or "귀하" in region["value"] for region in session["regions"]))
 
         first_region = session["regions"][0]
         update_region(session["id"], first_region["id"], "테스트 입력값", "")

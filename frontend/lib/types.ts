@@ -255,6 +255,7 @@ export interface HwpxTemplateCell {
   width?: number;
   background?: string;
   editable?: boolean;
+  source_ref?: Record<string, unknown>;
 }
 
 export interface HwpxTemplateBlock {
@@ -266,6 +267,7 @@ export interface HwpxTemplateBlock {
   rows: HwpxTemplateCell[][];
   style?: HwpxTextStyle;
   options?: HwpxCheckboxOption[];
+  source_ref?: Record<string, unknown>;
 }
 
 export interface HwpxTemplateField {

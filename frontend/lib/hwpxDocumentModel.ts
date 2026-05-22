@@ -141,24 +141,16 @@ function convertTemplateBlocks(block: HwpxTemplateBlock, index: number): HwpxBlo
         align: cell.align ?? (rowIndex === 0 || cellIndex === 0 ? 'center' : 'left'),
         verticalAlign: cell.vertical_align === 'bottom' ? 'bottom' : cell.vertical_align === 'top' ? 'top' : 'middle',
         background: cell.background ?? (rowIndex === 0 || cellIndex === 0 ? '#f1f5f2' : undefined),
-        editable: cell.editable ?? cellIndex > 0,
+        editable: true,
       })),
     }));
-    const trailingBlocks: HwpxBlock[] = [];
-    while (rows.length > 1) {
-      const row = rows[rows.length - 1];
-      const onlyCell = row.cells.length === 1 ? row.cells[0] : null;
-      if (!onlyCell || !looksLikeTrailingCertification(onlyCell.text)) break;
-      rows.pop();
-      trailingBlocks.unshift(...certificationBlocks(block.id || `uploaded-table-${index}`, onlyCell.text));
-    }
-    if (!rows.length) return trailingBlocks;
+    if (!rows.length) return [];
     return [{
       id: block.id || `uploaded-table-${index}`,
       type: 'table',
       style: { borderCollapse: true, width: '100%' },
       rows,
-    }, ...trailingBlocks];
+    }];
   }
 
   const text = sanitizeDocumentText(block.text);

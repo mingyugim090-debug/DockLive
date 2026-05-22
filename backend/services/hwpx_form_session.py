@@ -254,14 +254,15 @@ def _extract_editable_regions(content: bytes, page_count: int) -> list[dict[str,
                         table_index += 1
                     continue
                 text = _node_text(para)
-                if _looks_like_writing_paragraph(text):
+                if _should_expose_paragraph(text):
+                    kind = "textarea" if len(text) > 80 or _is_long_text_label(text) else "text"
                     regions.append(
                         _region(
                             section_path,
-                            "paragraph",
+                            kind,
                             len(regions),
                             page_count,
-                            text,
+                            _paragraph_label(text, current_paragraph_index),
                             text,
                             {
                                 "type": "paragraph",
@@ -270,7 +271,7 @@ def _extract_editable_regions(content: bytes, page_count: int) -> list[dict[str,
                             },
                         )
                     )
-    return regions[:120]
+    return regions
 
 
 def _table_regions(section_path: str, table: Any, table_index: int, start_order: int, page_count: int) -> list[dict[str, Any]]:
@@ -283,8 +284,6 @@ def _table_regions(section_path: str, table: Any, table_index: int, start_order:
             text = texts[cell_index].strip()
             prev = texts[cell_index - 1].strip() if cell_index > 0 else ""
             next_text = texts[cell_index + 1].strip() if cell_index + 1 < len(texts) else ""
-            if not _looks_editable_cell(text, prev, cell_index, next_text):
-                continue
             label = _label_for_cell(prev, text, row_index, cell_index)
             kind = "textarea" if _is_long_text_label(label) else "text"
             order = start_order + len(regions)
@@ -295,7 +294,7 @@ def _table_regions(section_path: str, table: Any, table_index: int, start_order:
                 "row": _int_attr(_first_child(cell, "cellAddr"), "rowAddr", row_index),
                 "col": _int_attr(_first_child(cell, "cellAddr"), "colAddr", cell_index),
             }
-            regions.append(_region(section_path, kind, order, page_count, label, "" if _is_placeholder(text) else text, source_ref))
+            regions.append(_region(section_path, kind, order, page_count, label, text, source_ref))
     return regions
 
 
@@ -412,7 +411,7 @@ def _clone_with_region_replacements(source_path: Path, output_path: Path, region
         section_path = source_ref.get("section_path")
         if source_ref.get("type") == "append_block" and (value or region.get("label")):
             appends_by_section.setdefault(section_path or "Contents/section0.xml", []).append(region)
-        elif value and section_path:
+        elif section_path:
             replacements_by_section.setdefault(section_path, []).append(region)
 
     with zipfile.ZipFile(source_path, "r") as zin:
@@ -694,6 +693,22 @@ def _looks_like_writing_paragraph(text: str) -> bool:
     if any(token in text for token in ("LiveDock", "DockLive", "자동화 예시", "자동작성")):
         return False
     return 8 <= len(text) <= 120 and _is_long_text_label(text)
+
+
+def _should_expose_paragraph(text: str) -> bool:
+    value = text.strip()
+    if not value:
+        return False
+    if any(token in value for token in ("LiveDock", "DockLive", "자동화 예시", "자동작성")):
+        return False
+    return True
+
+
+def _paragraph_label(text: str, paragraph_index: int) -> str:
+    value = re.sub(r"\s+", " ", text).strip()
+    if len(value) <= 42:
+        return value
+    return f"{paragraph_index + 1}번 문단"
 
 
 def _clean_label(label: str) -> str:

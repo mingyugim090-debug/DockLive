@@ -1028,7 +1028,6 @@ function modelStructureItems(model: HwpxDocumentModel) {
         const cells = block.rows
           .flatMap((row) => row.cells)
           .filter((cell) => cell.editable)
-          .slice(0, 8)
           .map((cell) => ({ id: `cell:${block.id}:${cell.id}`, label: `${prefix}표 셀 - ${cell.text.slice(0, 22) || '입력칸'}` }));
         return [{ id: `block:${block.id}`, label: `${prefix}표 ${blockIndex + 1}` }, ...cells];
       }

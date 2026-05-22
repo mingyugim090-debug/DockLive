@@ -82,7 +82,7 @@ def analyze_hwpx_template_bytes(content: bytes, source_filename: str) -> dict:
             except ElementTree.ParseError as exc:
                 warnings.append(f"{name} XML을 해석하지 못했습니다: {exc}")
                 continue
-            blocks.extend(_parse_section(root, section_index))
+            blocks.extend(_parse_section(root, section_index, name))
 
     _assign_roles(blocks)
     fields = _extract_fields(blocks)
@@ -97,9 +97,9 @@ def analyze_hwpx_template_bytes(content: bytes, source_filename: str) -> dict:
         "title": title,
         "organization": organization,
         "summary": _compact(all_text, 700),
-        "blocks": blocks[:180],
-        "fields": fields[:80],
-        "sections": sections[:40],
+        "blocks": blocks,
+        "fields": fields,
+        "sections": sections,
         "attachments": _guess_attachments(all_text, fields),
         "preview_image": preview_image,
         "stats": {
@@ -143,15 +143,21 @@ class PathLikeBytes:
         return True
 
 
-def _parse_section(root: ElementTree.Element, section_index: int) -> list[dict]:
+def _parse_section(root: ElementTree.Element, section_index: int, section_path: str) -> list[dict]:
     blocks: list[dict] = []
     metadata_started = False
+    table_index = 0
+    paragraph_index = 0
     for child in list(root):
         if _local(child.tag) != "p":
             continue
+        current_paragraph_index = paragraph_index
+        paragraph_index += 1
         tables = [node for node in child.iter() if _local(node.tag) == "tbl"]
         if tables:
             for table in tables:
+                current_table_index = table_index
+                table_index += 1
                 table_width = _table_width(table)
                 rows = _parse_table(table, table_width)
                 table_text = _table_to_text(rows)
@@ -170,6 +176,11 @@ def _parse_section(root: ElementTree.Element, section_index: int) -> list[dict]:
                             "text": table_text,
                             "rows": rows,
                             "style": {"width": "100%", "hwpx_width": table_width},
+                            "source_ref": {
+                                "type": "table",
+                                "section_path": section_path,
+                                "table_index": current_table_index,
+                            },
                         }
                     )
             continue
@@ -192,6 +203,11 @@ def _parse_section(root: ElementTree.Element, section_index: int) -> list[dict]:
                     "rows": [],
                     "style": _paragraph_style(child),
                     "options": _checkbox_options(text) if block_type == "checkboxGroup" else [],
+                    "source_ref": {
+                        "type": "paragraph",
+                        "section_path": section_path,
+                        "paragraph_index": current_paragraph_index,
+                    },
                 }
             )
     return blocks
