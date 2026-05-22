@@ -325,6 +325,12 @@ export interface HwpxFormSession {
     title?: string;
     organization?: string;
     summary?: string;
+    blocks?: HwpxTemplateBlock[];
+    fields?: HwpxTemplateField[];
+    sections?: HwpxTemplateSection[];
+    attachments?: string[];
+    preview_image?: string | null;
+    stats?: Record<string, number>;
   };
   pages: HwpxRenderPage[];
   regions: HwpxEditableRegion[];

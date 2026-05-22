@@ -62,6 +62,11 @@ def create_form_session(raw_content: bytes, filename: str) -> dict[str, Any]:
             "organization": analysis.get("organization") or "",
             "summary": analysis.get("summary") or "",
             "stats": analysis.get("stats") or {},
+            "blocks": analysis.get("blocks") or [],
+            "fields": analysis.get("fields") or [],
+            "sections": analysis.get("sections") or [],
+            "attachments": analysis.get("attachments") or [],
+            "preview_image": analysis.get("preview_image"),
         },
         "pages": pages,
         "regions": regions,
@@ -240,6 +245,8 @@ def _extract_editable_regions(content: bytes, page_count: int) -> list[dict[str,
             table_index = 0
             paragraph_index = 0
             for para in _children(root, "p"):
+                current_paragraph_index = paragraph_index
+                paragraph_index += 1
                 tables = [node for node in para.iter() if _local(node.tag) == "tbl"]
                 if tables:
                     for table in tables:
@@ -248,8 +255,21 @@ def _extract_editable_regions(content: bytes, page_count: int) -> list[dict[str,
                     continue
                 text = _node_text(para)
                 if _looks_like_writing_paragraph(text):
-                    regions.append(_region(section_path, "paragraph", len(regions), page_count, text, text, {"paragraph_index": paragraph_index}))
-                paragraph_index += 1
+                    regions.append(
+                        _region(
+                            section_path,
+                            "paragraph",
+                            len(regions),
+                            page_count,
+                            text,
+                            text,
+                            {
+                                "type": "paragraph",
+                                "section_path": section_path,
+                                "paragraph_index": current_paragraph_index,
+                            },
+                        )
+                    )
     return regions[:120]
 
 
@@ -262,7 +282,8 @@ def _table_regions(section_path: str, table: Any, table_index: int, start_order:
         for cell_index, cell in enumerate(cells):
             text = texts[cell_index].strip()
             prev = texts[cell_index - 1].strip() if cell_index > 0 else ""
-            if not _looks_editable_cell(text, prev, cell_index):
+            next_text = texts[cell_index + 1].strip() if cell_index + 1 < len(texts) else ""
+            if not _looks_editable_cell(text, prev, cell_index, next_text):
                 continue
             label = _label_for_cell(prev, text, row_index, cell_index)
             kind = "textarea" if _is_long_text_label(label) else "text"
@@ -618,19 +639,43 @@ def _int_attr(node: Any | None, name: str, fallback: int) -> int:
         return fallback
 
 
-def _looks_editable_cell(text: str, prev: str, cell_index: int) -> bool:
+def _looks_editable_cell(text: str, prev: str, cell_index: int, next_text: str = "") -> bool:
     if cell_index == 0 and text and not _is_placeholder(text):
         return False
-    if _is_placeholder(text) or not text:
-        return True
-    if prev and len(prev) <= 40 and not _is_placeholder(prev):
+    if not text or _is_placeholder(text):
+        return bool(prev and _looks_like_cell_label(prev) and not _looks_like_title_label(prev))
+    if text.strip().endswith((":", "：")):
+        return False
+    if _looks_like_cell_label(text) and next_text:
+        return False
+    if prev and _looks_like_cell_label(prev) and not _looks_like_title_label(prev):
         return True
     return _is_long_text_label(prev)
 
 
 def _is_placeholder(text: str) -> bool:
     value = text.strip()
-    return not value or value in {"입력 필요", "작성 필요", "기재", "해당 없음"} or "입력" in value or "작성" in value
+    return (
+        not value
+        or value in {"입력 필요", "작성 필요", "기재", "해당 없음"}
+        or "입력" in value
+        or "작성" in value
+        or value.startswith(("예)", "예시", "OO", "○○"))
+    )
+
+
+def _looks_like_cell_label(text: str) -> bool:
+    value = re.sub(r"\s+", "", text.strip().rstrip(":："))
+    if not value or len(value) > 35:
+        return False
+    if any(token in value for token in ("성명", "이름", "학과", "학번", "사번", "소속", "연락처", "이메일", "동아리명", "구분", "목표", "방법", "계획", "내용", "월")):
+        return True
+    return bool(re.fullmatch(r"[가-힣A-Za-z0-9/()·]+", value)) and len(value) <= 12
+
+
+def _looks_like_title_label(text: str) -> bool:
+    value = text.strip()
+    return any(token in value for token in ("서식", "신청서", "계획서", "동의서", "공고", "안내"))
 
 
 def _label_for_cell(prev: str, text: str, row: int, col: int) -> str:
@@ -646,6 +691,8 @@ def _is_long_text_label(label: str) -> bool:
 
 
 def _looks_like_writing_paragraph(text: str) -> bool:
+    if any(token in text for token in ("LiveDock", "DockLive", "자동화 예시", "자동작성")):
+        return False
     return 8 <= len(text) <= 120 and _is_long_text_label(text)
 
 

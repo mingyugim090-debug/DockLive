@@ -8,7 +8,7 @@ import {
   exportHwpxFormSession,
   updateHwpxRegion,
 } from '@/lib/api';
-import type { ExportResponse, HwpxEditableRegion, HwpxFormSession } from '@/lib/types';
+import type { ExportResponse, HwpxEditableRegion, HwpxFormSession, HwpxTemplateBlock, HwpxTemplateCell } from '@/lib/types';
 import { Button } from '@/components/ui/Button';
 
 type WorkflowStep = 'upload' | 'analysis' | 'edit' | 'generate' | 'review';
@@ -67,6 +67,57 @@ function writingRegions(regions: HwpxEditableRegion[]): HwpxEditableRegion[] {
       region.kind === 'textarea' ||
       /소개|동기|계획|내용|목표|방법|사유|자기|활동|지원/.test(region.label),
   );
+}
+
+function getAnalysisBlocks(session: HwpxFormSession): HwpxTemplateBlock[] {
+  return Array.isArray(session.analysis.blocks) ? session.analysis.blocks : [];
+}
+
+function toNumber(value: unknown, fallback = -1): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+  return fallback;
+}
+
+function sourceRefNumber(region: HwpxEditableRegion, key: string): number {
+  return toNumber(region.source_ref?.[key]);
+}
+
+function sourceRefText(region: HwpxEditableRegion, key: string): string {
+  const value = region.source_ref?.[key];
+  return typeof value === 'string' ? value : '';
+}
+
+function isTableRegion(region: HwpxEditableRegion, tableIndex: number, row: number, col: number): boolean {
+  return (
+    sourceRefText(region, 'type') === 'table_cell' &&
+    sourceRefNumber(region, 'table_index') === tableIndex &&
+    sourceRefNumber(region, 'row') === row &&
+    sourceRefNumber(region, 'col') === col
+  );
+}
+
+function cellAddress(cell: HwpxTemplateCell, rowIndex: number, cellIndex: number): { row: number; col: number } {
+  const match = String(cell.id ?? '').match(/cell-(\d+)-(\d+)/);
+  return {
+    row: match ? Number(match[1]) : rowIndex,
+    col: match ? Number(match[2]) : cellIndex,
+  };
+}
+
+function localDraftText(session: HwpxFormSession, region: HwpxEditableRegion, baseInput: string, promptText: string): string {
+  const facts = [baseInput, region.value].filter(Boolean).join('\n').trim();
+  if (region.kind === 'text' || region.kind === 'checkbox' || region.kind === 'signature') {
+    return facts || promptText || `${region.label} 입력값`;
+  }
+  return [
+    `${session.analysis.title || session.source_filename}의 ${region.label} 항목 초안입니다.`,
+    facts || '제공된 기본 정보를 바탕으로 목적, 필요성, 실행 내용을 구체적으로 정리했습니다.',
+    promptText ? `요청사항: ${promptText}` : '제출용 문체로 간결하고 명확하게 작성했습니다.',
+  ].join('\n');
 }
 
 export function HwpxFormEditor() {
@@ -198,7 +249,13 @@ export function HwpxFormEditor() {
       setSelectedId(selected.id);
       setPrompt(updated?.prompt ?? nextPrompt);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'AI 초안 생성에 실패했습니다.');
+      const fallback = localDraftText(session, selected, baseInput, prompt);
+      setRegionLocal(selected, fallback, prompt);
+      setError(
+        err instanceof Error
+          ? `${err.message} 로컬 초안으로 먼저 반영했습니다.`
+          : 'AI 초안 생성 응답이 지연되어 로컬 초안으로 먼저 반영했습니다.',
+      );
     } finally {
       setBusy(null);
     }
@@ -215,11 +272,24 @@ export function HwpxFormEditor() {
       const targets = ordered.filter((region) => region.kind === 'textarea' || !region.value.trim());
       const regionsToDraft = targets.length ? targets : ordered;
       for (const region of regionsToDraft) {
-        const response = await draftHwpxRegion(latest.id, region.id, {
-          baseInput: [globalBaseInput, region.value].filter(Boolean).join('\n\n'),
-          prompt: globalPrompt || region.prompt || `${region.label} 항목을 공고문 문체에 맞게 구체적으로 작성해줘.`,
-        });
-        latest = response.data;
+        const baseForRegion = [globalBaseInput, region.value].filter(Boolean).join('\n\n');
+        const promptForRegion = globalPrompt || region.prompt || `${region.label} 항목을 공고문 문체에 맞게 구체적으로 작성해줘.`;
+        try {
+          const response = await draftHwpxRegion(latest.id, region.id, {
+            baseInput: baseForRegion,
+            prompt: promptForRegion,
+          });
+          latest = response.data;
+        } catch {
+          const fallback = localDraftText(latest, region, baseForRegion, promptForRegion);
+          latest = {
+            ...latest,
+            status: 'editing',
+            regions: latest.regions.map((item) =>
+              item.id === region.id ? { ...item, value: fallback, prompt: promptForRegion, draft_status: 'drafted' } : item,
+            ),
+          };
+        }
         setSession(latest);
       }
       setSelectedId(sortRegions(latest.regions)[0]?.id ?? null);
@@ -453,6 +523,8 @@ function AnalysisStep({
     compactText(session.analysis.summary, '업로드한 HWPX의 표 구조, 문단, 입력 영역을 분석했습니다.'),
     220,
   );
+  const fields = Array.isArray(session.analysis.fields) ? session.analysis.fields : [];
+  const sections = Array.isArray(session.analysis.sections) ? session.analysis.sections : [];
   const longRegions = writingRegions(regions);
   const keyItems = [
     `${regions.length}개 입력 영역을 원본 순서대로 정리했습니다.`,
@@ -500,7 +572,24 @@ function AnalysisStep({
         </div>
 
         <div className="rounded-2xl border border-[#E4EBE7] bg-[#F8FBFA] p-4">
-          <p className="text-sm font-bold text-[#24312D]">추출된 입력 영역</p>
+          <p className="text-sm font-bold text-[#24312D]">원본에서 찾은 주요 섹션</p>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            {(sections.length ? sections : fields).slice(0, 8).map((item, index) => {
+              const label = 'heading' in item ? item.heading : item.label;
+              const body = 'body' in item ? item.body : item.value;
+              return (
+                <div key={`${label}-${index}`} className="rounded-xl border border-[#DDE7E2] bg-white px-3 py-2 text-sm">
+                  <p className="font-bold text-[#24312D]">{truncate(label || `섹션 ${index + 1}`, 34)}</p>
+                  {body ? <p className="mt-1 truncate text-xs text-[#65736E]">{body}</p> : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-6 rounded-2xl border border-[#E4EBE7] bg-[#F8FBFA] p-4">
+        <p className="text-sm font-bold text-[#24312D]">추출된 입력 영역</p>
           <div className="mt-3 grid gap-2 md:grid-cols-2">
             {regions.slice(0, 28).map((region, index) => (
               <div key={region.id} className="rounded-xl border border-[#DDE7E2] bg-white px-3 py-2 text-sm">
@@ -511,7 +600,6 @@ function AnalysisStep({
               </div>
             ))}
           </div>
-        </div>
       </div>
 
       <div className="mt-6 flex justify-end gap-2">
@@ -684,6 +772,21 @@ function DocumentPreview({
   onSelect: (region: HwpxEditableRegion) => void;
   compact?: boolean;
 }) {
+  const blocks = getAnalysisBlocks(session);
+  if (blocks.length) {
+    return (
+      <section className={[compact ? 'max-h-[720px]' : 'h-[calc(100vh-260px)] min-h-[720px]', 'overflow-auto rounded-2xl border border-[#DDE7E2] bg-[#DDE5E1] p-6'].join(' ')}>
+        <HtmlHwpxDocument
+          session={session}
+          blocks={blocks}
+          regions={regions}
+          selected={selected}
+          onSelect={onSelect}
+        />
+      </section>
+    );
+  }
+
   return (
     <section className={[compact ? 'max-h-[720px]' : 'h-[calc(100vh-260px)] min-h-[720px]', 'overflow-auto rounded-2xl border border-[#DDE7E2] bg-[#E2E8E5] p-5'].join(' ')}>
       <div className="mx-auto flex max-w-[920px] flex-col gap-8">
@@ -739,6 +842,180 @@ function DocumentPreview({
         })}
       </div>
     </section>
+  );
+}
+
+function HtmlHwpxDocument({
+  session,
+  blocks,
+  regions,
+  selected,
+  onSelect,
+}: {
+  session: HwpxFormSession;
+  blocks: HwpxTemplateBlock[];
+  regions: HwpxEditableRegion[];
+  selected: HwpxEditableRegion | null;
+  onSelect: (region: HwpxEditableRegion) => void;
+}) {
+  let tableIndex = -1;
+  return (
+    <article className="mx-auto min-h-[1100px] w-full max-w-[760px] bg-white px-9 py-10 text-[#111827] shadow-[0_24px_70px_rgba(36,49,45,0.18)]">
+      <div className="mb-4 flex items-center justify-between border-b border-[#D8E2DC] pb-3 text-[11px] text-[#65736E]">
+        <span>구조 기반 HTML 편집</span>
+        <span>{session.source_filename}</span>
+      </div>
+      {blocks.map((block, blockIndex) => {
+        if (block.type === 'table') {
+          tableIndex += 1;
+          return (
+            <HtmlTableBlock
+              key={block.id || `table-${blockIndex}`}
+              block={block}
+              tableIndex={tableIndex}
+              regions={regions}
+              selected={selected}
+              onSelect={onSelect}
+            />
+          );
+        }
+        return <HtmlTextBlock key={block.id || `block-${blockIndex}`} block={block} regions={regions} selected={selected} onSelect={onSelect} />;
+      })}
+    </article>
+  );
+}
+
+function HtmlTextBlock({
+  block,
+  regions,
+  selected,
+  onSelect,
+}: {
+  block: HwpxTemplateBlock;
+  regions: HwpxEditableRegion[];
+  selected: HwpxEditableRegion | null;
+  onSelect: (region: HwpxEditableRegion) => void;
+}) {
+  const text = compactText(block.text);
+  if (!text) return null;
+  const paragraphRegion = regions.find((region) => sourceRefText(region, 'type') === 'paragraph' && compactText(region.label) === text);
+  const displayText = paragraphRegion?.value || text;
+  const active = selected?.id === paragraphRegion?.id;
+  const alignClass = block.style?.align === 'center' ? 'text-center' : block.style?.align === 'right' ? 'text-right' : 'text-left';
+  const content = (
+    <span className="whitespace-pre-wrap">
+      {paragraphRegion ? (
+        <span className="mr-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#E7F1ED] px-1 text-[10px] font-bold text-[#245D50]">
+          {regionNumber(paragraphRegion, regions.findIndex((item) => item.id === paragraphRegion.id))}
+        </span>
+      ) : null}
+      {displayText}
+    </span>
+  );
+
+  if (block.role === 'title' || block.type === 'heading') {
+    const className = [
+      'my-3 w-full rounded-md px-2 py-1 font-extrabold tracking-normal',
+      block.role === 'title' ? 'text-[24px] leading-9' : 'text-[15px] leading-7',
+      alignClass,
+      paragraphRegion ? 'cursor-pointer hover:bg-[#F2F7F4]' : '',
+      active ? 'bg-[#E7F1ED] ring-2 ring-[#245D50]' : '',
+    ].join(' ');
+    return paragraphRegion ? (
+      <button type="button" onClick={() => onSelect(paragraphRegion)} className={className}>
+        {content}
+      </button>
+    ) : (
+      <h3 className={className}>{content}</h3>
+    );
+  }
+
+  const className = [
+    'my-1 w-full rounded-md px-2 py-1 text-[12px] leading-6',
+    alignClass,
+    paragraphRegion ? 'cursor-pointer hover:bg-[#F2F7F4]' : '',
+    active ? 'bg-[#E7F1ED] ring-2 ring-[#245D50]' : '',
+  ].join(' ');
+  return paragraphRegion ? (
+    <button type="button" onClick={() => onSelect(paragraphRegion)} className={className}>
+      {content}
+    </button>
+  ) : (
+    <p className={className}>{content}</p>
+  );
+}
+
+function HtmlTableBlock({
+  block,
+  tableIndex,
+  regions,
+  selected,
+  onSelect,
+}: {
+  block: HwpxTemplateBlock;
+  tableIndex: number;
+  regions: HwpxEditableRegion[];
+  selected: HwpxEditableRegion | null;
+  onSelect: (region: HwpxEditableRegion) => void;
+}) {
+  return (
+    <table className="my-3 w-full table-fixed border-collapse text-[12px] leading-5">
+      <tbody>
+        {block.rows.map((row, rowIndex) => (
+          <tr key={`${block.id}-row-${rowIndex}`}>
+            {row.map((cell, cellIndex) => {
+              const address = cellAddress(cell, rowIndex, cellIndex);
+              const region = regions.find((item) => isTableRegion(item, tableIndex, address.row, address.col));
+              const active = selected?.id === region?.id;
+              const filled = Boolean(region?.value.trim());
+              const displayValue = region?.value || cell.text;
+              const width = cell.width ? `${Math.max(5, Math.min(100, cell.width))}%` : undefined;
+              return (
+                <td
+                  key={cell.id ?? `${rowIndex}-${cellIndex}`}
+                  rowSpan={cell.row_span}
+                  colSpan={cell.col_span}
+                  className={[
+                    'border border-[#1F2933] p-0 align-middle',
+                    cell.background ? '' : rowIndex === 0 || cellIndex === 0 ? 'bg-[#F1F4F2]' : 'bg-white',
+                  ].join(' ')}
+                  style={{ width, backgroundColor: cell.background }}
+                >
+                  {region ? (
+                    <button
+                      type="button"
+                      onClick={() => onSelect(region)}
+                      className={[
+                        'group relative flex min-h-[32px] w-full items-center gap-1 px-2 py-1 text-left transition',
+                        active ? 'bg-[#E7F1ED] ring-2 ring-inset ring-[#245D50]' : 'hover:bg-[#F5FAF7]',
+                        filled ? 'text-[#111827]' : 'text-[#93A19B]',
+                        cell.align === 'center' ? 'justify-center text-center' : cell.align === 'right' ? 'justify-end text-right' : '',
+                      ].join(' ')}
+                    >
+                      <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-white px-1 text-[10px] font-bold text-[#245D50] shadow-sm">
+                        {regionNumber(region, regions.findIndex((item) => item.id === region.id))}
+                      </span>
+                      <span className="min-w-0 whitespace-pre-wrap break-words">
+                        {displayValue || '입력 필요'}
+                      </span>
+                    </button>
+                  ) : (
+                    <div
+                      className={[
+                        'min-h-[32px] whitespace-pre-wrap break-words px-2 py-1',
+                        cell.align === 'center' ? 'text-center' : cell.align === 'right' ? 'text-right' : 'text-left',
+                      ].join(' ')}
+                    >
+                      {cell.text}
+                    </div>
+                  )}
+                </td>
+              );
+            })}
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
