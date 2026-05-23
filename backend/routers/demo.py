@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from models.schemas import AnalysisResponse
 from routers.analyze import persist_analysis_and_workflow
@@ -8,14 +8,17 @@ from services.mock_data import get_mock_result
 router = APIRouter()
 _demo_cache: dict = {}
 
+_VALID_TYPES = {"startup", "scholarship", "business_plan", "application", "research"}
+
 
 @router.get("/demo", response_model=AnalysisResponse)
-async def get_demo_result():
+async def get_demo_result(type: str = Query("startup", alias="type")):
     """Return a fixed demo analysis and create its workflow session."""
-    demo_id = "demo-fixed"
+    doc_type = type if type in _VALID_TYPES else "startup"
+    demo_id = f"demo-{doc_type}"
 
     if demo_id not in _demo_cache:
-        raw = get_mock_result()
+        raw = get_mock_result(doc_type)
         result = build_analysis_result(raw)
         result.id = demo_id
         _demo_cache[demo_id] = result

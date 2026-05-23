@@ -441,8 +441,9 @@ export async function exportNoticeDocx(document: NoticeDocument): Promise<Export
   return res.json();
 }
 
-export async function getDemo(): Promise<ApiResponse> {
-  const res = await fetch(`${API_URL}/api/demo`);
+export async function getDemo(docType?: string): Promise<ApiResponse> {
+  const url = docType ? `${API_URL}/api/demo?type=${encodeURIComponent(docType)}` : `${API_URL}/api/demo`;
+  const res = await fetch(url);
   if (!res.ok) throw await readError(res, `Demo 실패: ${res.status}`);
   return res.json();
 }

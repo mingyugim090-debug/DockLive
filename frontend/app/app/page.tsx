@@ -347,7 +347,7 @@ export default function AppPage() {
           onAnalyzeFile={(file) => handleAnalysis(() => analyzeDocument(file))}
           onAnalyzeUrl={(url) => handleAnalysis(() => analyzeUrl(url))}
           onAnalyzeText={(text, title) => handleAnalysis(() => analyzeText(text, title))}
-          onDemo={() => handleAnalysis(() => getDemo())}
+          onDemo={(docType) => handleAnalysis(() => getDemo(docType))}
           onHwpxMode={() => setHwpxMode(true)}
         />
       )}
@@ -432,7 +432,7 @@ function InputStep({
   onAnalyzeFile: (file: File) => void;
   onAnalyzeUrl: (url: string) => void;
   onAnalyzeText: (text: string, title: string) => void;
-  onDemo: () => void;
+  onDemo: (docType?: string) => void;
   onHwpxMode: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -563,18 +563,32 @@ function InputStep({
         </div>
       </section>
 
-      {/* Demo option */}
+      {/* Demo option — 5 doc-type quick-start buttons */}
       <section className="rounded-2xl border border-[#C8DBD2] bg-[#EDF7F2] p-5">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-sm font-bold text-[#245D50]">파일 없이 예시로 바로 체험</p>
-            <p className="mt-1 text-xs leading-5 text-[#3A7A68]">
-              샘플 공고문으로 AI 분석 → 초안 생성 → 다운로드 전 과정을 60초 안에 확인할 수 있습니다.
-            </p>
-          </div>
-          <Button onClick={onDemo} disabled={isAnalyzing}>
-            {isAnalyzing ? '분석 중...' : '예시 시작'}
-          </Button>
+        <p className="text-sm font-bold text-[#245D50]">파일 없이 유형별 예시로 바로 체험</p>
+        <p className="mt-1 text-xs leading-5 text-[#3A7A68]">
+          문서 유형을 선택하면 AI가 맞춤 질문으로 초안을 자동 생성합니다. (파일 불필요)
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {(
+            [
+              { id: 'startup', label: '공모전' },
+              { id: 'scholarship', label: '장학금' },
+              { id: 'business_plan', label: '지원사업' },
+              { id: 'application', label: '신청서' },
+              { id: 'research', label: '연구과제' },
+            ] as const
+          ).map((type) => (
+            <button
+              key={type.id}
+              type="button"
+              onClick={() => onDemo(type.id)}
+              disabled={isAnalyzing}
+              className="rounded-xl border border-[#C8DBD2] bg-white px-4 py-2 text-xs font-bold text-[#245D50] transition hover:border-[#3A7A68] hover:bg-[#F0FAF5] disabled:opacity-50"
+            >
+              {isAnalyzing ? '분석 중...' : type.label}
+            </button>
+          ))}
         </div>
       </section>
 
