@@ -409,22 +409,6 @@ def stream_draft_events(workflow: WorkflowSession) -> Iterator[dict]:
     yield {"type": "workflow_done", "workflow_id": workflow.id, "content": "초안 생성이 완료되었습니다.", "_workflow": workflow}
 
 
-def revise_section(workflow: WorkflowSession, section_id: str) -> WorkflowSession:
-    for draft in workflow.draft_sections:
-        if draft.section_id == section_id:
-            draft.content_markdown = (
-                draft.content_markdown
-                + "\n\n"
-                + f"### 사용자 피드백 반영\n{draft.user_feedback or '추가 피드백이 없습니다.'}"
-            ).strip()
-            draft.status = "revised"
-            draft.updated_at = utc_now_iso()
-            break
-    workflow.status = "reviewing"
-    workflow.updated_at = utc_now_iso()
-    return workflow
-
-
 def confirm_workflow(workflow: WorkflowSession) -> WorkflowSession:
     now = utc_now_iso()
     workflow.status = "confirmed"
@@ -1337,17 +1321,51 @@ def _single_section_prompt(workflow: WorkflowSession, draft: DraftSection) -> st
     )
 
 
+_REVISE_SYSTEM_PROMPT = (
+    "당신은 한국 공고문 작성 전문가입니다. "
+    "사용자의 피드백을 반영하여 해당 섹션을 한국어 마크다운으로 다시 작성하세요. "
+    "JSON, 코드블록, 설명 문구 없이 본문만 출력하세요."
+)
+
+
 def revise_section(workflow: WorkflowSession, section_id: str) -> WorkflowSession:
     for draft in workflow.draft_sections:
-        if draft.section_id == section_id:
+        if draft.section_id != section_id:
+            continue
+
+        feedback = draft.user_feedback or ""
+
+        if should_use_mock_ai() or not feedback.strip():
             draft.content_markdown = (
                 draft.content_markdown
                 + "\n\n"
-                + f"### 사용자 피드백 반영\n{draft.user_feedback or '추가 피드백이 없습니다.'}"
+                + f"### 사용자 피드백 반영\n{feedback or '추가 피드백이 없습니다.'}"
             ).strip()
             draft.status = "revised"
             draft.updated_at = utc_now_iso()
             break
+
+        user_prompt = (
+            f"섹션: {draft.title}\n\n"
+            f"현재 내용:\n{draft.content_markdown}\n\n"
+            f"사용자 피드백:\n{feedback}\n\n"
+            "위 피드백을 반영하여 섹션을 다시 작성하세요."
+        )
+        try:
+            new_content = "".join(stream_text("draft", _REVISE_SYSTEM_PROMPT, user_prompt))
+        except Exception:
+            new_content = (
+                draft.content_markdown
+                + "\n\n"
+                + f"### 사용자 피드백 반영\n{feedback}"
+            )
+
+        draft.content_markdown = new_content.strip()
+        draft.revision_notes = [f"피드백 반영: {feedback[:80]}"]
+        draft.status = "revised"
+        draft.updated_at = utc_now_iso()
+        break
+
     workflow.status = "reviewing"
     workflow.updated_at = utc_now_iso()
     return workflow

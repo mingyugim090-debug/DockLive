@@ -13,6 +13,8 @@ import {
   finalizeWorkflow,
   getDemo,
   getWorkflow,
+  reviseDraft,
+  saveDraftFeedback,
   saveWorkflowInputs,
 } from '@/lib/api';
 import type { DraftSection, DraftStreamEvent, ExportResponse, WorkflowSession } from '@/lib/types';
@@ -62,6 +64,9 @@ export default function AppPage() {
   const [confirmedItems, setConfirmedItems] = useState<string[]>([]);
   const [hwpxMode, setHwpxMode] = useState(false);
   const [loadingPhase, setLoadingPhase] = useState<string | null>(null);
+  const [localEdits, setLocalEdits] = useState<Record<string, string>>({});
+  const [revisingSectionId, setRevisingSectionId] = useState<string | null>(null);
+  const [activeDelta, setActiveDelta] = useState<string>('');
   const esRef = useRef<EventSource | null>(null);
 
   // Restore session from localStorage on mount
@@ -124,6 +129,9 @@ export default function AppPage() {
     setDraftLog([]);
     setConfirmedItems([]);
     setHwpxMode(false);
+    setLocalEdits({});
+    setRevisingSectionId(null);
+    setActiveDelta('');
     localStorage.removeItem('livedock_session');
   }
 
@@ -164,14 +172,39 @@ export default function AppPage() {
     }
   }
 
+  function handleLocalEdit(sectionId: string, content: string) {
+    setLocalEdits((prev) => ({ ...prev, [sectionId]: content }));
+  }
+
+  async function handleAiRevise(sectionId: string, feedback: string) {
+    if (!workflow) return;
+    setRevisingSectionId(sectionId);
+    setError(null);
+    try {
+      await saveDraftFeedback(workflow.id, sectionId, feedback);
+      const res = await reviseDraft(workflow.id, sectionId);
+      setWorkflow(res.data);
+      // Clear local edit for this section so server content shows
+      setLocalEdits((prev) => { const next = { ...prev }; delete next[sectionId]; return next; });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'AI 재작성에 실패했습니다.');
+    } finally {
+      setRevisingSectionId(null);
+    }
+  }
+
   function handleStartDraft(workflowId: string) {
     setBusy('draft');
     setDraftLog([]);
+    setActiveDelta('');
     esRef.current?.close();
 
     const es = createDraftStream(workflowId, (event: DraftStreamEvent) => {
       if (event.type === 'section_start') {
+        setActiveDelta('');
         setDraftLog((prev) => [...prev, { section: event.content, done: false }]);
+      } else if (event.type === 'delta') {
+        setActiveDelta((prev) => prev + event.content);
       } else if (event.type === 'section_done') {
         const title = event.draft_section?.title ?? event.content;
         setDraftLog((prev) => {
@@ -341,6 +374,7 @@ export default function AppPage() {
       {step === 'draft' && workflow ? (
         <DraftStep
           log={draftLog}
+          activeDelta={activeDelta}
           busy={busy}
           onBack={() => setStep('questions')}
           onNext={() => setStep('review')}
@@ -350,12 +384,16 @@ export default function AppPage() {
       {step === 'review' && workflow ? (
         <ReviewStep
           workflow={workflow}
+          localEdits={localEdits}
           confirmedItems={confirmedItems}
+          revisingSectionId={revisingSectionId}
           onToggleConfirm={(item) =>
             setConfirmedItems((prev) =>
               prev.includes(item) ? prev.filter((i) => i !== item) : [...prev, item],
             )
           }
+          onLocalEdit={handleLocalEdit}
+          onAiRevise={handleAiRevise}
           busy={busy}
           onBack={() => setStep('draft')}
           onFinalize={handleFinalize}
@@ -832,11 +870,13 @@ function InputField({
 
 function DraftStep({
   log,
+  activeDelta,
   busy,
   onBack,
   onNext,
 }: {
   log: Array<{ section: string; done: boolean }>;
+  activeDelta: string;
   busy: string | null;
   onBack: () => void;
   onNext: () => void;
@@ -856,26 +896,37 @@ function DraftStep({
 
       {log.length > 0 && (
         <div className="mt-6 space-y-2">
-          {log.map((item, i) => (
-            <div
-              key={i}
-              className={[
-                'flex items-center gap-3 rounded-xl border px-4 py-3 text-sm transition',
-                item.done
-                  ? 'border-[#C8DBD2] bg-[#F7FBF9] text-[#3A7A68]'
-                  : 'border-[#E4EBE7] bg-[#FAFCFB] text-[#65736E]',
-              ].join(' ')}
-            >
-              <span
-                className={[
-                  'h-2 w-2 flex-shrink-0 rounded-full',
-                  item.done ? 'bg-[#3A7A68]' : 'animate-pulse bg-[#6A9C89]',
-                ].join(' ')}
-              />
-              <span className="font-semibold">{item.section}</span>
-              {item.done && <span className="ml-auto text-xs font-bold">완료</span>}
-            </div>
-          ))}
+          {log.map((item, i) => {
+            const isLast = i === log.length - 1;
+            const showDelta = isLast && !item.done && activeDelta;
+            return (
+              <div key={i} className="space-y-1">
+                <div
+                  className={[
+                    'flex items-center gap-3 rounded-xl border px-4 py-3 text-sm transition',
+                    item.done
+                      ? 'border-[#C8DBD2] bg-[#F7FBF9] text-[#3A7A68]'
+                      : 'border-[#E4EBE7] bg-[#FAFCFB] text-[#65736E]',
+                  ].join(' ')}
+                >
+                  <span
+                    className={[
+                      'h-2 w-2 flex-shrink-0 rounded-full',
+                      item.done ? 'bg-[#3A7A68]' : 'animate-pulse bg-[#6A9C89]',
+                    ].join(' ')}
+                  />
+                  <span className="font-semibold">{item.section}</span>
+                  {item.done && <span className="ml-auto text-xs font-bold">완료</span>}
+                </div>
+                {showDelta && (
+                  <div className="rounded-xl border border-[#E4EBE7] bg-[#F8FBFA] px-4 py-3 text-xs leading-6 text-[#65736E] whitespace-pre-wrap max-h-40 overflow-y-auto">
+                    {activeDelta}
+                    <span className="animate-pulse">▍</span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -904,15 +955,23 @@ function DraftStep({
 
 function ReviewStep({
   workflow,
+  localEdits,
   confirmedItems,
+  revisingSectionId,
   onToggleConfirm,
+  onLocalEdit,
+  onAiRevise,
   busy,
   onBack,
   onFinalize,
 }: {
   workflow: WorkflowSession;
+  localEdits: Record<string, string>;
   confirmedItems: string[];
+  revisingSectionId: string | null;
   onToggleConfirm: (item: string) => void;
+  onLocalEdit: (sectionId: string, content: string) => void;
+  onAiRevise: (sectionId: string, feedback: string) => void;
   busy: string | null;
   onBack: () => void;
   onFinalize: () => void;
@@ -928,7 +987,7 @@ function ReviewStep({
           섹션별 초안을 확인하고 최종 문서를 생성합니다.
         </h2>
         <p className="mt-2 text-sm leading-6 text-[#65736E]">
-          확인이 필요한 항목을 체크하고 최종 문서 생성 버튼을 눌러주세요.
+          내용을 직접 편집하거나 AI에게 재작성을 요청할 수 있습니다.
         </p>
       </div>
 
@@ -936,8 +995,12 @@ function ReviewStep({
         <DraftSectionCard
           key={section.id}
           section={section}
+          localContent={localEdits[section.section_id]}
           confirmedItems={confirmedItems}
+          isRevising={revisingSectionId === section.section_id}
           onToggleConfirm={onToggleConfirm}
+          onLocalEdit={(content) => onLocalEdit(section.section_id, content)}
+          onAiRevise={(feedback) => onAiRevise(section.section_id, feedback)}
         />
       ))}
 
@@ -961,50 +1024,177 @@ function ReviewStep({
   );
 }
 
+const STATUS_COLORS: Record<string, string> = {
+  empty: 'bg-[#E4EBE7] text-[#65736E]',
+  needs_input: 'bg-amber-100 text-amber-700',
+  drafted: 'bg-blue-50 text-blue-700',
+  revised: 'bg-[#EDF7F2] text-[#3A7A68]',
+  confirmed: 'bg-[#C8DBD2] text-[#245D50]',
+};
+const STATUS_LABEL: Record<string, string> = {
+  empty: '비어 있음',
+  needs_input: '입력 필요',
+  drafted: 'AI 작성',
+  revised: '수정됨',
+  confirmed: '확인 완료',
+};
+
 function DraftSectionCard({
   section,
+  localContent,
   confirmedItems,
+  isRevising,
   onToggleConfirm,
+  onLocalEdit,
+  onAiRevise,
 }: {
   section: DraftSection;
+  localContent: string | undefined;
   confirmedItems: string[];
+  isRevising: boolean;
   onToggleConfirm: (item: string) => void;
+  onLocalEdit: (content: string) => void;
+  onAiRevise: (feedback: string) => void;
 }) {
-  const statusColors: Record<string, string> = {
-    empty: 'bg-[#E4EBE7] text-[#65736E]',
-    needs_input: 'bg-amber-100 text-amber-700',
-    drafted: 'bg-blue-50 text-blue-700',
-    revised: 'bg-[#EDF7F2] text-[#3A7A68]',
-    confirmed: 'bg-[#C8DBD2] text-[#245D50]',
-  };
-  const statusLabel: Record<string, string> = {
-    empty: '비어 있음',
-    needs_input: '입력 필요',
-    drafted: 'AI 작성',
-    revised: '수정됨',
-    confirmed: '확인 완료',
-  };
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState('');
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [feedbackText, setFeedbackText] = useState('');
+
+  const displayContent = localContent ?? section.content_markdown;
+
+  function startEdit() {
+    setEditText(displayContent);
+    setIsEditing(true);
+    setShowFeedback(false);
+  }
+
+  function saveEdit() {
+    onLocalEdit(editText);
+    setIsEditing(false);
+  }
+
+  function submitFeedback() {
+    if (!feedbackText.trim()) return;
+    onAiRevise(feedbackText.trim());
+    setFeedbackText('');
+    setShowFeedback(false);
+  }
 
   return (
     <div className="rounded-2xl border border-[#DDE7E2] bg-white p-5 shadow-sm">
+      {/* Header */}
       <div className="flex items-center gap-3">
         <h3 className="text-base font-bold text-[#24312D]">{section.title}</h3>
         <span
           className={[
             'rounded-full px-2 py-0.5 text-[10px] font-bold',
-            statusColors[section.status] ?? 'bg-[#F8FBFA] text-[#65736E]',
+            STATUS_COLORS[section.status] ?? 'bg-[#F8FBFA] text-[#65736E]',
           ].join(' ')}
         >
-          {statusLabel[section.status] ?? section.status}
+          {STATUS_LABEL[section.status] ?? section.status}
         </span>
+        {localContent && (
+          <span className="rounded-full bg-[#EDF7F2] px-2 py-0.5 text-[10px] font-bold text-[#3A7A68]">
+            로컬 편집
+          </span>
+        )}
+        {displayContent && !isEditing && !showFeedback && (
+          <div className="ml-auto flex gap-1">
+            <button
+              type="button"
+              onClick={startEdit}
+              className="rounded-lg border border-[#DDE7E2] bg-white px-3 py-1 text-xs font-bold text-[#40504B] transition hover:border-[#6A9C89] hover:text-[#245D50]"
+            >
+              편집
+            </button>
+            <button
+              type="button"
+              onClick={() => { setShowFeedback(true); setIsEditing(false); }}
+              disabled={isRevising}
+              className="rounded-lg border border-[#DDE7E2] bg-white px-3 py-1 text-xs font-bold text-[#3A7A68] transition hover:border-[#3A7A68] hover:bg-[#EDF7F2] disabled:opacity-50"
+            >
+              {isRevising ? 'AI 재작성 중...' : 'AI 재작성'}
+            </button>
+          </div>
+        )}
       </div>
 
-      {section.content_markdown && (
-        <div className="mt-4 whitespace-pre-wrap rounded-xl border border-[#E4EBE7] bg-[#F8FBFA] px-4 py-3 text-sm leading-7 text-[#40504B]">
-          {section.content_markdown}
+      {/* Inline edit mode */}
+      {isEditing ? (
+        <div className="mt-4 space-y-2">
+          <textarea
+            value={editText}
+            onChange={(e) => setEditText(e.target.value)}
+            rows={12}
+            className="w-full resize-y rounded-xl border border-[#6A9C89] bg-[#F8FBFA] px-4 py-3 text-sm leading-7 text-[#24312D] outline-none"
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setIsEditing(false)}
+              className="rounded-lg border border-[#DDE7E2] px-3 py-1.5 text-xs font-bold text-[#65736E] hover:bg-[#F8FBFA]"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={saveEdit}
+              className="rounded-lg bg-[#245D50] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#1E4F44]"
+            >
+              저장
+            </button>
+          </div>
+        </div>
+      ) : (
+        displayContent && (
+          <div className="mt-4 whitespace-pre-wrap rounded-xl border border-[#E4EBE7] bg-[#F8FBFA] px-4 py-3 text-sm leading-7 text-[#40504B]">
+            {displayContent}
+          </div>
+        )
+      )}
+
+      {/* AI feedback panel */}
+      {showFeedback && !isEditing && (
+        <div className="mt-4 space-y-2 rounded-xl border border-[#C8DBD2] bg-[#EDF7F2] p-4">
+          <p className="text-xs font-bold text-[#245D50]">AI 재작성 방향을 입력하세요</p>
+          <textarea
+            value={feedbackText}
+            onChange={(e) => setFeedbackText(e.target.value)}
+            rows={3}
+            placeholder="예: 구체적인 수치를 추가해줘 / 더 간결하게 작성해줘 / 마지막 문단을 삭제해줘"
+            className="w-full resize-none rounded-xl border border-[#C8DBD2] bg-white px-3 py-2 text-sm outline-none focus:border-[#3A7A68]"
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setShowFeedback(false)}
+              className="rounded-lg border border-[#DDE7E2] px-3 py-1.5 text-xs font-bold text-[#65736E] hover:bg-white"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={submitFeedback}
+              disabled={!feedbackText.trim() || isRevising}
+              className="rounded-lg bg-[#245D50] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#1E4F44] disabled:opacity-50"
+            >
+              AI로 다시 작성
+            </button>
+          </div>
         </div>
       )}
 
+      {/* revision_notes */}
+      {section.revision_notes.length > 0 && (
+        <div className="mt-3 space-y-1">
+          {section.revision_notes.map((note, i) => (
+            <p key={i} className="text-xs text-[#65736E]">· {note}</p>
+          ))}
+        </div>
+      )}
+
+      {/* Confirmation checkboxes */}
       {section.confirmation_required.length > 0 && (
         <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
           <p className="text-xs font-bold text-amber-800">확인 필요 항목</p>
