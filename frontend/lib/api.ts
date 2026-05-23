@@ -7,8 +7,6 @@ import type {
   HwpxComposeResponse,
   HwpxConvertResponse,
   HwpxFormSessionResponse,
-  HwpxSessionDraftRequest,
-  HwpxSessionDraftResponse,
   NoticeDocument,
   NoticeGenerateResponse,
   HwpxPlaceholderMapResponse,
@@ -340,19 +338,6 @@ export async function draftHwpxRegion(
     body: JSON.stringify({ base_input: payload.baseInput, prompt: payload.prompt }),
   }, 90000);
   if (!res.ok) throw await readError(res, `AI 초안 생성 실패: ${res.status}`);
-  return res.json();
-}
-
-export async function draftHwpxSession(
-  sessionId: string,
-  payload: HwpxSessionDraftRequest,
-): Promise<HwpxSessionDraftResponse> {
-  const res = await fetchWithTimeout(`${API_URL}/api/hwpx/sessions/${sessionId}/draft`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  }, 120000);
-  if (!res.ok) throw await readError(res, `AI 전체 작성 실패: ${res.status}`);
   return res.json();
 }
 

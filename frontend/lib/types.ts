@@ -347,21 +347,6 @@ export interface HwpxFormSessionResponse {
   data: HwpxFormSession;
 }
 
-export interface HwpxSessionDraftRequest {
-  brief: string;
-  facts: string;
-  tone: string;
-  constraints: string;
-}
-
-export interface HwpxSessionDraftResponse {
-  success: boolean;
-  data: HwpxFormSession;
-  filled_region_count: number;
-  confirmation_required: string[];
-  ai_summary: string;
-}
-
 export interface HwpxConvertResponse extends ExportResponse {
   source_filename: string;
   conversion_method: string;
