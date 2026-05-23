@@ -41,13 +41,14 @@ def create_form_session(raw_content: bytes, filename: str) -> dict[str, Any]:
 
     session_id = f"hwpx-{uuid.uuid4().hex}"
     analysis = analyze_hwpx_template_bytes(hwpx_content, source_filename)
-    pages, render_warnings = _render_hwpx_pages(hwpx_content, source_filename, analysis.get("preview_image"))
+    pages, text_boxes, render_warnings = _render_hwpx_pages(hwpx_content, source_filename, analysis.get("preview_image"))
     warnings.extend(render_warnings)
     regions = _extract_editable_regions(hwpx_content, max(1, len(pages)))
     if not regions:
         warnings.append("편집 가능한 입력 영역을 자동으로 찾지 못했습니다. 문서 전체 요약 영역을 대신 제공합니다.")
         regions = [_fallback_region()]
-    _normalize_region_layout(regions, max(1, len(pages)))
+    position_warnings = _assign_region_bboxes(regions, text_boxes, max(1, len(pages)))
+    warnings.extend(position_warnings)
 
     stored = storage.save_source_file(session_id, source_filename, hwpx_content, HWPX_MEDIA_TYPE)
     now = utc_now_iso()
@@ -136,6 +137,51 @@ def draft_region(session_id: str, region_id: str, base_input: str = "", prompt: 
     return _public_session(session)
 
 
+def draft_session(
+    session_id: str,
+    brief: str = "",
+    facts: str = "",
+    tone: str = "",
+    constraints: str = "",
+) -> dict[str, Any]:
+    session = _load_session(session_id)
+    request = {
+        "brief": brief.strip(),
+        "facts": facts.strip(),
+        "tone": tone.strip(),
+        "constraints": constraints.strip(),
+    }
+    regions = session.get("regions", [])
+    targets = [region for region in regions if _should_ai_fill_region(region)]
+    if not targets:
+        targets = [region for region in regions if not str(region.get("value") or "").strip()]
+
+    generated, ai_summary, confirmation_required = _generate_session_region_values(session, targets, request)
+    filled_count = 0
+    for region in regions:
+        value = str(generated.get(region.get("id"), "")).strip()
+        if not value:
+            continue
+        if value == str(region.get("value") or "").strip():
+            continue
+        region["value"] = value
+        region["prompt"] = _session_prompt_text(request)
+        region["draft_status"] = "drafted"
+        filled_count += 1
+
+    confirmation_required.extend(_session_confirmation_items(session, targets))
+    session["status"] = "editing"
+    session["updated_at"] = utc_now_iso()
+    _save_session(session)
+    return {
+        "success": True,
+        "data": _public_session(session),
+        "filled_region_count": filled_count,
+        "confirmation_required": list(dict.fromkeys(item for item in confirmation_required if item)),
+        "ai_summary": ai_summary or f"{filled_count}개 입력 영역을 요청사항 기준으로 채웠습니다.",
+    }
+
+
 def export_form_session(session_id: str) -> tuple[str, bytes, dict[str, Any]]:
     session = _load_session(session_id)
     source = base64.b64decode(session.get("source_hwpx_base64") or "")
@@ -173,6 +219,10 @@ def export_form_session(session_id: str) -> tuple[str, bytes, dict[str, Any]]:
                 verify_report = json.loads(verify_path.read_text(encoding="utf-8"))
         except subprocess.CalledProcessError as exc:
             raise AnalysisError(f"HWPX 구조 검증 실패: {(exc.stderr or exc.stdout or str(exc))[:700]}") from exc
+        if verify_report.get("status") == "FAIL":
+            issues = verify_report.get("issues") or verify_report.get("errors") or []
+            detail = "; ".join(str(item) for item in issues[:5]) if isinstance(issues, list) else str(issues)
+            raise AnalysisError(f"HWPX 구조 검증 실패: {detail or '원본 대비 구조 보존 검증을 통과하지 못했습니다.'}")
 
         extracted = ""
         try:
@@ -181,10 +231,15 @@ def export_form_session(session_id: str) -> tuple[str, bytes, dict[str, Any]]:
         except Exception:
             extracted = _zip_text_excerpt(output_path)
 
-        inserted = [r.get("value", "").strip() for r in session["regions"] if r.get("value", "").strip()]
-        missing = [text[:40] for text in inserted if text[:20] not in extracted]
+        inserted = [
+            r.get("value", "").strip()
+            for r in session["regions"]
+            if r.get("value", "").strip() and r.get("draft_status") in {"drafted", "revised"}
+        ]
+        missing = [text[:40] for text in inserted if not _contains_loose(extracted, text)]
         if missing:
-            raise AnalysisError("다운로드 검증 실패: 입력한 내용 일부를 HWPX에서 확인하지 못했습니다.")
+            detail = ", ".join(missing[:3])
+            raise AnalysisError(f"다운로드 검증 실패: 입력한 내용 일부를 HWPX에서 확인하지 못했습니다. ({detail})")
 
         filename = f"{_safe_title(session.get('analysis', {}).get('title') or session['source_filename'])}_completed.hwpx"
         content = output_path.read_bytes()
@@ -205,7 +260,7 @@ def export_form_session(session_id: str) -> tuple[str, bytes, dict[str, Any]]:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def _render_hwpx_pages(content: bytes, filename: str, preview_image: str | None) -> tuple[list[dict[str, Any]], list[str]]:
+def _render_hwpx_pages(content: bytes, filename: str, preview_image: str | None) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
     warnings: list[str] = []
     try:
         _, pdf_content, _ = convert_hwpx_bytes_to_pdf(content, Path(filename).stem, filename)
@@ -213,17 +268,19 @@ def _render_hwpx_pages(content: bytes, filename: str, preview_image: str | None)
 
         doc = fitz.open(stream=pdf_content, filetype="pdf")
         pages: list[dict[str, Any]] = []
+        text_boxes: list[dict[str, Any]] = []
         for index, page in enumerate(doc):
+            text_boxes.extend(_extract_pdf_text_boxes(page, index))
             pix = page.get_pixmap(matrix=fitz.Matrix(1.6, 1.6), alpha=False)
             image = base64.b64encode(pix.tobytes("png")).decode("ascii")
             pages.append({"page_index": index, "image_base64": f"data:image/png;base64,{image}", "width": pix.width, "height": pix.height})
         if pages:
-            return pages, warnings
+            return pages, text_boxes, warnings
     except Exception as exc:
         warnings.append(f"HWPX 페이지 렌더링은 PDF 변환기를 사용할 수 없어 preview 이미지로 대체했습니다: {str(exc)[:180]}")
 
     if preview_image:
-        return [{"page_index": 0, "image_base64": preview_image, "width": 900, "height": 1200}], warnings
+        return [{"page_index": 0, "image_base64": preview_image, "width": 900, "height": 1200}], [], warnings
 
     svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200">'
@@ -233,7 +290,81 @@ def _render_hwpx_pages(content: bytes, filename: str, preview_image: str | None)
         "</svg>"
     )
     encoded = base64.b64encode(svg.encode("utf-8")).decode("ascii")
-    return [{"page_index": 0, "image_base64": f"data:image/svg+xml;base64,{encoded}", "width": 900, "height": 1200}], warnings
+    return [{"page_index": 0, "image_base64": f"data:image/svg+xml;base64,{encoded}", "width": 900, "height": 1200}], [], warnings
+
+
+def _extract_pdf_text_boxes(page: Any, page_index: int) -> list[dict[str, Any]]:
+    page_width = max(float(page.rect.width), 1.0)
+    page_height = max(float(page.rect.height), 1.0)
+    boxes: list[dict[str, Any]] = []
+    order = 0
+    raw = page.get_text("dict") or {}
+    for block in raw.get("blocks", []):
+        if block.get("type") != 0:
+            continue
+        block_text_parts: list[str] = []
+        block_bbox: list[float] | None = None
+        for line in block.get("lines", []):
+            line_text = "".join(str(span.get("text") or "") for span in line.get("spans", [])).strip()
+            if not line_text:
+                continue
+            line_bbox = _union_bbox([span.get("bbox") for span in line.get("spans", [])])
+            if line_bbox:
+                boxes.append(_pdf_box(page_index, order, line_text, line_bbox, page_width, page_height, "line"))
+                order += 1
+                block_bbox = _merge_bbox(block_bbox, line_bbox)
+            block_text_parts.append(line_text)
+            for span in line.get("spans", []):
+                span_text = str(span.get("text") or "").strip()
+                if not span_text or span_text == line_text:
+                    continue
+                bbox = span.get("bbox")
+                if bbox:
+                    boxes.append(_pdf_box(page_index, order, span_text, bbox, page_width, page_height, "span"))
+                    order += 1
+        block_text = " ".join(block_text_parts).strip()
+        if block_text and block_bbox:
+            boxes.append(_pdf_box(page_index, order, block_text, block_bbox, page_width, page_height, "block"))
+            order += 1
+    return boxes
+
+
+def _pdf_box(page_index: int, order: int, text: str, bbox: Any, page_width: float, page_height: float, kind: str) -> dict[str, Any]:
+    x0, y0, x1, y1 = [float(value) for value in bbox]
+    return {
+        "page_index": page_index,
+        "order": order,
+        "kind": kind,
+        "text": _clean_label(text),
+        "norm": _match_key(text),
+        "bbox": {
+            "x": max(0.0, min(99.0, (x0 / page_width) * 100)),
+            "y": max(0.0, min(99.0, (y0 / page_height) * 100)),
+            "width": max(0.5, min(100.0, ((x1 - x0) / page_width) * 100)),
+            "height": max(0.4, min(100.0, ((y1 - y0) / page_height) * 100)),
+        },
+    }
+
+
+def _union_bbox(items: list[Any]) -> list[float] | None:
+    bbox: list[float] | None = None
+    for item in items:
+        if not item:
+            continue
+        bbox = _merge_bbox(bbox, item)
+    return bbox
+
+
+def _merge_bbox(left: list[float] | None, right: Any) -> list[float]:
+    values = [float(value) for value in right]
+    if left is None:
+        return values
+    return [
+        min(left[0], values[0]),
+        min(left[1], values[1]),
+        max(left[2], values[2]),
+        max(left[3], values[3]),
+    ]
 
 
 def _extract_editable_regions(content: bytes, page_count: int) -> list[dict[str, Any]]:
@@ -293,6 +424,11 @@ def _table_regions(section_path: str, table: Any, table_index: int, start_order:
                 "table_index": table_index,
                 "row": _int_attr(_first_child(cell, "cellAddr"), "rowAddr", row_index),
                 "col": _int_attr(_first_child(cell, "cellAddr"), "colAddr", cell_index),
+                "row_span": _int_attr(_first_child(cell, "cellSpan"), "rowSpan", 1),
+                "col_span": _int_attr(_first_child(cell, "cellSpan"), "colSpan", 1),
+                "cell_width": _int_attr(_first_child(cell, "cellSz"), "width", 0),
+                "cell_height": _int_attr(_first_child(cell, "cellSz"), "height", 0),
+                "original_text": text,
             }
             regions.append(_region(section_path, kind, order, page_count, label, text, source_ref))
     return regions
@@ -313,6 +449,127 @@ def _region(section_path: str, kind: str, order: int, page_count: int, label: st
         "draft_status": "empty",
         "source_ref": source_ref,
     }
+
+
+def _assign_region_bboxes(regions: list[dict[str, Any]], text_boxes: list[dict[str, Any]], page_count: int) -> list[str]:
+    if not text_boxes:
+        _normalize_region_layout(regions, page_count)
+        for region in regions:
+            region.setdefault("source_ref", {})["bbox_status"] = "fallback"
+        return ["원본 페이지 좌표를 추출하지 못해 입력 영역을 목록형 오버레이로 배치했습니다."]
+
+    by_key: dict[str, list[dict[str, Any]]] = {}
+    for box in sorted(text_boxes, key=lambda item: (item.get("page_index", 0), item.get("order", 0))):
+        key = str(box.get("norm") or "")
+        if key:
+            by_key.setdefault(key, []).append(box)
+
+    used: set[tuple[int, int]] = set()
+    unmatched: list[dict[str, Any]] = []
+    for region in sorted(regions, key=lambda item: int(item.get("display_order") or 0)):
+        candidates = _region_match_keys(region)
+        matched = _consume_text_box(by_key, candidates, used)
+        if matched:
+            padded = _pad_bbox(matched["bbox"], region)
+            region["page_index"] = int(matched.get("page_index") or 0)
+            region["bbox"] = padded
+            source_ref = region.setdefault("source_ref", {})
+            source_ref["bbox_status"] = "matched"
+            source_ref["bbox_text"] = matched.get("text", "")
+            source_ref["bbox_kind"] = matched.get("kind", "")
+        else:
+            region.setdefault("source_ref", {})["bbox_status"] = "unmatched"
+            unmatched.append(region)
+
+    _layout_unmatched_regions(unmatched, page_count)
+    if unmatched:
+        return [f"{len(unmatched)}개 입력 영역은 원본 위치를 확정하지 못해 위치 확인 필요 목록에 표시했습니다."]
+    return []
+
+
+def _region_match_keys(region: dict[str, Any]) -> list[str]:
+    raw_values = [
+        region.get("value", ""),
+        region.get("label", ""),
+        (region.get("source_ref") or {}).get("original_text", ""),
+    ]
+    keys: list[str] = []
+    for value in raw_values:
+        key = _match_key(str(value or ""))
+        if key and key not in keys:
+            keys.append(key)
+    return keys
+
+
+def _consume_text_box(by_key: dict[str, list[dict[str, Any]]], candidates: list[str], used: set[tuple[int, int]]) -> dict[str, Any] | None:
+    for key in candidates:
+        for box in by_key.get(key, []):
+            marker = (int(box.get("page_index") or 0), int(box.get("order") or 0))
+            if marker not in used:
+                used.add(marker)
+                return box
+    for key in candidates:
+        if len(key) < 3:
+            continue
+        for box_key, boxes in by_key.items():
+            if key not in box_key and box_key not in key:
+                continue
+            for box in boxes:
+                marker = (int(box.get("page_index") or 0), int(box.get("order") or 0))
+                if marker not in used:
+                    used.add(marker)
+                    return box
+    return None
+
+
+def _pad_bbox(bbox: dict[str, float], region: dict[str, Any]) -> dict[str, float]:
+    kind = region.get("kind")
+    text = str(region.get("value") or "")
+    x = float(bbox.get("x") or 0)
+    y = float(bbox.get("y") or 0)
+    width = float(bbox.get("width") or 1)
+    height = float(bbox.get("height") or 1)
+    pad_x = 1.2
+    pad_y = 0.6
+    if (region.get("source_ref") or {}).get("type") == "table_cell":
+        pad_x = 2.0
+        pad_y = 0.9
+    if kind == "textarea" or len(text) > 50:
+        height = max(height, 3.2)
+    return {
+        "x": max(0.0, x - pad_x),
+        "y": max(0.0, y - pad_y),
+        "width": min(100.0 - max(0.0, x - pad_x), max(width + pad_x * 2, 3.0)),
+        "height": min(100.0 - max(0.0, y - pad_y), max(height + pad_y * 2, 2.0)),
+    }
+
+
+def _layout_unmatched_regions(regions: list[dict[str, Any]], page_count: int) -> None:
+    if not regions:
+        return
+    page_count = max(1, page_count)
+    for index, region in enumerate(regions):
+        page_index = min(page_count - 1, index // 12)
+        slot = index % 12
+        region["page_index"] = page_index
+        region["bbox"] = {"x": 2.0, "y": 3.0 + slot * 4.8, "width": 20.0, "height": 3.4}
+
+
+def _match_key(value: str) -> str:
+    return re.sub(r"\s+", "", html_unescape(value)).strip()
+
+
+def _contains_loose(haystack: str, needle: str) -> bool:
+    cleaned = _match_key(needle)
+    if not cleaned:
+        return True
+    return cleaned[: min(20, len(cleaned))] in _match_key(haystack)
+
+
+def html_unescape(value: str) -> str:
+    import html
+
+    return html.unescape(value or "")
 
 
 def _normalize_region_layout(regions: list[dict[str, Any]], page_count: int) -> None:
@@ -400,6 +657,182 @@ def _generate_region_text(session: dict[str, Any], region: dict[str, Any], base_
         return str(data.get("content") or data.get("text") or fallback).strip()
     except Exception:
         return fallback
+
+
+def _generate_session_region_values(
+    session: dict[str, Any],
+    targets: list[dict[str, Any]],
+    request: dict[str, str],
+) -> tuple[dict[str, str], str, list[str]]:
+    if should_use_mock_ai():
+        values = {
+            str(region.get("id")): _session_fallback_value(session, region, request)
+            for region in targets
+            if _session_fallback_value(session, region, request)
+        }
+        return values, f"{len(values)}개 입력 영역을 로컬 작성 규칙으로 채웠습니다.", _request_confirmation_items(request)
+
+    schema = {
+        "type": "object",
+        "properties": {
+            "fields": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "region_id": {"type": "string"},
+                        "value": {"type": "string"},
+                    },
+                    "required": ["region_id", "value"],
+                    "additionalProperties": False,
+                },
+            },
+            "ai_summary": {"type": "string"},
+            "confirmation_required": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["fields", "ai_summary", "confirmation_required"],
+        "additionalProperties": False,
+    }
+    system_prompt = (
+        "당신은 한국 공공기관 공고문/HWPX 양식 작성 전문가입니다. "
+        "사용자가 제공한 사실만 사용해 업로드된 양식의 입력칸을 채웁니다. "
+        "기관명, 날짜, 금액, 서명, 연락처처럼 확인이 필요한 값은 임의로 만들지 말고 제공된 정보가 없으면 빈 문자열을 반환합니다. "
+        "응답은 JSON만 반환합니다."
+    )
+    user_prompt = json.dumps(
+        {
+            "document": session.get("analysis", {}),
+            "request": request,
+            "regions": [
+                {
+                    "region_id": region.get("id"),
+                    "label": region.get("label"),
+                    "kind": region.get("kind"),
+                    "current_value": region.get("value"),
+                    "source_ref": region.get("source_ref"),
+                }
+                for region in targets[:80]
+            ],
+            "rules": [
+                "각 value에는 해당 region에 들어갈 내용만 작성",
+                "라벨/표 머리글은 다시 쓰지 않음",
+                "공고문 문체는 간결하고 공식적으로 작성",
+                "확인 불가한 사실은 confirmation_required에 적고 value는 비워 둠",
+            ],
+        },
+        ensure_ascii=False,
+    )
+    try:
+        data = call_json("draft", system_prompt, user_prompt, max_tokens=4096, json_schema=schema, schema_name="hwpx_session_draft")
+    except Exception:
+        values = {
+            str(region.get("id")): _session_fallback_value(session, region, request)
+            for region in targets
+            if _session_fallback_value(session, region, request)
+        }
+        return values, f"{len(values)}개 입력 영역을 로컬 작성 규칙으로 채웠습니다.", _request_confirmation_items(request)
+
+    values: dict[str, str] = {}
+    target_ids = {str(region.get("id")) for region in targets}
+    for item in data.get("fields") or []:
+        if not isinstance(item, dict):
+            continue
+        region_id = str(item.get("region_id") or "")
+        value = str(item.get("value") or "").strip()
+        if region_id in target_ids and value:
+            values[region_id] = value
+    return (
+        values,
+        str(data.get("ai_summary") or "").strip(),
+        [str(item).strip() for item in data.get("confirmation_required") or [] if str(item).strip()],
+    )
+
+
+def _should_ai_fill_region(region: dict[str, Any]) -> bool:
+    label = str(region.get("label") or "")
+    value = str(region.get("value") or "")
+    source_ref = region.get("source_ref") or {}
+    if source_ref.get("type") == "append_block":
+        return False
+    if _looks_like_title_label(label):
+        return False
+    if _is_placeholder(value):
+        return True
+    if not value.strip():
+        return True
+    if region.get("kind") == "textarea" and _is_long_text_label(label):
+        return True
+    if source_ref.get("type") == "paragraph" and _is_long_text_label(value):
+        return True
+    return False
+
+
+def _session_fallback_value(session: dict[str, Any], region: dict[str, Any], request: dict[str, str]) -> str:
+    label = str(region.get("label") or "입력 영역").strip()
+    combined = "\n".join(value for value in request.values() if value).strip()
+    if not combined:
+        current = str(region.get("value") or "").strip()
+        return "" if _is_placeholder(current) else current
+    if any(token in label for token in ("기관", "소속", "담당")):
+        return _extract_fact_line(request, ("기관", "부서", "소속")) or ""
+    if any(token in label for token in ("일정", "기간", "일시", "월")):
+        return _extract_fact_line(request, ("기간", "일정", "일시", "마감")) or ""
+    if any(token in label for token in ("연락처", "전화", "이메일", "메일")):
+        return _extract_fact_line(request, ("연락처", "전화", "이메일", "메일")) or ""
+    if any(token in label for token in ("서명", "성명", "대표")):
+        return ""
+    if region.get("kind") == "text":
+        first = next((line.strip() for line in combined.splitlines() if line.strip()), "")
+        return first[:120]
+    title = str(session.get("analysis", {}).get("title") or "공고문").strip()
+    tone = request.get("tone") or "공식적이고 간결한 문체"
+    return (
+        f"{title}의 {label} 항목은 사용자가 제공한 요청사항을 기준으로 작성합니다.\n"
+        f"{combined[:700]}\n"
+        f"문체: {tone}"
+    ).strip()
+
+
+def _extract_fact_line(request: dict[str, str], keywords: tuple[str, ...]) -> str:
+    for value in request.values():
+        for line in value.splitlines():
+            if any(keyword in line for keyword in keywords):
+                return line.strip()[:160]
+    return ""
+
+
+def _session_prompt_text(request: dict[str, str]) -> str:
+    return "\n".join(
+        f"{label}: {value}"
+        for label, value in [
+            ("공고 목적", request.get("brief", "")),
+            ("핵심 정보", request.get("facts", "")),
+            ("문체", request.get("tone", "")),
+            ("제약사항", request.get("constraints", "")),
+        ]
+        if value
+    )
+
+
+def _request_confirmation_items(request: dict[str, str]) -> list[str]:
+    missing = []
+    if not request.get("brief"):
+        missing.append("공고 목적")
+    if not request.get("facts"):
+        missing.append("대상, 일정, 제출방법 등 핵심 정보")
+    return [f"확인 필요: {', '.join(missing)}"] if missing else []
+
+
+def _session_confirmation_items(session: dict[str, Any], targets: list[dict[str, Any]]) -> list[str]:
+    items: list[str] = []
+    empty_targets = [region for region in targets if not str(region.get("value") or "").strip()]
+    if empty_targets:
+        labels = ", ".join(str(region.get("label") or "입력 영역") for region in empty_targets[:6])
+        items.append(f"값이 비어 있어 직접 확인이 필요한 칸: {labels}")
+    unmatched = [region for region in session.get("regions", []) if (region.get("source_ref") or {}).get("bbox_status") == "unmatched"]
+    if unmatched:
+        items.append(f"원본 위치 확인이 필요한 입력 영역 {len(unmatched)}개")
+    return items
 
 
 def _clone_with_region_replacements(source_path: Path, output_path: Path, regions: list[dict[str, Any]]) -> None:
@@ -736,4 +1169,4 @@ def _zip_text_excerpt(path: Path) -> str:
         for name in zf.namelist():
             if name.startswith("Contents/") and name.endswith(".xml"):
                 texts.append(re.sub(r"<[^>]+>", " ", zf.read(name).decode("utf-8", errors="replace")))
-    return "\n".join(texts)[:5000]
+    return "\n".join(texts)[:200000]

@@ -17,6 +17,8 @@ from models.schemas import (
     HwpxFormSessionResponse,
     HwpxRegionDraftRequest,
     HwpxRegionUpdateRequest,
+    HwpxSessionDraftRequest,
+    HwpxSessionDraftResponse,
     HwpxStatusResponse,
     HwpxTemplateAnalysisResponse,
 )
@@ -28,6 +30,7 @@ from services.hwpx_form_session import (
     add_component,
     create_form_session,
     draft_region,
+    draft_session,
     export_form_session,
     get_form_session,
     update_region,
@@ -103,6 +106,18 @@ async def update_hwpx_form_region(session_id: str, region_id: str, payload: Hwpx
 async def draft_hwpx_form_region(session_id: str, region_id: str, payload: HwpxRegionDraftRequest):
     session = draft_region(session_id, region_id, payload.base_input, payload.prompt)
     return HwpxFormSessionResponse(data=session)
+
+
+@router.post("/hwpx/sessions/{session_id}/draft", response_model=HwpxSessionDraftResponse)
+async def draft_hwpx_form_session(session_id: str, payload: HwpxSessionDraftRequest):
+    result = draft_session(
+        session_id,
+        brief=payload.brief,
+        facts=payload.facts,
+        tone=payload.tone,
+        constraints=payload.constraints,
+    )
+    return HwpxSessionDraftResponse(**result)
 
 
 @router.post("/hwpx/sessions/{session_id}/components", response_model=HwpxFormSessionResponse)

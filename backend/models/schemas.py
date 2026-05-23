@@ -275,6 +275,7 @@ class HwpxTemplateCell(BaseModel):
     width: Optional[int] = None
     background: Optional[str] = None
     editable: bool = True
+    source_ref: dict[str, Any] = Field(default_factory=dict)
 
 
 class HwpxTemplateBlock(BaseModel):
@@ -286,6 +287,7 @@ class HwpxTemplateBlock(BaseModel):
     rows: list[list[HwpxTemplateCell]] = Field(default_factory=list)
     style: dict[str, Any] = Field(default_factory=dict)
     options: list[dict[str, Any]] = Field(default_factory=list)
+    source_ref: dict[str, Any] = Field(default_factory=dict)
 
 
 class HwpxTemplateField(BaseModel):
@@ -363,6 +365,21 @@ class HwpxRegionUpdateRequest(BaseModel):
 class HwpxRegionDraftRequest(BaseModel):
     base_input: str = ""
     prompt: str = ""
+
+
+class HwpxSessionDraftRequest(BaseModel):
+    brief: str = ""
+    facts: str = ""
+    tone: str = ""
+    constraints: str = ""
+
+
+class HwpxSessionDraftResponse(BaseModel):
+    success: bool = True
+    data: HwpxFormSession
+    filled_region_count: int = 0
+    confirmation_required: list[str] = Field(default_factory=list)
+    ai_summary: str = ""
 
 
 class HwpxComponentCreateRequest(BaseModel):
