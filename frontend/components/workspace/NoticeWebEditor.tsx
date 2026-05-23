@@ -1,10 +1,16 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { Button } from '@/components/ui/Button';
+import {
+  documentStyleProfiles,
+  getDocumentStyleProfile,
+  isStyleLimitedByOfficialForm,
+} from '@/lib/documentStyleProfiles';
 import { findFirstEditableId, sanitizeHwpxDocumentModel } from '@/lib/hwpxDocumentModel';
 import type {
+  DocumentStyleProfile,
   HwpxBlock,
   HwpxDocumentModel,
   HwpxTableBlock,
@@ -48,19 +54,34 @@ export function NoticeWebEditor({
   onRegenerate,
   onDownload,
   onAiRequest,
+  styleProfile,
+  availableStyleProfiles,
+  isOfficialHwpxSource = false,
+  onStyleProfileChange,
 }: {
   document: NoticeDocument;
   warnings: string[];
   exporting: ExportFormat | null;
   sourceFileName?: string | null;
   templateAnalysis?: HwpxTemplateAnalysisResponse | null;
+  styleProfile?: DocumentStyleProfile;
+  availableStyleProfiles?: DocumentStyleProfile[];
+  isOfficialHwpxSource?: boolean;
   onChange: (document: NoticeDocument) => void;
   onBackToInfo: () => void;
   onRegenerate: () => void;
   onDownload: (format: ExportFormat) => void;
   onAiRequest?: (payload: { prompt: string; scope: 'selected' | 'all'; target: NoticeAiTarget }) => Promise<void>;
+  onStyleProfileChange?: (profile: DocumentStyleProfile) => void;
 }) {
   const safeDocument = normalizeDocument(document);
+  const activeStyleProfile = styleProfile ?? getDocumentStyleProfile('public-agency');
+  const styleOptions = availableStyleProfiles?.length ? availableStyleProfiles : documentStyleProfiles;
+  const styleLimited = isStyleLimitedByOfficialForm(
+    activeStyleProfile,
+    Boolean(isOfficialHwpxSource || safeDocument.documentModel || templateAnalysis?.preview_image),
+  );
+  const previewStyleProfile = styleLimited ? getDocumentStyleProfile('official-preserve') : activeStyleProfile;
   const [selected, setSelected] = useState<SelectedTarget>(
     safeDocument.documentModel ? { type: 'block', blockId: findFirstEditableId(safeDocument.documentModel) } : { type: 'section', index: 0 },
   );
@@ -200,9 +221,51 @@ export function NoticeWebEditor({
         </div>
       ) : null}
 
+      <StyleProfileSelector
+        profiles={styleOptions}
+        selected={activeStyleProfile}
+        limited={styleLimited}
+        onChange={onStyleProfileChange}
+      />
+
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_390px]">
-        <section className="h-[calc(100vh-230px)] min-h-[680px] overflow-auto rounded-2xl border border-[#DDE7E2] bg-[#E2E8E5] p-5">
-          <article className="mx-auto min-h-[1120px] max-w-[760px] bg-white px-10 py-12 text-[#142033] shadow-[0_18px_48px_rgba(36,49,45,0.14)] sm:px-16">
+        <section
+          className="h-[calc(100vh-230px)] min-h-[680px] overflow-auto rounded-2xl border border-[#DDE7E2] p-5"
+          style={{ background: previewStyleProfile.preview.pageBackground }}
+        >
+          <article
+            className="styled-notice-preview mx-auto min-h-[1120px] max-w-[760px] px-10 py-12 shadow-[0_18px_48px_rgba(36,49,45,0.14)] sm:px-16"
+            style={{
+              background: previewStyleProfile.preview.documentBackground,
+              color: previewStyleProfile.colors.text,
+              fontFamily: previewStyleProfile.typography.fontFamily,
+              fontSize: previewStyleProfile.typography.bodySize,
+              lineHeight: previewStyleProfile.typography.lineHeight,
+              '--style-primary': previewStyleProfile.colors.primary,
+              '--style-primary-soft': previewStyleProfile.colors.primarySoft,
+              '--style-table-header-bg': previewStyleProfile.colors.tableHeaderBg,
+              '--style-table-header-text': previewStyleProfile.colors.tableHeaderText,
+              '--style-table-border': previewStyleProfile.table.borderColor,
+              '--style-selected-outline': previewStyleProfile.preview.selectedOutline,
+            } as CSSProperties}
+          >
+            <style jsx>{`
+              .styled-notice-preview h3,
+              .styled-notice-preview h4 {
+                color: var(--style-primary);
+              }
+              .styled-notice-preview th {
+                background: var(--style-table-header-bg) !important;
+                color: var(--style-table-header-text);
+                border-color: var(--style-table-border) !important;
+              }
+              .styled-notice-preview td {
+                border-color: var(--style-table-border) !important;
+              }
+              .styled-notice-preview button:focus-visible {
+                outline-color: var(--style-selected-outline);
+              }
+            `}</style>
             {sourceFileName ? (
               <div className="mb-7 flex items-center justify-between border-b border-[#DDE5E0] pb-3 text-xs font-bold text-[#65736E]">
                 <span>업로드 원본 HWPX</span>
@@ -561,6 +624,64 @@ function UploadedHwpxPreview({
         </section>
       ) : null}
     </div>
+  );
+}
+
+function StyleProfileSelector({
+  profiles,
+  selected,
+  limited,
+  onChange,
+}: {
+  profiles: DocumentStyleProfile[];
+  selected: DocumentStyleProfile;
+  limited: boolean;
+  onChange?: (profile: DocumentStyleProfile) => void;
+}) {
+  return (
+    <section className="rounded-2xl border border-[#DDE7E2] bg-white p-4 shadow-sm">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-xs font-bold text-[#3A7A68]">Document Style Profile</p>
+          <h3 className="mt-1 text-base font-extrabold text-[#24312D]">문서 스타일 프로필</h3>
+          <p className="mt-1 text-sm leading-6 text-[#65736E]">
+            AI가 작성한 제출 문서의 미리보기와 export에 일관된 시각 규칙을 적용합니다.
+          </p>
+        </div>
+        <label className="min-w-[260px]">
+          <span className="sr-only">문서 스타일 프로필 선택</span>
+          <select
+            value={selected.id}
+            onChange={(event) => {
+              const next = profiles.find((profile) => profile.id === event.target.value);
+              if (next) onChange?.(next);
+            }}
+            className="h-11 w-full rounded-xl border border-[#C9D6D0] bg-white px-3 text-sm font-bold text-[#24312D] outline-none focus:border-[#245D50]"
+          >
+            {profiles.map((profile) => (
+              <option key={profile.id} value={profile.id}>{profile.name}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-[1fr_auto] md:items-center">
+        <p className="text-sm leading-6 text-[#65736E]">{selected.description}</p>
+        <div className="flex gap-1.5">
+          {[selected.colors.primary, selected.colors.accent, selected.colors.tableHeaderBg].map((color) => (
+            <span key={color} className="h-6 w-6 rounded-full border border-[#DDE7E2]" style={{ background: color }} />
+          ))}
+        </div>
+      </div>
+      {limited ? (
+        <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-800">
+          공식 HWPX 양식은 표, 문단, 여백, 병합 셀, 서명란 구조를 변경하지 않습니다. 스타일은 검토 화면과 export 메타데이터에 제한적으로 반영됩니다.
+        </p>
+      ) : (
+        <p className="mt-3 rounded-lg border border-[#DDE7E2] bg-[#F8FBFA] px-3 py-2 text-xs font-semibold leading-5 text-[#65736E]">
+          검토 미리보기에는 선택한 스타일을 바로 반영하고, export 요청에는 styleProfile을 함께 전달합니다. HWPX는 검증 가능한 안전 범위에서만 반영합니다.
+        </p>
+      )}
+    </section>
   );
 }
 

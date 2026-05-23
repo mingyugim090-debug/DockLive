@@ -64,7 +64,7 @@ async def generate_notice(
 
 @router.post("/notices/export/hwpx", response_model=ExportResponse)
 async def export_notice_as_hwpx(payload: NoticeExportRequest):
-    filename, content, validation_summary = export_notice_hwpx(payload.document)
+    filename, content, validation_summary = export_notice_hwpx(payload.document, payload.style_profile)
     return ExportResponse(
         success=True,
         filename=filename,
@@ -78,7 +78,7 @@ async def export_notice_as_hwpx(payload: NoticeExportRequest):
 
 @router.post("/notices/export/pdf", response_model=ExportResponse)
 async def export_notice_as_pdf(payload: NoticeExportRequest):
-    filename, content, validation_summary = export_notice_pdf(payload.document)
+    filename, content, validation_summary = export_notice_pdf(payload.document, payload.style_profile)
     return ExportResponse(
         success=True,
         filename=filename,

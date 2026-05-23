@@ -13,7 +13,15 @@ os.environ.setdefault("MOCK_MODE", "true")
 
 try:
     from core.config import settings  # noqa: E402
-    from models.schemas import AnalysisResult, ExportListResponse, ExportMetadata, HwpxStatusResponse  # noqa: E402
+    from models.schemas import (  # noqa: E402
+        AnalysisResult,
+        DocumentStyleProfile,
+        ExportListResponse,
+        ExportMetadata,
+        HwpxStatusResponse,
+        NoticeDocument,
+        NoticeExportRequest,
+    )
     from services.ai_provider import provider_name, should_use_mock_ai  # noqa: E402
     from services.analyzer import build_analysis_result  # noqa: E402
     from services.document_ingestion import ingest_uploaded_document  # noqa: E402
@@ -42,9 +50,12 @@ except ModuleNotFoundError as exc:  # pragma: no cover - local minimal Python fa
         raise
     settings = None
     AnalysisResult = None
+    DocumentStyleProfile = None
     ExportMetadata = None
     ExportListResponse = None
     HwpxStatusResponse = None
+    NoticeDocument = None
+    NoticeExportRequest = None
     provider_name = None
     should_use_mock_ai = None
     build_analysis_result = None
@@ -123,6 +134,56 @@ class AgentMvpContractTests(unittest.TestCase):
         self.assertEqual(response.data[0].workflow_id, "workflow-1")
         self.assertEqual(response.data[0].export_type, "html")
         self.assertEqual(response.data[0].status, "success")
+
+    def test_notice_export_accepts_document_style_profile_contract(self):
+        if NoticeExportRequest is None or DocumentStyleProfile is None:
+            self.skipTest("pydantic is not installed in this Python environment")
+
+        style_profile = DocumentStyleProfile(
+            id="official-preserve",
+            name="공식 양식 보존",
+            description="공식 HWPX 구조를 유지합니다.",
+            mode="preserve-official-form",
+            colors={
+                "primary": "#245D50",
+                "primarySoft": "#F3F8F5",
+                "accent": "#6A9C89",
+                "accentSoft": "#EEF7F2",
+                "text": "#142033",
+                "muted": "#65736E",
+                "border": "#C5D1CC",
+                "surface": "#FFFFFF",
+                "tableHeaderBg": "#F3F7F5",
+                "tableHeaderText": "#24312D",
+            },
+            typography={
+                "fontFamily": "system-ui",
+                "titleSize": "24px",
+                "titleWeight": 800,
+                "headingWeight": 800,
+                "bodySize": "13px",
+                "lineHeight": "1.75",
+            },
+            section={"headingStyle": "plain-underlined", "spacing": "normal"},
+            table={"headerStyle": "preserve", "borderColor": "#C5D1CC", "zebra": False, "density": "comfortable"},
+            preview={
+                "pageBackground": "#E2E8E5",
+                "documentBackground": "#FFFFFF",
+                "selectedOutline": "#245D50",
+                "note": "검토 UI에 제한 적용",
+            },
+        )
+        document = NoticeDocument(
+            documentType="notice",
+            title="계약 테스트 공고",
+            organization="DockLive",
+            purpose="스타일 프로필 계약 확인",
+        )
+        request = NoticeExportRequest(document=document, style_profile=style_profile)
+
+        self.assertEqual(request.style_profile.id, "official-preserve")
+        self.assertEqual(request.style_profile.mode, "preserve-official-form")
+        self.assertEqual(request.document.title, "계약 테스트 공고")
 
     def test_hwpx_status_contract(self):
         if HwpxStatusResponse is None:

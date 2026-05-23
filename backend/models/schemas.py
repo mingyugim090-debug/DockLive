@@ -406,6 +406,66 @@ class NoticeDocument(BaseModel):
     documentModel: Optional[dict[str, Any]] = None
 
 
+DocumentStyleProfileMode = Literal["preserve-official-form", "submission", "proposal", "report"]
+DocumentSectionHeadingStyle = Literal["plain-underlined", "left-rule", "boxed", "numbered-band"]
+DocumentSectionSpacing = Literal["compact", "normal", "wide"]
+DocumentTableHeaderStyle = Literal["preserve", "tinted", "solid", "minimal"]
+DocumentTableDensity = Literal["compact", "comfortable"]
+
+
+class DocumentStyleColors(BaseModel):
+    primary: str
+    primarySoft: str
+    accent: str
+    accentSoft: str
+    text: str
+    muted: str
+    border: str
+    surface: str
+    tableHeaderBg: str
+    tableHeaderText: str
+
+
+class DocumentStyleTypography(BaseModel):
+    fontFamily: str
+    titleSize: str
+    titleWeight: int
+    headingWeight: int
+    bodySize: str
+    lineHeight: str
+
+
+class DocumentStyleSection(BaseModel):
+    headingStyle: DocumentSectionHeadingStyle
+    spacing: DocumentSectionSpacing
+
+
+class DocumentStyleTable(BaseModel):
+    headerStyle: DocumentTableHeaderStyle
+    borderColor: str
+    zebra: bool
+    density: DocumentTableDensity
+
+
+class DocumentStylePreview(BaseModel):
+    pageBackground: str
+    documentBackground: str
+    selectedOutline: str
+    note: str
+
+
+class DocumentStyleProfile(BaseModel):
+    id: str
+    name: str
+    description: str
+    mode: DocumentStyleProfileMode
+    colors: DocumentStyleColors
+    typography: DocumentStyleTypography
+    section: DocumentStyleSection
+    table: DocumentStyleTable
+    preview: DocumentStylePreview
+
+
 class NoticeGenerateRequest(BaseModel):
     template_id: str
     inputs: dict[str, str] = Field(default_factory=dict)
@@ -420,6 +480,7 @@ class NoticeGenerateResponse(BaseModel):
 
 class NoticeExportRequest(BaseModel):
     document: NoticeDocument
+    style_profile: Optional[DocumentStyleProfile] = None
 
 
 def utc_now_iso() -> str:

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from core.errors import AnalysisError
-from models.schemas import NoticeDocument, NoticeSection
+from models.schemas import DocumentStyleProfile, NoticeDocument, NoticeSection
 from services.ai_provider import call_json, should_use_mock_ai
 from services.document_ingestion import convert_hwp_to_hwpx, extract_text_from_hwpx
 from services.drafting_service import _make_tmp_dir, _require_hwpx_scripts, _run_hwpx_command, _safe_title
@@ -93,6 +93,36 @@ NOTICE_TEMPLATES: dict[str, dict[str, Any]] = {
 }
 
 
+DEFAULT_STYLE_PROFILE_ID = "official-preserve"
+OFFICIAL_STYLE_MODE = "preserve-official-form"
+
+
+def _style_profile_summary(
+    style_profile: DocumentStyleProfile | None,
+    document: NoticeDocument,
+    export_format: str,
+) -> dict[str, Any]:
+    profile_id = style_profile.id if style_profile else DEFAULT_STYLE_PROFILE_ID
+    profile_name = style_profile.name if style_profile else "Official form preservation"
+    profile_mode = style_profile.mode if style_profile else OFFICIAL_STYLE_MODE
+    official_source = bool(document.documentModel) or profile_mode == OFFICIAL_STYLE_MODE
+
+    if official_source:
+        application_mode = "official-form-preserved"
+    elif export_format in {"pdf", "html"}:
+        application_mode = "style-profile-forwarded"
+    else:
+        application_mode = "limited-generated-document-style"
+
+    return {
+        "style_profile_id": profile_id,
+        "style_profile_name": profile_name,
+        "style_profile_mode": profile_mode,
+        "style_application_mode": application_mode,
+        "style_limited_by_official_form": official_source,
+    }
+
+
 def generate_notice_document(
     template_id: str,
     inputs: dict[str, str],
@@ -151,18 +181,25 @@ def render_notice_markdown(document: NoticeDocument) -> str:
     return "\n".join(lines).strip() + "\n"
 
 
-def export_notice_hwpx(document: NoticeDocument) -> tuple[str, bytes, dict[str, Any]]:
+def export_notice_hwpx(
+    document: NoticeDocument,
+    style_profile: DocumentStyleProfile | None = None,
+) -> tuple[str, bytes, dict[str, Any]]:
     markdown = render_notice_markdown(document)
     _assert_clean_notice_text(markdown, "HWPX 입력")
-    filename, content, summary = _export_notice_document_to_hwpx(document)
+    filename, content, summary = _export_notice_document_to_hwpx(document, style_profile)
     excerpt = str(summary.get("extracted_text_excerpt") or "")
     _assert_clean_notice_text(excerpt or markdown, "HWPX 추출 텍스트")
     summary["renderer"] = "notice_document_renderer"
     summary["forbidden_terms_checked"] = FORBIDDEN_NOTICE_TERMS
+    summary.update(_style_profile_summary(style_profile, document, "hwpx"))
     return filename, content, summary
 
 
-def _export_notice_document_to_hwpx(document: NoticeDocument) -> tuple[str, bytes, dict[str, Any]]:
+def _export_notice_document_to_hwpx(
+    document: NoticeDocument,
+    style_profile: DocumentStyleProfile | None = None,
+) -> tuple[str, bytes, dict[str, Any]]:
     scripts = _require_hwpx_scripts(
         "build_hwpx.py",
         "fix_namespaces.py",
@@ -183,7 +220,7 @@ def _export_notice_document_to_hwpx(document: NoticeDocument) -> tuple[str, byte
         section_path = tmpdir / "section0.xml"
         output_path = tmpdir / f"{safe_title}.hwpx"
         verify_path = tmpdir / "verify.json"
-        section_path.write_text(_build_notice_section_xml(document), encoding="utf-8")
+        section_path.write_text(_build_notice_section_xml(document, style_profile), encoding="utf-8")
 
         python_bin = sys.executable or "python"
         _run_hwpx_command(
@@ -244,7 +281,10 @@ def _export_notice_document_to_hwpx(document: NoticeDocument) -> tuple[str, byte
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def _build_notice_section_xml(document: NoticeDocument) -> str:
+def _build_notice_section_xml(
+    document: NoticeDocument,
+    style_profile: DocumentStyleProfile | None = None,
+) -> str:
     if document.documentModel:
         return _build_document_model_section_xml(document)
 
@@ -607,14 +647,22 @@ def _export_notice_markdown_to_hwpx(markdown: str, title: str) -> tuple[str, byt
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def export_notice_pdf(document: NoticeDocument) -> tuple[str, bytes, dict[str, Any]]:
-    hwpx_filename, hwpx_content, hwpx_summary = export_notice_hwpx(document)
+def export_notice_pdf(
+    document: NoticeDocument,
+    style_profile: DocumentStyleProfile | None = None,
+) -> tuple[str, bytes, dict[str, Any]]:
+    hwpx_filename, hwpx_content, hwpx_summary = export_notice_hwpx(document, style_profile)
     pdf_filename, pdf_content, pdf_summary = convert_hwpx_bytes_to_pdf(
         hwpx_content,
         document.title,
         source_filename=hwpx_filename,
     )
-    return pdf_filename, pdf_content, {"hwpx_validation": hwpx_summary, "pdf_validation": pdf_summary}
+    validation_summary = {
+        "hwpx_validation": hwpx_summary,
+        "pdf_validation": pdf_summary,
+    }
+    validation_summary.update(_style_profile_summary(style_profile, document, "pdf"))
+    return pdf_filename, pdf_content, validation_summary
 
 
 def export_notice_docx(document: NoticeDocument) -> tuple[str, bytes, dict[str, Any]]:

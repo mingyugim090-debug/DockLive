@@ -369,6 +369,51 @@ export interface NoticeContact {
   email: string;
 }
 
+export type DocumentStyleProfileMode = 'preserve-official-form' | 'submission' | 'proposal' | 'report';
+
+export interface DocumentStyleProfile {
+  id: string;
+  name: string;
+  description: string;
+  mode: DocumentStyleProfileMode;
+  colors: {
+    primary: string;
+    primarySoft: string;
+    accent: string;
+    accentSoft: string;
+    text: string;
+    muted: string;
+    border: string;
+    surface: string;
+    tableHeaderBg: string;
+    tableHeaderText: string;
+  };
+  typography: {
+    fontFamily: string;
+    titleSize: string;
+    titleWeight: number;
+    headingWeight: number;
+    bodySize: string;
+    lineHeight: string;
+  };
+  section: {
+    headingStyle: 'plain-underlined' | 'left-rule' | 'boxed' | 'numbered-band';
+    spacing: 'compact' | 'normal' | 'wide';
+  };
+  table: {
+    headerStyle: 'preserve' | 'tinted' | 'solid' | 'minimal';
+    borderColor: string;
+    zebra: boolean;
+    density: 'compact' | 'comfortable';
+  };
+  preview: {
+    pageBackground: string;
+    documentBackground: string;
+    selectedOutline: string;
+    note: string;
+  };
+}
+
 export interface HwpxTextStyle {
   align?: 'left' | 'center' | 'right';
   fontSize?: number;

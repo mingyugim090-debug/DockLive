@@ -2,6 +2,10 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { getNoticeTemplate, type NoticeTemplate } from '@/data/mockTemplates';
+import {
+  documentStyleProfiles,
+  getDocumentStyleProfile,
+} from '@/lib/documentStyleProfiles';
 import { analysisToHwpxDocumentModel, sanitizeHwpxDocumentModel } from '@/lib/hwpxDocumentModel';
 import {
   analyzeHwpxTemplate,
@@ -14,6 +18,7 @@ import {
 } from '@/lib/api';
 import type {
   ExportResponse,
+  DocumentStyleProfile,
   HwpxTemplateAnalysisResponse,
   NoticeAnalysisResult,
   NoticeDocument,
@@ -372,9 +377,10 @@ async function exportUploadedHwpx(
   document: NoticeDocument,
   inputs: Record<string, string>,
   format: 'HWPX' | 'PDF',
+  styleProfile: DocumentStyleProfile,
 ): Promise<ExportResponse> {
   if (document.documentModel) {
-    return format === 'HWPX' ? exportNoticeHwpx(document) : exportNoticePdf(document);
+    return format === 'HWPX' ? exportNoticeHwpx(document, styleProfile) : exportNoticePdf(document, styleProfile);
   }
   const composed = await composeHwpxDocument(
     sourceFile,
@@ -441,6 +447,7 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
 
   // Template / document state
   const [selectedTemplateId, setSelectedTemplateId] = useState(initialTemplate.id);
+  const [styleProfile, setStyleProfileState] = useState<DocumentStyleProfile>(() => getDocumentStyleProfile('public-agency'));
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
   const [draftDocument, setDraftDocument] = useState<NoticeDocument | null>(
     initialTemplateId ? createDraftFromTemplate(initialTemplate) : null,
@@ -460,6 +467,7 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
   const [exporting, setExporting] = useState<'HWPX' | 'PDF' | 'DOCX' | null>(null);
 
   const selectedTemplate = useMemo(() => getNoticeTemplate(selectedTemplateId), [selectedTemplateId]);
+  const isOfficialHwpxSource = useMemo(() => Boolean(sourceFiles[0] && isHwpxLikeFile(sourceFiles[0])), [sourceFiles]);
   const stepIndex = agentSteps.findIndex((step) => step.id === currentStep);
   const missingRequired = useMemo(
     () => selectedTemplate.fields.filter((field) => field.required && !inputValues[field.id]?.trim()),
@@ -468,6 +476,10 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
 
   // Question fields (static for now; can be dynamically derived from analysisResult in future)
   const questionFields = useMemo((): QuestionField[] => DEFAULT_QUESTION_FIELDS, []);
+
+  const setStyleProfile = useCallback((profileOrId: DocumentStyleProfile | string) => {
+    setStyleProfileState(typeof profileOrId === 'string' ? getDocumentStyleProfile(profileOrId) : profileOrId);
+  }, []);
 
   // -------------------------------------------------------------------------
   // Template shortcut — goes directly to review (sample 체험 path)
@@ -482,6 +494,7 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
     setSourceFiles([]);
     setSourceFileName(null);
     setTemplateAnalysis(null);
+    setStyleProfileState(getDocumentStyleProfile('public-agency'));
     setAnalysisResult(null);
     setUserAnswers({});
     setWarnings([]);
@@ -502,6 +515,7 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
     setSourceFiles([file]);
     setSourceFileName(file.name);
     setSelectedTemplateId(resolved.id);
+    setStyleProfileState(getDocumentStyleProfile('official-preserve'));
     setUserAnswers({});
     setWarnings([]);
     setError(null);
@@ -816,16 +830,19 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
   const download = useCallback(async (format: 'HWPX' | 'PDF' | 'DOCX') => {
     if (!draftDocument) return;
     const normalized = normalizeNoticeDocument(draftDocument);
+    const exportStyleProfile = isOfficialHwpxSource && format === 'HWPX'
+      ? getDocumentStyleProfile('official-preserve')
+      : styleProfile;
     setExporting(format);
     setError(null);
     try {
       const exported =
         sourceFiles[0] && isHwpxLikeFile(sourceFiles[0]) && format !== 'DOCX'
-          ? await exportUploadedHwpx(sourceFiles[0], normalized, inputValues, format)
+          ? await exportUploadedHwpx(sourceFiles[0], normalized, inputValues, format, exportStyleProfile)
           : format === 'HWPX'
-            ? await exportNoticeHwpx(normalized)
+            ? await exportNoticeHwpx(normalized, exportStyleProfile)
             : format === 'PDF'
-              ? await exportNoticePdf(normalized)
+              ? await exportNoticePdf(normalized, exportStyleProfile)
               : await exportNoticeDocx(normalized);
       downloadExportResponse(exported);
       setCurrentStep('download');
@@ -834,7 +851,7 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
     } finally {
       setExporting(null);
     }
-  }, [draftDocument, inputValues, sourceFiles]);
+  }, [draftDocument, inputValues, isOfficialHwpxSource, sourceFiles, styleProfile]);
 
   // -------------------------------------------------------------------------
   // Reset
@@ -847,6 +864,7 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
     setSourceFiles([]);
     setSourceFileName(null);
     setTemplateAnalysis(null);
+    setStyleProfileState(getDocumentStyleProfile('public-agency'));
     setAnalysisResult(null);
     setUserAnswers({});
     setWarnings([]);
@@ -862,6 +880,9 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
     stepIndex,
     selectedTemplate,
     selectedTemplateId,
+    styleProfile,
+    availableStyleProfiles: documentStyleProfiles,
+    isOfficialHwpxSource,
     inputValues,
     draftDocument,
     sourceFileName,
@@ -875,6 +896,7 @@ export function useNoticeBuilder(initialTemplateId?: string | null) {
     exporting,
     missingRequired,
     setCurrentStep,
+    setStyleProfile,
     selectTemplate,
     selectUploadedFile,
     setInputValue,

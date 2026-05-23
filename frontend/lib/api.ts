@@ -4,6 +4,7 @@ import type {
   DraftStreamEvent,
   ExportListResponse,
   ExportResponse,
+  DocumentStyleProfile,
   HwpxComposeResponse,
   HwpxConvertResponse,
   HwpxFormSessionResponse,
@@ -410,21 +411,21 @@ export async function generateNoticeDocument(
   return res.json();
 }
 
-export async function exportNoticeHwpx(document: NoticeDocument): Promise<ExportResponse> {
+export async function exportNoticeHwpx(document: NoticeDocument, styleProfile?: DocumentStyleProfile): Promise<ExportResponse> {
   const res = await fetch(`${API_URL}/api/notices/export/hwpx`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ document }),
+    body: JSON.stringify({ document, style_profile: styleProfile }),
   });
   if (!res.ok) throw await readError(res, `HWPX 다운로드 생성 실패: ${res.status}`);
   return res.json();
 }
 
-export async function exportNoticePdf(document: NoticeDocument): Promise<ExportResponse> {
+export async function exportNoticePdf(document: NoticeDocument, styleProfile?: DocumentStyleProfile): Promise<ExportResponse> {
   const res = await fetch(`${API_URL}/api/notices/export/pdf`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ document }),
+    body: JSON.stringify({ document, style_profile: styleProfile }),
   });
   if (!res.ok) throw await readError(res, `PDF 다운로드 생성 실패: ${res.status}`);
   return res.json();
