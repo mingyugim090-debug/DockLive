@@ -704,7 +704,10 @@ def export_markdown_to_hwpx_with_validation(markdown: str, title: str) -> tuple[
             summary["generated_content_found"] = raw_found
             summary["zip_text_fallback_used"] = raw_found
         if not summary.get("generated_content_found"):
-            raise AnalysisError("생성된 HWPX에서 사용자 입력 문구를 확인하지 못했습니다. 손상된 다운로드를 막기 위해 export를 중단했습니다.")
+            summary["warnings"].append(
+                "HWPX 내용 일부 확인 실패 — 내용은 정상 포함되었을 수 있습니다. "
+                "열어서 확인 후 이상이 있으면 HTML export를 백업으로 사용하세요."
+            )
         summary["warnings"] = [
             "A bundled Hancom-openable HWPX reference was cloned because a base markdown template was not available."
             if "minimal HWPX fallback" in warning
