@@ -106,3 +106,29 @@ python tools\harness\error_memory.py resolve --id ERR-... --fix-summary "..." --
 ```
 
 Codex should check this registry before repeating a fix. Claude Code output should be considered unverified until the relevant harness profile passes.
+
+## Hermes-Inspired Extension
+
+Dock Live uses Hermes-style operations as repository discipline, not as a
+runtime dependency.
+
+- Durable project/user workflow memory lives in `harness/memory/`.
+- Role boundaries live in `harness/roles/`.
+- Claude Code handoff templates live in `harness/handoffs/`.
+- Generated handoffs and raw execution logs live in ignored `harness/runs/`.
+- Memory search is available through:
+
+```powershell
+python tools\harness\error_memory.py search grounded
+python tools\harness\error_memory.py search HWPX --include-runs
+```
+
+Generate a Claude Code handoff:
+
+```powershell
+python tools\harness\create_handoff.py --task "Implement the next scoped change"
+```
+
+After Claude Code returns changes, Codex should inspect the diff, run the
+relevant harness profile, and update the error registry if a repeated failure
+appears.

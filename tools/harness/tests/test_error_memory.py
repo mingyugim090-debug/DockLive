@@ -11,7 +11,7 @@ HARNESS_TOOLS = ROOT / "tools" / "harness"
 if str(HARNESS_TOOLS) not in sys.path:
     sys.path.insert(0, str(HARNESS_TOOLS))
 
-from error_memory import build_fingerprint, command_from_log, load_registry, record_failure, resolve_error  # noqa: E402
+from error_memory import build_fingerprint, command_from_log, load_registry, record_failure, resolve_error, search_memory  # noqa: E402
 
 
 class ErrorMemoryTests(unittest.TestCase):
@@ -58,6 +58,39 @@ class ErrorMemoryTests(unittest.TestCase):
         log = "$ python -m unittest backend.tests.contracts.test_agent_mvp_contracts\n# cwd: repo\n\nERROR"
 
         self.assertEqual(command_from_log(log), "python -m unittest backend.tests.contracts.test_agent_mvp_contracts")
+
+    def test_search_memory_finds_registry_and_memory_docs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry_path = root / "registry.json"
+            memory_dir = root / "memory"
+            memory_dir.mkdir()
+            memory_file = memory_dir / "PROJECT_MEMORY.md"
+            memory_file.write_text("Grounded analysis is mandatory.\n", encoding="utf-8")
+            record_failure("python -m unittest", 1, "AssertionError: grounded output missing", registry_path)
+
+            results = search_memory("grounded", registry_path, [memory_dir], root / "runs")
+            titles = [result["title"] for result in results]
+
+            self.assertTrue(any("ERR-" in title for title in titles))
+            self.assertIn(str(memory_file), titles)
+
+    def test_search_memory_only_reads_runs_when_requested(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry_path = root / "registry.json"
+            memory_dir = root / "memory"
+            runs_dir = root / "runs"
+            memory_dir.mkdir()
+            runs_dir.mkdir()
+            run_log = runs_dir / "01-test.log"
+            run_log.write_text("rare-run-token\n", encoding="utf-8")
+
+            without_runs = search_memory("rare-run-token", registry_path, [memory_dir], runs_dir, include_runs=False)
+            with_runs = search_memory("rare-run-token", registry_path, [memory_dir], runs_dir, include_runs=True)
+
+            self.assertEqual(without_runs, [])
+            self.assertEqual(with_runs[0]["title"], str(run_log))
 
 
 if __name__ == "__main__":

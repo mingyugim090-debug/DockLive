@@ -26,19 +26,29 @@ Do not start community, feed, team recruiting, or social features unless the use
 - Gemini-style QA prompts are treated as test-first harness input: convert them into tests, fixtures, or quality gates instead of production behavior.
 - Humans make final product judgments; agents must expose uncertainty, failures, and verification results.
 
+## Hermes-Inspired Operating Philosophy
+
+- Context is an operating surface, not background prose. Before work starts, agents read the state spec, durable memory, role file, and active error registry.
+- Memory is bounded and intentional. Use `harness/memory/` for durable product/development facts, `harness/errors/registry.json` for recurring failures, and `harness/runs/` for disposable raw logs.
+- Tool access follows role boundaries. Codex owns verification and error-memory updates; Claude Code owns broad implementation only after receiving a handoff with scope, constraints, and gates.
+- Delegation happens through explicit handoffs, not vague prompts. Use `tools/harness/create_handoff.py` when passing Codex work to Claude Code.
+- Every agent output remains untrusted until the relevant harness gate passes or the failure is recorded with a clear next step.
+
 ## Context Layer
 
 Before changing code:
 
 1. Read the relevant files and the nearest README/docs.
 2. Read `harness/state-spec.yaml` for product invariants.
-3. Check `harness/errors/registry.json` for active recurring failures.
-4. Keep backend, frontend, docs, tools, and harness responsibilities separate.
-5. If touching InsForge SDK or infrastructure code, first consult `docs/engineering/insforge.md`.
+3. Read the relevant role file in `harness/roles/`.
+4. Check `harness/memory/PROJECT_MEMORY.md` and `harness/memory/USER_WORKFLOW.md` for durable context.
+5. Check `harness/errors/registry.json` for active recurring failures.
+6. Keep backend, frontend, docs, tools, and harness responsibilities separate.
+7. If touching InsForge SDK or infrastructure code, first consult `docs/engineering/insforge.md`.
 
 ## Implementation Rules
 
-- Never invent facts from source documents. Missing document facts must remain `미명시`, `정보 없음`, `uncertain_fields`, or confirmation-required items.
+- Never invent facts from source documents. Missing document facts must remain `unspecified`, `no_information`, `uncertain_fields`, or confirmation-required items.
 - Keep API contract changes synchronized across `backend/models/schemas.py`, `frontend/lib/types.ts`, and client code.
 - Preserve HWPX structure whenever working with official forms. Prefer clone/replace workflows for complex templates.
 - Avoid moving app code unless a task explicitly calls for a refactor. New support tooling belongs in `tools/` or `harness/`.
@@ -79,3 +89,4 @@ If a command fails, the harness records a fingerprint in `harness/errors/registr
 - [ ] User-visible errors are clear.
 - [ ] Relevant harness profile was run.
 - [ ] New recurring failures are recorded or resolved in the error registry.
+- [ ] If another agent continues the work, a handoff was generated or updated.

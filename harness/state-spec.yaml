@@ -16,21 +16,62 @@ agent_collaboration:
     role: implementation_verification_driver
     responsibilities:
       - inspect_existing_context_before_changes
+      - read_project_memory_and_role_file
       - implement_scoped_changes
       - run_harness_quality_gates
       - record_or_resolve_repeat_failures
+      - generate_handoff_for_claude_when_delegating
   claude_code:
     role: broad_implementation_collaborator
     responsibilities:
+      - start_from_codex_handoff
       - follow_context_layer
       - keep_changes_inside_existing_boundaries
       - leave_verifiable_outputs_for_codex
+      - report_commands_failures_and_assumptions
   qa_agent:
     role: test_first_guardrail_author
     responsibilities:
       - turn_feature_specs_into_tests
       - mock_external_services
       - cover_happy_edge_and_error_paths
+
+operating_philosophy:
+  borrowed_from_hermes:
+    - explicit_context_loading_before_tool_use
+    - bounded_project_memory
+    - searchable_error_and_run_history
+    - role_specific_tool_boundaries
+    - delegated_subtasks_with_return_contracts
+    - untrusted_agent_output_until_verified
+  not_adopted:
+    - product_runtime_dependency_on_hermes_agent
+    - broad_autonomous_tool_access_inside_user_workflows
+
+memory_layer:
+  durable_project_memory:
+    - harness/memory/PROJECT_MEMORY.md
+    - harness/memory/USER_WORKFLOW.md
+  recurring_error_memory: harness/errors/registry.json
+  disposable_run_logs: harness/runs
+  search_command: python tools/harness/error_memory.py search "<query>"
+
+handoff_protocol:
+  codex_to_claude:
+    generator: tools/harness/create_handoff.py
+    command: python tools/harness/create_handoff.py --task "<task>"
+    claude_must_read:
+      - AGENTS.md
+      - harness/state-spec.yaml
+      - harness/memory/PROJECT_MEMORY.md
+      - harness/memory/USER_WORKFLOW.md
+      - harness/roles/claude-code.md
+    claude_return_contract:
+      - changed_files
+      - behavior_summary
+      - commands_run
+      - failures_or_open_questions
+      - suggested_codex_verification_gate
 
 contracts:
   analysis_result:
@@ -89,6 +130,8 @@ api_boundaries:
       - local_developer_automation
       - optional_hwp_mcp
       - harness_runner
+      - memory_search
+      - handoff_generation
 
 hwpx_rules:
   package_type: zip_xml

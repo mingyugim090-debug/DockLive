@@ -11,6 +11,12 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_REGISTRY_PATH = ROOT / "harness" / "errors" / "registry.json"
+DEFAULT_RUNS_DIR = ROOT / "harness" / "runs"
+DEFAULT_SEARCH_DIRS = (
+    ROOT / "harness" / "memory",
+    ROOT / "harness" / "roles",
+    ROOT / "harness" / "handoffs",
+)
 ERROR_PATTERNS = (
     "traceback",
     "error",
@@ -177,6 +183,89 @@ def match_log(log_path: Path, command: str = "", exit_code: int = 1) -> dict[str
     return next((entry for entry in registry["errors"] if entry.get("fingerprint") == fingerprint), None)
 
 
+def _field_text(entry: dict[str, Any]) -> str:
+    values: list[str] = []
+    for value in entry.values():
+        if isinstance(value, str):
+            values.append(value)
+        elif isinstance(value, list):
+            values.extend(str(item) for item in value)
+    return "\n".join(values)
+
+
+def _safe_relative(path: Path) -> str:
+    try:
+        return str(path.relative_to(ROOT))
+    except ValueError:
+        return str(path)
+
+
+def _search_files(query: str, roots: list[Path], limit: int) -> list[dict[str, Any]]:
+    lowered = query.lower()
+    results: list[dict[str, Any]] = []
+    for root in roots:
+        if not root.exists():
+            continue
+        paths = [root] if root.is_file() else sorted(root.rglob("*"))
+        for path in paths:
+            if len(results) >= limit:
+                return results
+            if not path.is_file() or path.suffix.lower() not in {".md", ".txt", ".json", ".yaml", ".yml", ".log"}:
+                continue
+            try:
+                lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+            except OSError:
+                continue
+            for line_number, line in enumerate(lines, start=1):
+                if lowered in line.lower():
+                    results.append(
+                        {
+                            "kind": "file",
+                            "title": _safe_relative(path),
+                            "line": line_number,
+                            "snippet": line.strip()[:240],
+                        }
+                    )
+                    break
+    return results
+
+
+def search_memory(
+    query: str,
+    registry_path: Path = DEFAULT_REGISTRY_PATH,
+    search_dirs: list[Path] | None = None,
+    runs_dir: Path = DEFAULT_RUNS_DIR,
+    include_runs: bool = False,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    query = query.strip()
+    if not query:
+        return []
+    lowered = query.lower()
+    results: list[dict[str, Any]] = []
+
+    registry = load_registry(registry_path)
+    for entry in registry["errors"]:
+        if len(results) >= limit:
+            return results
+        if lowered in _field_text(entry).lower():
+            results.append(
+                {
+                    "kind": "error",
+                    "title": f"{entry.get('id', '(no id)')} [{entry.get('status', 'active')}]",
+                    "line": None,
+                    "snippet": entry.get("symptom", ""),
+                }
+            )
+
+    roots = list(search_dirs if search_dirs is not None else DEFAULT_SEARCH_DIRS)
+    if include_runs:
+        roots.append(runs_dir)
+    remaining = max(limit - len(results), 0)
+    results.extend(_search_files(query, roots, remaining))
+    return results[:limit]
+
+
 def _print_entries(entries: list[dict[str, Any]]) -> None:
     if not entries:
         print("No errors found.")
@@ -190,6 +279,19 @@ def _print_entries(entries: list[dict[str, Any]]) -> None:
             print(f"  fix: {entry['fix_summary']}")
         if entry.get("guard_test"):
             print(f"  guard: {entry['guard_test']}")
+
+
+def _print_search_results(results: list[dict[str, Any]]) -> None:
+    if not results:
+        print("No memory matches found.")
+        return
+    for result in results:
+        location = result["title"]
+        if result.get("line"):
+            location += f":{result['line']}"
+        print(f"{result['kind']}: {location}")
+        if result.get("snippet"):
+            print(f"  {result['snippet']}")
 
 
 def main() -> int:
@@ -215,6 +317,11 @@ def main() -> int:
     match_parser.add_argument("--log", type=Path, required=True)
     match_parser.add_argument("--command", default="")
     match_parser.add_argument("--exit-code", type=int, default=1)
+
+    search_parser = subparsers.add_parser("search")
+    search_parser.add_argument("query")
+    search_parser.add_argument("--include-runs", action="store_true")
+    search_parser.add_argument("--limit", type=int, default=20)
 
     args = parser.parse_args()
 
@@ -246,6 +353,11 @@ def main() -> int:
             return 1
         _print_entries([entry])
         return 0
+
+    if args.command_name == "search":
+        results = search_memory(args.query, include_runs=args.include_runs, limit=args.limit)
+        _print_search_results(results)
+        return 0 if results else 1
 
     return 1
 

@@ -1,8 +1,6 @@
 param(
-  [ValidateSet("quick", "backend", "agent", "frontend", "full", "hwpx")]
-  [string]$Profile = "quick",
-  [switch]$IncludeHwpx,
-  [switch]$ContinueOnFailure,
+  [string]$Task = "Continue the scoped Dock Live task described by Codex.",
+  [switch]$Stdout,
   [string]$PythonPath = ""
 )
 
@@ -59,12 +57,9 @@ if (-not $Python) {
   exit 1
 }
 
-$ArgsList = @("tools\harness\run_harness.py", "--profile", $Profile)
-if ($IncludeHwpx) {
-  $ArgsList += "--include-hwpx"
-}
-if ($ContinueOnFailure) {
-  $ArgsList += "--continue-on-failure"
+$ArgsList = @("tools\harness\create_handoff.py", "--task", $Task)
+if ($Stdout) {
+  $ArgsList += "--stdout"
 }
 
 Push-Location $Root

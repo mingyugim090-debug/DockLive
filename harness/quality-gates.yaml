@@ -61,3 +61,21 @@ failure_policy:
     - exit_code
     - representative_error_line
     - related_file_paths
+
+collaboration_policy:
+  memory_sources:
+    - harness/memory/PROJECT_MEMORY.md
+    - harness/memory/USER_WORKFLOW.md
+    - harness/errors/registry.json
+  role_files:
+    - harness/roles/codex.md
+    - harness/roles/claude-code.md
+  codex_to_claude_handoff:
+    generator: python tools/harness/create_handoff.py --task "<task>"
+    required_sections:
+      - task
+      - required_context
+      - git_status
+      - active_error_memory
+      - recent_harness_runs
+      - expected_return_to_codex
