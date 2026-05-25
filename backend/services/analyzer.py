@@ -139,21 +139,20 @@ def _source_evidence(value: Any) -> list[SourceEvidence]:
 
 
 def _ensure_deadline_evidence(evidence: list[SourceEvidence], timeline: list[TimelineItem]) -> list[SourceEvidence]:
-    fields = {item.field for item in evidence}
-    if "submission_deadline" in fields:
-        return evidence
-    deadline = next((item for item in timeline if item.is_deadline), None)
-    if not deadline:
-        return evidence
-    evidence.append(
-        SourceEvidence(
-            field="submission_deadline",
-            quote=f"{deadline.label}: {deadline.date}",
-            note="timeline에서 추출한 마감일입니다.",
-            confidence=0.65,
-        )
-    )
+    # Never synthesize evidence from normalized fields. Evidence must be a real
+    # quote passed through from the extraction model and verified upstream.
     return evidence
+
+
+def _evidence_quotes(value: Any, evidence: list[SourceEvidence]) -> list[str]:
+    quotes: list[str] = []
+    for quote in _as_list(value):
+        if quote not in quotes:
+            quotes.append(quote[:500])
+    for item in evidence:
+        if item.quote and item.quote not in quotes:
+            quotes.append(item.quote[:500])
+    return quotes
 
 
 def _missing_questions(value: Any) -> list[MissingQuestion]:
@@ -228,6 +227,12 @@ def _derive_missing_questions(
             f"{first_section} 섹션에 반드시 넣어야 할 경험, 성과, 수치가 있나요?",
             "섹션별 초안은 사용자가 제공한 사실만 근거로 작성해야 합니다.",
             sections[0].id,
+        )
+    else:
+        add(
+            "작성해야 할 항목이나 공식 서식 목차가 별도로 있나요?",
+            "원문에서 작성 양식 항목을 확인하지 못했습니다.",
+            "document_sections",
         )
 
     add(
@@ -306,37 +311,23 @@ def build_analysis_result(raw: dict, source_type: str = "pdf", source_name: str 
     doc_type = raw.get("doc_type", "competition")
     if doc_type not in ("competition", "research", "scholarship", "startup"):
         doc_type = "competition"
+    uncertain_fields = _as_list(raw.get("uncertain_fields"))
 
     if not checklist:
-        logger.warning("Checklist is empty; using fallback items")
-        for i, item in enumerate(_FALLBACK_CHECKLIST.get(doc_type, _FALLBACK_CHECKLIST["competition"])):
-            checklist.append(
-                ChecklistItem(
-                    id=f"check-{i + 1}",
-                    label=item["label"],
-                    category=item["category"],
-                    description=item.get("description"),
-                    file_format=item.get("file_format"),
-                )
-            )
+        logger.warning("Checklist is empty; leaving submission documents unspecified")
+        if "제출 서류: 원문에서 명시된 항목을 확인하지 못했습니다." not in uncertain_fields:
+            uncertain_fields.append("제출 서류: 원문에서 명시된 항목을 확인하지 못했습니다.")
 
     if not sections:
-        logger.warning("Document sections are empty; using fallback sections")
-        for item in _FALLBACK_SECTIONS.get(doc_type, _FALLBACK_SECTIONS["competition"]):
-            sections.append(
-                DocumentSection(
-                    id=f"section-{item['order']}",
-                    title=str(item["title"]),
-                    hint=str(item["hint"]),
-                    order=int(item["order"]),
-                )
-            )
+        logger.warning("Document sections are empty; leaving document template unspecified")
+        if "작성 항목: 원문에서 공식 작성 항목을 확인하지 못했습니다." not in uncertain_fields:
+            uncertain_fields.append("작성 항목: 원문에서 공식 작성 항목을 확인하지 못했습니다.")
 
     if not timeline:
         logger.warning("Timeline is empty; no reliable dates were extracted")
 
     source_evidence = _ensure_deadline_evidence(_source_evidence(raw.get("source_evidence")), timeline)
-    uncertain_fields = _as_list(raw.get("uncertain_fields"))
+    evidence_quotes = _evidence_quotes(raw.get("evidence_quotes"), source_evidence)
     submission_method = raw.get("submission_method") or None
     missing_questions = _derive_missing_questions(
         _missing_questions(raw.get("missing_questions")),
@@ -352,8 +343,8 @@ def build_analysis_result(raw: dict, source_type: str = "pdf", source_name: str 
         source_name=source_name,
         summary=raw.get("summary") or "",
         doc_type=doc_type,
-        title=raw.get("title") or "제목 미상",
-        organization=raw.get("organization") or "기관 미상",
+        title=raw.get("title") or "미명시",
+        organization=raw.get("organization") or "미명시",
         timeline=timeline,
         checklist=checklist,
         document_template=sections,
@@ -364,6 +355,7 @@ def build_analysis_result(raw: dict, source_type: str = "pdf", source_name: str 
         benefits=_as_list(raw.get("benefits")),
         cautions=_as_list(raw.get("cautions")),
         uncertain_fields=uncertain_fields,
+        evidence_quotes=evidence_quotes,
         source_evidence=source_evidence,
         missing_questions=missing_questions,
     )

@@ -73,6 +73,7 @@ class AnalysisResult(BaseModel):
     benefits: list[str] = Field(default_factory=list)
     cautions: list[str] = Field(default_factory=list)
     uncertain_fields: list[str] = Field(default_factory=list)
+    evidence_quotes: list[str] = Field(default_factory=list)
     source_evidence: list[SourceEvidence] = Field(default_factory=list)
     missing_questions: list[MissingQuestion] = Field(default_factory=list)
 

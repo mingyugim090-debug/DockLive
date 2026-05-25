@@ -11,7 +11,7 @@ from typing import Any
 from core.errors import AnalysisError
 from models.schemas import DocumentStyleProfile, NoticeDocument, NoticeSection
 from services.ai_provider import call_json, should_use_mock_ai
-from services.document_ingestion import convert_hwp_to_hwpx, extract_text_from_hwpx
+from services.document_ingestion import parse_hwp_document, parse_hwpx_document
 from services.drafting_service import _make_tmp_dir, _require_hwpx_scripts, _run_hwpx_command, _safe_title
 from services.pdf_export_service import convert_hwpx_bytes_to_pdf
 
@@ -683,11 +683,11 @@ def extract_reference_text(content: bytes, filename: str) -> tuple[str, list[str
 
         return extract_text_from_pdf(content, filename), []
     if suffix == ".hwpx":
-        return extract_text_from_hwpx(content)
+        parsed = parse_hwpx_document(content, filename)
+        return parsed.text, parsed.warnings
     if suffix == ".hwp":
-        converted, warnings = convert_hwp_to_hwpx(content, filename)
-        text, extract_warnings = extract_text_from_hwpx(converted)
-        return text, warnings + extract_warnings
+        parsed = parse_hwp_document(content, filename)
+        return parsed.text, parsed.warnings
     if suffix in {".txt", ".md"}:
         return content.decode("utf-8", errors="replace"), []
     if suffix == ".docx":
@@ -757,8 +757,10 @@ def _call_notice_ai(
     }
     system_prompt = (
         "당신은 한국 공공기관 공고문을 작성하는 행정 문서 전문가입니다. "
-        "내부 메타데이터, JSON 문자열, 자동작성 문구를 본문에 쓰지 말고 제출 가능한 공고문 내용만 작성하세요. "
-        "불확실한 사실은 임의로 확정하지 말고 확인 필요 문장으로 완곡하게 작성하세요."
+        "입력값과 참고자료 발췌문에 존재하는 사실만 사용하세요. "
+        "마감일, 지원 대상, 제출 서류, 지원금, 접수 방법, 연락처를 추측하거나 일반적인 관행으로 채우지 마세요. "
+        "근거가 없는 값은 반드시 '미명시' 또는 '정보 없음'으로 작성하세요. "
+        "내부 메타데이터, JSON 문자열, 자동작성 문구를 본문에 쓰지 말고 제출 가능한 공고문 내용만 작성하세요."
     )
     reference_excerpt = "\n\n".join(
         f"[{item.get('filename', '참고자료')}]\n{item.get('text', '')[:2500]}" for item in references
@@ -771,7 +773,11 @@ def _call_notice_ai(
         "inputs": inputs,
         "referenceExcerpt": reference_excerpt,
     }
-    user_prompt = "다음 정보를 공공기관 공고문 document JSON으로 작성하세요.\n" + json.dumps(payload, ensure_ascii=False)
+    user_prompt = (
+        "다음 정보를 공공기관 공고문 document JSON으로 작성하세요. "
+        "referenceExcerpt 또는 inputs에 없는 사실은 만들지 말고 '미명시'로 두세요.\n"
+        + json.dumps(payload, ensure_ascii=False)
+    )
     return call_json("draft", system_prompt, user_prompt, max_tokens=4096, json_schema=schema, schema_name="notice_document")
 
 
@@ -787,7 +793,7 @@ def _normalize_notice_document(
             "title": raw.get("title") or inputs.get("title") or template["name"],
             "organization": raw.get("organization") or inputs.get("organization") or "기관명 확인 필요",
             "purpose": raw.get("purpose") or template["purpose"],
-            "applicationMethod": raw.get("applicationMethod") or inputs.get("applicationMethod") or "온라인 또는 담당 부서 접수",
+            "applicationMethod": raw.get("applicationMethod") or inputs.get("applicationMethod") or "미명시",
             "sections": raw.get("sections") or [],
             "schedule": raw.get("schedule") or {},
             "contact": raw.get("contact") or {},
@@ -812,7 +818,7 @@ def _normalize_notice_document(
         normalized_sections.append(NoticeSection(heading=f"{index}. {heading}", body=body))
     document.sections = normalized_sections
     if not document.attachments:
-        document.attachments = _split_attachments(inputs.get("attachments")) or _split_attachments(inputs.get("documents")) or ["신청서", "개인정보 수집 및 이용 동의서"]
+        document.attachments = _split_attachments(inputs.get("attachments")) or _split_attachments(inputs.get("documents"))
     return document
 
 
@@ -823,12 +829,12 @@ def _mock_notice_document(
     references: list[dict[str, str]],
 ) -> dict[str, Any]:
     title = inputs.get("title") or template["name"]
-    organization = inputs.get("organization") or "서울과학기술대학교 창업지원단"
-    target = inputs.get("target") or "해당 분야에 관심 있는 시민 및 기관 관계자"
-    capacity = inputs.get("capacity") or "모집 규모는 기관 계획과 예산 범위에 따라 정합니다."
-    benefit = inputs.get("benefit") or "전문 교육, 네트워킹, 후속 지원 기회"
-    documents = inputs.get("documents") or inputs.get("attachments") or "신청서, 개인정보 수집 및 이용 동의서 등 공고에서 정한 서류"
-    criteria = inputs.get("selectionCriteria") or "신청 자격, 사업 목적 적합성, 제출 서류의 충실성 등을 종합적으로 검토합니다."
+    organization = inputs.get("organization") or "미명시"
+    target = inputs.get("target") or "미명시"
+    capacity = inputs.get("capacity") or "미명시"
+    benefit = inputs.get("benefit") or "미명시"
+    documents = inputs.get("documents") or inputs.get("attachments") or "미명시"
+    criteria = inputs.get("selectionCriteria") or "미명시"
     reference_note = " 참고자료의 주요 내용을 반영하여 세부 일정과 운영 방식은 담당 부서 확인 후 확정합니다." if references else ""
     ai_prompt = inputs.get("aiPrompt", "").strip()
     ai_target = inputs.get("aiTarget", "").strip()
@@ -852,7 +858,7 @@ def _mock_notice_document(
         "title": title,
         "organization": organization,
         "purpose": template["purpose"],
-        "applicationMethod": inputs.get("applicationMethod") or "기관 누리집 공고문 확인 후 온라인 신청",
+        "applicationMethod": inputs.get("applicationMethod") or "미명시",
         "sections": [
             {
                 "heading": f"{idx}. {heading}",
@@ -861,32 +867,32 @@ def _mock_notice_document(
             for idx, heading in enumerate(template["sections"], start=1)
         ],
         "schedule": {
-            "applicationPeriod": inputs.get("applicationPeriod") or "공고일로부터 2026. 6. 30.까지",
-            "eventPeriod": inputs.get("eventPeriod") or inputs.get("operationPeriod") or "선정 후 별도 안내",
+            "applicationPeriod": inputs.get("applicationPeriod") or "미명시",
+            "eventPeriod": inputs.get("eventPeriod") or inputs.get("operationPeriod") or "미명시",
         },
         "contact": {
-            "department": inputs.get("department") or "사업 담당 부서",
-            "phone": inputs.get("phone") or "02-000-0000",
-            "email": inputs.get("email") or "notice@example.go.kr",
+            "department": inputs.get("department") or "미명시",
+            "phone": inputs.get("phone") or "미명시",
+            "email": inputs.get("email") or "미명시",
         },
-        "attachments": _split_attachments(inputs.get("attachments")) or ["신청서", "개인정보 수집 및 이용 동의서"],
+        "attachments": _split_attachments(inputs.get("attachments")),
     }
 
 
 def _default_section_body(
     heading: str,
     inputs: dict[str, str],
-    target: str = "공고 대상자",
-    capacity: str = "모집 규모는 기관 계획과 예산 범위에 따라 정합니다.",
-    benefit: str = "세부 지원 내용",
-    documents: str = "신청서, 개인정보 수집 및 이용 동의서 등 공고에서 정한 서류",
-    criteria: str = "신청 자격, 사업 목적 적합성, 제출 서류의 충실성 등을 종합적으로 검토합니다.",
+    target: str = "미명시",
+    capacity: str = "미명시",
+    benefit: str = "미명시",
+    documents: str = "미명시",
+    criteria: str = "미명시",
 ) -> str:
     title = inputs.get("title") or "본 공고"
-    organization = inputs.get("organization") or "주관 기관"
-    application_period = inputs.get("applicationPeriod") or "공고문에 따른 접수 기간"
-    event_period = inputs.get("eventPeriod") or "선정 이후 별도 안내하는 운영 일정"
-    method = inputs.get("applicationMethod") or "기관 누리집 또는 담당 부서가 안내한 접수 방법"
+    organization = inputs.get("organization") or "미명시"
+    application_period = inputs.get("applicationPeriod") or "미명시"
+    event_period = inputs.get("eventPeriod") or "미명시"
+    method = inputs.get("applicationMethod") or "미명시"
     if heading == "사업 개요":
         return f"{organization}은 {title}을 통해 사업 목적에 적합한 참여자를 모집하고, 원활한 운영을 위한 절차를 안내합니다. 주요 지원 내용은 {benefit}입니다."
     if heading == "모집 대상":

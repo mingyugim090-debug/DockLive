@@ -42,6 +42,12 @@ def _model_for_task(task: AiTask) -> str:
     return settings.OPENAI_DRAFT_MODEL if task == "draft" else settings.OPENAI_ANALYSIS_MODEL
 
 
+def _temperature_for_task(task: AiTask) -> float:
+    if task in {"analysis", "match"}:
+        return 0.0
+    return 0.2
+
+
 def clean_json(text: str) -> str:
     text = (text or "").strip()
     code_block = re.search(r"```(?:json)?\s*([\s\S]+?)\s*```", text)
@@ -119,6 +125,7 @@ def _call_openai_json(
         completion = client.chat.completions.create(
             model=_model_for_task(task),
             max_tokens=max_tokens,
+            temperature=_temperature_for_task(task),
             response_format=_structured_response_format(json_schema, schema_name),
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -151,6 +158,7 @@ def _call_openai_json_http(
     payload = {
         "model": _model_for_task(task),
         "max_tokens": max_tokens,
+        "temperature": _temperature_for_task(task),
         "response_format": _structured_response_format(json_schema, schema_name),
         "messages": [
             {"role": "system", "content": system_prompt},
@@ -226,7 +234,7 @@ def _call_gemma_json(task: AiTask, system_prompt: str, user_prompt: str, max_tok
         "systemInstruction": {"parts": [{"text": system_prompt}]},
         "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
         "generationConfig": {
-            "temperature": 0.2,
+            "temperature": _temperature_for_task(task),
             "maxOutputTokens": max_tokens,
             "responseMimeType": "application/json",
         },

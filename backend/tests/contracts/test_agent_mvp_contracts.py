@@ -49,6 +49,7 @@ try:
         detect_template,
     )
     from services.mock_data import get_mock_result  # noqa: E402
+    from services.openai_service import _validate_result  # noqa: E402
     from services.storage import list_export_files, load_export_file, save_export_file  # noqa: E402
 except ModuleNotFoundError as exc:  # pragma: no cover - local minimal Python fallback
     if exc.name != "pydantic":
@@ -79,6 +80,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - local minimal Python fa
     convert_hwp_to_hwpx = None
     detect_uploaded_document_type = None
     get_mock_result = None
+    _validate_result = None
     list_export_files = None
     load_export_file = None
     save_export_file = None
@@ -123,7 +125,43 @@ class AgentMvpContractTests(unittest.TestCase):
         self.assertGreaterEqual(len(restored.checklist), 1)
         self.assertGreaterEqual(len(restored.document_template), 1)
         self.assertGreaterEqual(len(restored.source_evidence), 1)
+        self.assertGreaterEqual(len(restored.evidence_quotes), 1)
         self.assertGreaterEqual(len(restored.missing_questions), 1)
+
+    def test_analysis_fact_guard_rejects_unsupported_fields(self):
+        if _validate_result is None:
+            self.skipTest("backend dependencies are not installed in this Python environment")
+
+        source = "KAIST OverEdge 창업 아이디어 공모전\n마감일: 2026-06-30\n제출 서류: 기술서"
+        guarded = _validate_result(
+            {
+                "doc_type": "startup",
+                "title": "KAIST OverEdge 창업 아이디어 공모전",
+                "organization": "없는 기관",
+                "summary": "원문 기반 요약",
+                "checklist": [
+                    {"label": "기술서", "category": "required", "description": "기술서", "file_format": "미명시"},
+                    {"label": "사업자등록증", "category": "required", "description": "사업자등록증", "file_format": "PDF"},
+                ],
+                "evidence_quotes": ["KAIST OverEdge 창업 아이디어 공모전", "없는 기관"],
+                "source_evidence": [
+                    {
+                        "field": "title",
+                        "quote": "KAIST OverEdge 창업 아이디어 공모전",
+                        "page": None,
+                        "note": "",
+                        "confidence": 0.98,
+                    },
+                    {"field": "organization", "quote": "없는 기관", "page": None, "note": "", "confidence": 0.9},
+                ],
+            },
+            source,
+        )
+
+        self.assertEqual(guarded["organization"], "미명시")
+        self.assertEqual([item["label"] for item in guarded["checklist"]], ["기술서"])
+        self.assertNotIn("없는 기관", guarded["evidence_quotes"])
+        self.assertTrue(any("근거" in item for item in guarded["uncertain_fields"]))
 
     def test_export_metadata_contract(self):
         if ExportMetadata is None:

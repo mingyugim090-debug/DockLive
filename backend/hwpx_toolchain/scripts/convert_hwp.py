@@ -13,12 +13,14 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import os
 import re
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 
@@ -114,18 +116,21 @@ def convert_with_result(input_path: str, output_path: str | None = None) -> dict
     output = output_path or str(Path(input_path).with_suffix(".hwpx"))
     try:
         converted = _convert_with_hwp2hwpx(input_path, output)
+        audit = _conversion_audit(input_path, converted, "hwp2hwpx-python-refactor")
         return {
             "input": input_path,
             "output": converted,
             "size": os.path.getsize(converted),
             "conversion_method": "hwp2hwpx-python-refactor",
-            "warnings": [],
+            "warnings": audit.pop("warnings"),
+            "audit": audit,
         }
     except Exception as primary_exc:
         if os.getenv("HWP2HWPX_DISABLE_TEXT_FALLBACK", "").strip().lower() in {"1", "true", "yes"}:
             raise
 
         fallback = _convert_with_preview_text_fallback(input_path, output, primary_exc)
+        audit = _conversion_audit(input_path, fallback, "preview-text-to-hwpx-fallback")
         return {
             "input": input_path,
             "output": fallback,
@@ -134,12 +139,68 @@ def convert_with_result(input_path: str, output_path: str | None = None) -> dict
             "warnings": [
                 "원본 HWP 서식 보존 변환기가 실패해 HWP 미리보기 텍스트 기반 HWPX로 변환했습니다.",
                 f"원인: {primary_exc}",
+                *audit.pop("warnings"),
             ],
+            "audit": audit,
         }
 
 
 def convert(input_path: str, output_path: str | None = None) -> str:
     return str(convert_with_result(input_path, output_path)["output"])
+
+
+def _conversion_audit(input_path: str, output_path: str, method: str) -> dict:
+    warnings: list[str] = []
+    preview_text = ""
+    output_text = ""
+
+    try:
+        preview_text = _extract_hwp_preview_text(input_path)
+    except Exception as exc:
+        warnings.append(f"HWP 원본 preview 텍스트 감사에 실패했습니다: {exc}")
+
+    try:
+        output_text = _extract_hwpx_package_text(output_path)
+    except Exception as exc:
+        warnings.append(f"변환된 HWPX 텍스트 감사에 실패했습니다: {exc}")
+
+    preview_chars = len(_clean_hwp_text(preview_text))
+    output_chars = len(_clean_hwp_text(output_text))
+    if output_chars < 5:
+        warnings.append("변환된 HWPX에서 분석 가능한 텍스트를 거의 찾지 못했습니다.")
+    if preview_chars and output_chars and output_chars < max(10, int(preview_chars * 0.6)):
+        warnings.append(
+            f"변환 후 텍스트 길이가 원본 preview 대비 크게 줄었습니다. preview={preview_chars}, hwpx={output_chars}"
+        )
+    if method == "preview-text-to-hwpx-fallback":
+        warnings.append("텍스트 fallback 변환 결과는 표 구조와 서식이 일부 누락될 수 있습니다.")
+
+    return {
+        "input_preview_text_chars": preview_chars,
+        "output_hwpx_text_chars": output_chars,
+        "output_text_preview": _clean_hwp_text(output_text)[:1000],
+        "data_loss_risk": bool(output_chars < 5 or (preview_chars and output_chars < max(10, int(preview_chars * 0.6)))),
+        "warnings": warnings,
+    }
+
+
+def _extract_hwpx_package_text(output_path: str) -> str:
+    chunks: list[str] = []
+    with zipfile.ZipFile(output_path) as package:
+        for name in sorted(package.namelist()):
+            lower = name.lower()
+            if not lower.endswith(".xml"):
+                continue
+            if "/bindata/" in lower or lower.startswith("bindata/"):
+                continue
+            xml = package.read(name).decode("utf-8", errors="replace")
+            text_nodes = re.findall(r"<(?:\w+:)?t\b[^>]*>(.*?)</(?:\w+:)?t>", xml, flags=re.DOTALL)
+            for node in text_nodes:
+                text = re.sub(r"<[^>]+>", "", node)
+                text = html.unescape(text).strip()
+                if text:
+                    chunks.append(text)
+    return _clean_hwp_text("\n".join(chunks))
 
 
 def _convert_with_hwp2hwpx(input_path: str, output_path: str | None = None) -> str:
