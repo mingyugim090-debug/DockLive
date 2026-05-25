@@ -1,4 +1,5 @@
 import html
+import json
 import re
 import shutil
 import subprocess
@@ -92,8 +93,15 @@ def convert_hwp_to_hwpx(content: bytes, filename: str) -> tuple[bytes, list[str]
         input_path.write_bytes(content)
 
         try:
-            subprocess.run(
-                [sys.executable or "python", str(scripts["convert_hwp.py"]), str(input_path), "-o", str(output_path)],
+            convert_result = subprocess.run(
+                [
+                    sys.executable or "python",
+                    str(scripts["convert_hwp.py"]),
+                    str(input_path),
+                    "-o",
+                    str(output_path),
+                    "--json",
+                ],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -101,6 +109,7 @@ def convert_hwp_to_hwpx(content: bytes, filename: str) -> tuple[bytes, list[str]
                 errors="replace",
                 env=_hwpx_subprocess_env(),
             )
+            warnings.extend(_conversion_warnings_from_stdout(convert_result.stdout))
             subprocess.run(
                 [sys.executable or "python", str(scripts["fix_namespaces.py"]), str(output_path)],
                 check=True,
@@ -132,6 +141,25 @@ def convert_hwp_to_hwpx(content: bytes, filename: str) -> tuple[bytes, list[str]
         return output_path.read_bytes(), warnings
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def _conversion_warnings_from_stdout(stdout: str) -> list[str]:
+    if not stdout.strip():
+        return []
+    try:
+        payload = json.loads(stdout)
+    except json.JSONDecodeError:
+        match = re.search(r"\{[\s\S]+\}\s*$", stdout.strip())
+        if not match:
+            return []
+        try:
+            payload = json.loads(match.group(0))
+        except json.JSONDecodeError:
+            return []
+    warnings = payload.get("warnings", []) if isinstance(payload, dict) else []
+    if not isinstance(warnings, list):
+        return []
+    return [str(item).strip() for item in warnings if str(item).strip()]
 
 
 def _extract_text_from_hwpx_zip(path: Path) -> str:

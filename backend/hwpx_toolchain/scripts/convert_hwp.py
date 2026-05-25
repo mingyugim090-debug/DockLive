@@ -15,12 +15,15 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 
 REPO_URL = "https://github.com/jkf87/hwp2hwpx-python-refactor.git"
+SCRIPT_DIR = Path(__file__).resolve().parent
 
 
 def _import_or_none(module_name: str):
@@ -47,13 +50,31 @@ def _ensure_dependencies() -> None:
         )
 
 
+def _ensure_preview_text_dependencies() -> None:
+    if _import_or_none("olefile") is None:
+        raise RuntimeError(
+            "HWP 텍스트 fallback에 필요한 Python 패키지가 설치되어 있지 않습니다: olefile. "
+            "requirements.txt 또는 배포 이미지에 olefile을 설치해 주세요."
+        )
+
+
 def _candidate_roots() -> list[Path]:
-    script_dir = Path(__file__).resolve().parent
-    return [
+    script_dir = SCRIPT_DIR
+    repo_root = script_dir.parents[2]
+    env_dir = os.getenv("HWP2HWPX_DIR", "").strip()
+    candidates = [
         Path.home() / "hwp2hwpx-python-refactor",
         Path.home() / "문자연구원-claudecode" / "hwp2hwpx-python-refactor",
         script_dir.parent / ".hwp2hwpx-repo",
-        script_dir.parents[2] / "tools" / "hwp2hwpx-python-refactor",
+        repo_root / "tools" / "hwp2hwpx-python-refactor",
+        repo_root / "vendor" / "hwp2hwpx-python-refactor",
+    ]
+    if env_dir:
+        candidates.insert(0, Path(env_dir))
+    return [
+        candidate
+        for candidate in candidates
+        if candidate
     ]
 
 
@@ -83,16 +104,182 @@ def _ensure_hwp2hwpx() -> None:
 
     sys.path.insert(0, str(clone_dir))
     if _import_or_none("hwp2hwpx") is None:
-        raise RuntimeError("hwp2hwpx 변환기를 import하지 못했습니다.")
+        raise RuntimeError(
+            "hwp2hwpx 변환기를 import하지 못했습니다. "
+            "변환기 저장소가 손상되었거나 pyhwp/olefile/lxml 의존성이 맞지 않습니다."
+        )
+
+
+def convert_with_result(input_path: str, output_path: str | None = None) -> dict:
+    output = output_path or str(Path(input_path).with_suffix(".hwpx"))
+    try:
+        converted = _convert_with_hwp2hwpx(input_path, output)
+        return {
+            "input": input_path,
+            "output": converted,
+            "size": os.path.getsize(converted),
+            "conversion_method": "hwp2hwpx-python-refactor",
+            "warnings": [],
+        }
+    except Exception as primary_exc:
+        if os.getenv("HWP2HWPX_DISABLE_TEXT_FALLBACK", "").strip().lower() in {"1", "true", "yes"}:
+            raise
+
+        fallback = _convert_with_preview_text_fallback(input_path, output, primary_exc)
+        return {
+            "input": input_path,
+            "output": fallback,
+            "size": os.path.getsize(fallback),
+            "conversion_method": "preview-text-to-hwpx-fallback",
+            "warnings": [
+                "원본 HWP 서식 보존 변환기가 실패해 HWP 미리보기 텍스트 기반 HWPX로 변환했습니다.",
+                f"원인: {primary_exc}",
+            ],
+        }
 
 
 def convert(input_path: str, output_path: str | None = None) -> str:
+    return str(convert_with_result(input_path, output_path)["output"])
+
+
+def _convert_with_hwp2hwpx(input_path: str, output_path: str | None = None) -> str:
     _ensure_dependencies()
     _ensure_hwp2hwpx()
     from hwp2hwpx import convert_file
 
     output = convert_file(input_path, output_path)
     return str(output)
+
+
+def _convert_with_preview_text_fallback(input_path: str, output_path: str, reason: Exception) -> str:
+    text = _extract_hwp_preview_text(input_path)
+    if len(text.strip()) < 5:
+        raise RuntimeError(
+            "hwp2hwpx 변환기가 실패했고 HWP 미리보기 텍스트도 추출하지 못했습니다. "
+            "암호화되었거나 미리보기 텍스트가 없는 HWP일 수 있습니다."
+        ) from reason
+
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    markdown = _markdown_from_hwp_text(text, Path(input_path).stem)
+    md2hwpx = SCRIPT_DIR / "md2hwpx.py"
+    if not md2hwpx.is_file():
+        raise RuntimeError(f"텍스트 fallback에 필요한 md2hwpx.py를 찾지 못했습니다: {md2hwpx}") from reason
+
+    with tempfile.TemporaryDirectory(prefix="livedock_hwp_fallback_") as tmp:
+        markdown_path = Path(tmp) / "input.md"
+        markdown_path.write_text(markdown, encoding="utf-8")
+        completed = subprocess.run(
+            [
+                sys.executable or "python",
+                str(md2hwpx),
+                str(markdown_path),
+                "-o",
+                str(output),
+                "--title",
+                Path(input_path).stem,
+                "--template",
+                "report",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        if not output.exists():
+            detail = "\n".join(part for part in [completed.stdout, completed.stderr] if part).strip()
+            raise RuntimeError(f"HWP 텍스트 fallback 변환 후 출력 파일을 찾지 못했습니다. {detail[:500]}") from reason
+    return str(output)
+
+
+def _extract_hwp_preview_text(input_path: str) -> str:
+    _ensure_preview_text_dependencies()
+    import olefile
+
+    path = Path(input_path)
+    try:
+        with olefile.OleFileIO(str(path)) as ole:
+            for stream_name in ("PrvText", "PrvText/Section0"):
+                if not ole.exists(stream_name):
+                    continue
+                data = ole.openstream(stream_name).read()
+                text = _decode_hwp_text(data)
+                if text.strip():
+                    return _clean_hwp_text(text)
+    except Exception:
+        pass
+    return _scan_utf16le_text(path.read_bytes())
+
+
+def _decode_hwp_text(data: bytes) -> str:
+    for encoding in ("utf-16-le", "utf-8", "cp949"):
+        try:
+            return data.decode(encoding, errors="replace")
+        except Exception:
+            continue
+    return ""
+
+
+def _clean_hwp_text(text: str) -> str:
+    text = text.replace("\x00", "")
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _scan_utf16le_text(data: bytes) -> str:
+    runs: list[str] = []
+    i = 0
+    while i < len(data) - 1 and len(runs) < 800:
+        code = data[i] | (data[i + 1] << 8)
+        if _looks_like_text_codepoint(code):
+            run = []
+            while i < len(data) - 1:
+                current = data[i] | (data[i + 1] << 8)
+                if not _looks_like_text_codepoint(current):
+                    break
+                run.append(chr(current))
+                i += 2
+            candidate = "".join(run).strip()
+            if len(candidate) >= 2:
+                runs.append(candidate)
+        else:
+            i += 2
+    return _clean_hwp_text("\n".join(runs))
+
+
+def _looks_like_text_codepoint(code: int) -> bool:
+    return (
+        code in {0x0009, 0x000A, 0x000D, 0x0020}
+        or 0x0021 <= code <= 0x007E
+        or 0x3131 <= code <= 0x318F
+        or 0xAC00 <= code <= 0xD7A3
+        or 0x4E00 <= code <= 0x9FFF
+    )
+
+
+def _markdown_from_hwp_text(text: str, title: str) -> str:
+    lines = [line.strip() for line in text.splitlines()]
+    lines = [line for line in lines if line]
+    if not lines:
+        lines = [title]
+
+    body: list[str] = [f"# {title}", ""]
+    for line in lines:
+        if line == title:
+            continue
+        if _looks_like_heading(line):
+            body.extend([f"## {line}", ""])
+        else:
+            body.extend([line, ""])
+    return "\n".join(body).strip() + "\n"
+
+
+def _looks_like_heading(line: str) -> bool:
+    if len(line) > 80:
+        return False
+    return bool(re.match(r"^(\d+[\.)]|[가-하][\.)]|[IVX]+[\.)])\s+", line)) or line.endswith(("개요", "안내", "방법", "서류", "일정"))
 
 
 def info(input_path: str) -> dict:
@@ -141,8 +328,7 @@ def main() -> int:
         if args.info:
             result = info(str(input_path))
         else:
-            output = convert(str(input_path), args.output)
-            result = {"input": str(input_path), "output": output, "size": os.path.getsize(output)}
+            result = convert_with_result(str(input_path), args.output)
         print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else result)
         return 0
     except Exception as exc:

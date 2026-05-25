@@ -81,8 +81,11 @@ Required Python dependencies:
 
 ```bash
 pip install python-hwpx lxml
-pip install pyhwp5 olefile
+pip install pyhwp olefile
+git clone --depth 1 https://github.com/jkf87/hwp2hwpx-python-refactor.git C:\tools\hwp2hwpx-python-refactor
 ```
+
+For local HWP upload conversion, set `HWP2HWPX_DIR` to the cloned converter path. If the converter is missing, LiveDock can still create a text-preserving HWPX fallback from the HWP preview text, but exact layout preservation requires the converter.
 
 ## GitHub
 

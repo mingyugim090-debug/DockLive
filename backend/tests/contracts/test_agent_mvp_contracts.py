@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -24,7 +25,7 @@ try:
     )
     from services.ai_provider import provider_name, should_use_mock_ai  # noqa: E402
     from services.analyzer import build_analysis_result  # noqa: E402
-    from services.document_ingestion import ingest_uploaded_document  # noqa: E402
+    from services.document_ingestion import convert_hwp_to_hwpx, ingest_uploaded_document  # noqa: E402
     from services.drafting_service import (  # noqa: E402
         build_template_replacements,
         clone_hwpx_template,
@@ -71,6 +72,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - local minimal Python fa
     stream_draft_events = None
     update_inputs = None
     ingest_uploaded_document = None
+    convert_hwp_to_hwpx = None
     get_mock_result = None
     list_export_files = None
     load_export_file = None
@@ -259,6 +261,41 @@ class AgentMvpContractTests(unittest.TestCase):
         self.assertEqual(ingested.source_type, "hwpx")
         self.assertGreater(len(ingested.text), 20)
         self.assertEqual(ingested.source_name, sample.name)
+
+    def test_hwp_conversion_preserves_converter_warnings(self):
+        if convert_hwp_to_hwpx is None:
+            self.skipTest("backend dependencies are not installed in this Python environment")
+
+        import subprocess
+
+        from services import document_ingestion
+
+        def fake_run(command, **kwargs):
+            script_name = Path(command[1]).name
+            if script_name == "convert_hwp.py":
+                output_path = Path(command[command.index("-o") + 1])
+                output_path.write_bytes(b"PK\x03\x04converted")
+                return subprocess.CompletedProcess(
+                    command,
+                    0,
+                    stdout=json.dumps(
+                        {
+                            "output": str(output_path),
+                            "conversion_method": "preview-text-to-hwpx-fallback",
+                            "warnings": ["fallback warning"],
+                        },
+                        ensure_ascii=False,
+                    ),
+                    stderr="",
+                )
+            return subprocess.CompletedProcess(command, 0, stdout="ok", stderr="")
+
+        with patch.object(document_ingestion.subprocess, "run", side_effect=fake_run):
+            content, warnings = convert_hwp_to_hwpx(b"hwp bytes", "sample.hwp")
+
+        self.assertEqual(content, b"PK\x03\x04converted")
+        self.assertIn("fallback warning", warnings)
+        self.assertTrue(any("HWP 원본을 HWPX로 변환" in warning for warning in warnings))
 
     def test_hwpx_template_analysis_preserves_table_spans_and_blank_cells(self):
         if analyze_hwpx_template_bytes is None:

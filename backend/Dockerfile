@@ -11,6 +11,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+RUN git clone --depth 1 https://github.com/jkf87/hwp2hwpx-python-refactor.git /app/hwpx_toolchain/.hwp2hwpx-repo
+ENV HWP2HWPX_DIR=/app/hwpx_toolchain/.hwp2hwpx-repo
 
 EXPOSE 8000
 

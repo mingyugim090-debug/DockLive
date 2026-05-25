@@ -59,13 +59,15 @@ Required toolchain from `jkf87/hwpx-skill`:
 - `scripts/md2hwpx.py`
 - `scripts/fix_namespaces.py`
 - `scripts/validate.py`
+- `scripts/convert_hwp.py` for uploaded `.hwp` intake
 - templates and references used by those scripts
 
 Recommended backend setup:
 
 ```bash
 pip install python-hwpx lxml
-pip install pyhwp5 olefile
+pip install pyhwp olefile
+git clone --depth 1 https://github.com/jkf87/hwp2hwpx-python-refactor.git /app/hwpx_toolchain/.hwp2hwpx-repo
 ```
 
 Then set:
@@ -73,9 +75,11 @@ Then set:
 ```env
 HWPX_EXPORT_ENABLED=true
 HWPX_SKILL_DIR=/absolute/path/to/hwpx-skill
+HWP2HWPX_DIR=/absolute/path/to/hwp2hwpx-python-refactor
 ```
 
 If HWPX export is disabled or misconfigured, HTML export should remain available.
+If the full HWP converter is unavailable, LiveDock falls back to extracting HWP preview text and packaging it as a validated HWPX so the upload flow does not fail outright. That fallback keeps text content, not the original HWP layout.
 
 ## Smoke Checks
 
