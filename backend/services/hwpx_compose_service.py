@@ -74,8 +74,8 @@ def compose_hwpx(
     """Create an HWPX draft from an uploaded HWPX form.
 
     Known templates can be handled with template-specific field names. Unknown official
-    forms are still supported by preserving the original package and appending a clearly
-    labeled auto-written draft section, so users are not blocked by template detection.
+    forms are handled by preserving the original package and filling existing text
+    nodes after matching section headings.
     """
     if not settings.HWPX_EXPORT_ENABLED:
         raise AnalysisError("HWPX 자동 작성이 비활성화되어 있습니다. HWPX_EXPORT_ENABLED=true로 설정해 주세요.")
@@ -84,7 +84,7 @@ def compose_hwpx(
     if len(request_text.strip()) < 20:
         raise AnalysisError("요청사항을 20자 이상 입력해야 HWPX 자동 작성을 시작할 수 있습니다.")
 
-    scripts = _require_hwpx_scripts("fix_namespaces.py", "validate.py", "verify_hwpx.py", "text_extract.py")
+    scripts = _require_hwpx_scripts("fix_namespaces.py", "validate.py", "verify_hwpx.py", "text_extract.py", "clone_form.py")
 
     tmpdir = _compose_temp_root() / f"compose_{uuid.uuid4().hex}"
     tmpdir.mkdir(parents=True, exist_ok=False)
@@ -104,10 +104,9 @@ def compose_hwpx(
             generated = generate_generic_fields(request_text, applicant_context, title, source_path)
             composed_markdown = _render_generic_markdown(generated)
             warnings = [
-                "알 수 없는 HWPX 양식입니다. 원본 양식 구조는 보존하고 자동작성 내용을 새 섹션으로 추가했습니다. "
-                "정확한 칸 매핑이 필요한 공식 양식은 다음 단계에서 템플릿 매핑을 추가해 주세요."
+                "Unknown HWPX form: preserved the source package and filled only existing text nodes after matching section headings."
             ]
-            _copy_hwpx_with_appended_section(source_path, output_path, composed_markdown)
+            _copy_hwpx_with_section_fills(scripts["clone_form.py"], source_path, output_path, generated)
 
         python_bin = sys.executable or "python"
         _run_required([python_bin, str(scripts["fix_namespaces.py"]), str(output_path)], "HWPX namespace 보정")
@@ -210,7 +209,8 @@ def generate_generic_fields(request_text: str, applicant_context: str, title: st
     }
     prompt = (
         "아래 정보를 바탕으로 HWPX 양식에 삽입할 자동작성 초안을 JSON으로 작성하세요.\n"
-        "형식: {\"document_title\":\"...\", \"summary\":\"...\", \"draft_content\":\"...\", "
+        "형식: {\"document_title\":\"...\", \"summary\":\"...\", \"problem\":\"...\", "
+        "\"solution\":\"...\", \"ai_capability\":\"...\", \"draft_content\":\"...\", "
         "\"confirmation_required\":[\"...\"]}\n\n"
         + json.dumps(payload, ensure_ascii=False)
     )
@@ -253,10 +253,19 @@ def _normalize_generic_fields(raw: dict, request_text: str, applicant_context: s
     document_title = str(raw.get("document_title") or title or _guess_title(source_excerpt) or "LiveDock HWPX 자동작성").strip()
     summary = str(raw.get("summary") or "").strip()
     draft_content = str(raw.get("draft_content") or "").strip()
+    problem = str(raw.get("problem") or raw.get("Problem") or summary).strip()
+    solution = str(raw.get("solution") or raw.get("Solution") or draft_content).strip()
+    ai_capability = str(raw.get("ai_capability") or raw.get("AI 활용 역량") or applicant_context or draft_content).strip()
     if not summary:
         summary = _compact(request_text, 500)
     if not draft_content:
         draft_content = "\n\n".join(part for part in [request_text.strip(), applicant_context.strip()] if part)
+    if not problem:
+        problem = _compact(summary or request_text, 900)
+    if not solution:
+        solution = _compact(draft_content or request_text, 1600)
+    if not ai_capability:
+        ai_capability = _compact(applicant_context or draft_content or request_text, 1200)
     confirmations = raw.get("confirmation_required", [])
     confirmation_text = "\n".join(str(item).strip() for item in confirmations if str(item).strip()) if isinstance(confirmations, list) else ""
     return {
@@ -264,6 +273,9 @@ def _normalize_generic_fields(raw: dict, request_text: str, applicant_context: s
         "summary": _compact(summary, 900),
         "applicant_context": _compact(applicant_context, 900),
         "draft_content": _compact(draft_content, 3000),
+        "problem": _compact(problem, 1200),
+        "solution": _compact(solution, 1800),
+        "ai_capability": _compact(ai_capability, 1200),
         "_confirmation_required": confirmation_text,
     }
 
@@ -434,6 +446,37 @@ def _replace_nonempty_hwpx_texts(xml_text: str, replacements: dict[int, str]) ->
         return f"{match.group(1)}{escape(value)}{match.group(3)}"
 
     return re.sub(r"(<hp:t\b(?![^>]*/>)[^>]*>)(.*?)(</hp:t>)", replace, xml_text, flags=re.DOTALL)
+
+
+def _copy_hwpx_with_section_fills(clone_script: Path, source_path: Path, output_path: Path, fields: dict[str, str]) -> None:
+    fill_map = {
+        "Problem": fields.get("problem") or fields.get("summary") or fields.get("draft_content") or "",
+        "Solution": fields.get("solution") or fields.get("draft_content") or "",
+        "AI 활용 역량": fields.get("ai_capability") or fields.get("applicant_context") or fields.get("draft_content") or "",
+    }
+    fill_map = {key: _compact(value, 1800) for key, value in fill_map.items() if str(value or "").strip()}
+    if not fill_map:
+        raise AnalysisError("HWPX 양식에 채워 넣을 source-grounded content가 없습니다.")
+
+    fill_path = output_path.with_suffix(".fill.json")
+    fill_path.write_text(json.dumps(fill_map, ensure_ascii=False, indent=2), encoding="utf-8")
+    _run_required(
+        [
+            sys.executable or "python",
+            str(clone_script),
+            str(source_path),
+            str(output_path),
+            "--fill-sections",
+            str(fill_path),
+            "--strict-fill",
+            "--verify-structure",
+            "--title",
+            fields.get("document_title", ""),
+            "--creator",
+            "Dock Live",
+        ],
+        "HWPX source-clone in-place fill",
+    )
 
 
 def _copy_hwpx_with_appended_section(source_path: Path, output_path: Path, markdown: str) -> None:
@@ -617,7 +660,18 @@ def _structure_counts(hwpx_path: Path) -> dict:
 
 def _contains_generated_content(text: str, fields: dict[str, str]) -> bool:
     candidates: list[str] = []
-    for key in ("team_or_club_name", "applicant_name", "document_title", "summary", "draft_content", "motivation", "goals"):
+    for key in (
+        "team_or_club_name",
+        "applicant_name",
+        "document_title",
+        "summary",
+        "draft_content",
+        "problem",
+        "solution",
+        "ai_capability",
+        "motivation",
+        "goals",
+    ):
         value = fields.get(key, "")
         if value:
             candidates.append(value[:30])

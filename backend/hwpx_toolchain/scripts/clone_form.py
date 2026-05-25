@@ -1,209 +1,193 @@
 #!/usr/bin/env python3
+"""Clone an HWPX form and replace text in-place.
+
+This script is intentionally conservative: it copies the source HWPX package,
+keeps table/image/style XML intact, and changes only existing ``hp:t`` text
+nodes. Use this for official forms where layout preservation matters.
 """
-HWPX 양식 복제 도구 (Workflow F)
 
-기존 HWPX 양식을 복사한 뒤 텍스트만 치환하여 새 문서를 생성한다.
-원본의 테이블·이미지·스타일을 100% 유지하면서 내용만 교체한다.
-
-2단계 치환:
-  Phase 1 — 구문 수준(--map/--replace): 전체 XML에서 긴 문구를 먼저 치환
-  Phase 2 — 키워드 수준(--keywords): <hp:t> 태그 내부에서만 남은 키워드를 치환
-
-사용법:
-  분석:    python clone_form.py --analyze sample.hwpx
-  복제:    python clone_form.py sample.hwpx output.hwpx --map map.json
-  키워드:  python clone_form.py sample.hwpx output.hwpx --map map.json --keywords kw.json
-  CLI:     python clone_form.py sample.hwpx output.hwpx --replace "원본=대체" "A=B"
-
-Import:
-  from clone_form import clone, analyze, extract_texts
-"""
+from __future__ import annotations
 
 import argparse
+import html
 import json
 import os
 import re
+import subprocess
 import sys
 import zipfile
+from pathlib import Path
+from typing import Any
+
+from lxml import etree
 
 
-def extract_texts(hwpx_path):
-    """HWPX에서 <hp:t> 태그의 텍스트를 모두 추출한다.
+SCRIPT_DIR = Path(__file__).resolve().parent
+HWPX_SECTION_PATH = "Contents/section0.xml"
+CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F]")
+TEXT_TAG_RE = re.compile(r"(<hp:t\b(?![^>]*/>)[^>]*>)(.*?)(</hp:t>)", re.DOTALL)
 
-    Returns:
-        list[str]: 고유 텍스트 목록 (등장 순서 유지)
-    """
-    texts = []
-    seen = set()
+DEFAULT_SECTION_ALIASES = {
+    "problem": [
+        "problem",
+        "problem 풀고자 하는 문제",
+        "풀고자 하는 문제",
+        "문제 정의",
+        "해결하고자 하는 문제",
+    ],
+    "solution": [
+        "solution",
+        "solution 나의 솔루션",
+        "나의 솔루션",
+        "해결 방안",
+    ],
+    "ai_capability": [
+        "ai 활용 역량",
+        "ai활용역량",
+        "ai 활용",
+        "인공지능 활용 역량",
+        "생성형 ai 활용 역량",
+    ],
+}
+
+
+def extract_texts(hwpx_path: str) -> list[str]:
+    """Extract unique hp:t text snippets in package order."""
+    texts: list[str] = []
+    seen: set[str] = set()
 
     with zipfile.ZipFile(hwpx_path, "r") as zf:
         for name in zf.namelist():
             if name.startswith("Contents/") and name.endswith(".xml"):
-                data = zf.read(name).decode("utf-8")
-                for m in re.finditer(r"<hp:t>(.*?)</hp:t>", data, re.DOTALL):
-                    # 인라인 XML 태그 제거하여 순수 텍스트 추출
-                    raw = m.group(1)
+                data = zf.read(name).decode("utf-8", errors="replace")
+                for match in re.finditer(r"<hp:t\b[^>]*>(.*?)</hp:t>", data, re.DOTALL):
+                    raw = match.group(1)
                     clean = re.sub(r"<[^>]+>", "", raw).strip()
+                    clean = html.unescape(clean)
                     if clean and clean not in seen:
                         seen.add(clean)
                         texts.append(clean)
     return texts
 
 
-def analyze(hwpx_path):
-    """HWPX 양식을 분석하여 구조 요약과 텍스트 목록을 출력한다."""
-    print(f"=== HWPX 양식 분석: {hwpx_path} ===\n")
+def analyze(hwpx_path: str) -> list[str]:
+    """Print a human-readable structure summary."""
+    print(f"=== HWPX form analysis: {hwpx_path} ===\n")
 
     with zipfile.ZipFile(hwpx_path, "r") as zf:
         names = zf.namelist()
-        print(f"ZIP 엔트리: {len(names)}개")
+        print(f"ZIP entries: {len(names)}")
+        bindata = [name for name in names if name.startswith("BinData/")]
+        print(f"BinData: {len(bindata)}")
 
-        # BinData 수
-        bindata = [n for n in names if n.startswith("BinData/")]
-        print(f"BinData (이미지 등): {len(bindata)}개")
+        if HWPX_SECTION_PATH in names:
+            section = zf.read(HWPX_SECTION_PATH).decode("utf-8", errors="replace")
+            paragraph_count = len(re.findall(r"<hp:p\b", section))
+            run_count = len(re.findall(r"<hp:run\b", section))
+            table_count = len(re.findall(r"<hp:tbl\b", section))
+            image_count = len(re.findall(r"<hp:pic\b", section))
+            print(
+                "section0.xml: "
+                f"paragraphs={paragraph_count}, "
+                f"runs={run_count}, "
+                f"tables={table_count}, "
+                f"images={image_count}, "
+                f"bytes={len(section):,}"
+            )
 
-        # section0.xml 분석
-        if "Contents/section0.xml" in names:
-            sec = zf.read("Contents/section0.xml").decode("utf-8")
-            tables = len(re.findall(r"<hp:tbl ", sec))
-            pics = len(re.findall(r"<hp:pic ", sec))
-            paras = len(re.findall(r"<hp:p ", sec))
-            runs = len(re.findall(r"<hp:run ", sec))
-            print(f"문단: {paras}개, 런: {runs}개, 테이블: {tables}개, 이미지: {pics}개")
-            print(f"section0.xml 크기: {len(sec):,} bytes")
-
-    # 텍스트 추출
     texts = extract_texts(hwpx_path)
-    print(f"\n고유 텍스트 조각: {len(texts)}개\n")
-    for i, t in enumerate(texts, 1):
-        display = t[:80] + "..." if len(t) > 80 else t
-        print(f"  [{i:3d}] {display}")
-
+    print(f"\nUnique text snippets: {len(texts)}\n")
+    for index, text in enumerate(texts, start=1):
+        display = text[:80] + "..." if len(text) > 80 else text
+        print(f"  [{index:3d}] {display}")
     return texts
 
 
-def auto_analyze(hwpx_path, output_json=None):
-    """양식을 분석하고 치환 맵 템플릿을 JSON으로 출력한다.
-
-    에이전트가 이 출력을 기반으로 치환 맵을 작성할 수 있도록
-    원본 텍스트를 key로, 빈 문자열을 value로 하는 JSON을 생성한다.
-
-    Args:
-        hwpx_path: 분석할 .hwpx 파일
-        output_json: 출력 JSON 경로 (None이면 stdout)
-
-    Returns:
-        dict: {structure: {...}, texts: [...], template: {...}}
-    """
-    structure = {}
+def auto_analyze(hwpx_path: str, output_json: str | None = None) -> dict[str, Any]:
+    """Analyze a form and generate an empty exact-text replacement map."""
+    structure: dict[str, Any] = {}
     with zipfile.ZipFile(hwpx_path, "r") as zf:
         names = zf.namelist()
-        bindata = [n for n in names if n.startswith("BinData/")]
         structure["zip_entries"] = len(names)
-        structure["bindata_count"] = len(bindata)
+        structure["bindata_count"] = len([name for name in names if name.startswith("BinData/")])
 
-        if "Contents/section0.xml" in names:
-            sec = zf.read("Contents/section0.xml").decode("utf-8")
-            structure["tables"] = len(re.findall(r"<hp:tbl ", sec))
-            structure["images"] = len(re.findall(r"<hp:pic ", sec))
-            structure["paragraphs"] = len(re.findall(r"<hp:p ", sec))
-            structure["runs"] = len(re.findall(r"<hp:run ", sec))
-            structure["section_size"] = len(sec)
+        if HWPX_SECTION_PATH in names:
+            section = zf.read(HWPX_SECTION_PATH).decode("utf-8", errors="replace")
+            structure["tables"] = len(re.findall(r"<hp:tbl\b", section))
+            structure["images"] = len(re.findall(r"<hp:pic\b", section))
+            structure["paragraphs"] = len(re.findall(r"<hp:p\b", section))
+            structure["runs"] = len(re.findall(r"<hp:run\b", section))
+            structure["section_size"] = len(section)
 
     texts = extract_texts(hwpx_path)
-
-    # 워크플로우 추천
-    has_tables = structure.get("tables", 0) > 0
-    has_images = structure.get("images", 0) > 0
-    if has_tables or has_images:
-        recommendation = "Workflow F (clone_form.py) — 테이블/이미지 포함, 양식 복제 필수"
-    else:
-        recommendation = "Workflow C 또는 F 가능 — 단순 텍스트 문서"
-
-    # 치환 맵 템플릿 생성
-    template = {}
-    for t in texts:
-        if len(t) > 1:  # 1글자 이하 건너뜀
-            template[t] = ""
-
     result = {
         "source": hwpx_path,
         "structure": structure,
-        "recommendation": recommendation,
+        "recommendation": "Workflow F: clone the source package and replace hp:t text in-place",
         "text_count": len(texts),
-        "template_map": template,
+        "template_map": {text: "" for text in texts if len(text) > 1},
     }
 
     output = json.dumps(result, ensure_ascii=False, indent=2)
-
     if output_json:
-        with open(output_json, "w", encoding="utf-8") as f:
-            f.write(output)
-        print(f"자동 분석 완료: {output_json}")
-        print(f"  구조: 테이블 {structure.get('tables', 0)}개, "
-              f"이미지 {structure.get('images', 0)}개, "
-              f"문단 {structure.get('paragraphs', 0)}개")
-        print(f"  텍스트 조각: {len(texts)}개")
-        print(f"  추천: {recommendation}")
+        Path(output_json).write_text(output + "\n", encoding="utf-8")
+        print(f"Wrote analysis: {output_json}")
     else:
         print(output)
-
     return result
 
 
-def _prepare_keywords(keywords):
-    """키워드를 길이 내림차순으로 정렬한다 (긴 것이 먼저 매칭되도록)."""
-    return sorted(keywords.items(), key=lambda x: len(x[0]), reverse=True)
+def sanitize_hwpx_text(value: Any) -> str:
+    """Return XML-safe text without schema-polluting control characters."""
+    text = html.unescape(str(value or ""))
+    text = CONTROL_CHAR_RE.sub("", text)
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\s*\n+\s*", " ", text)
+    return text.strip()
 
 
-def _apply_keywords_to_text(text, sorted_keywords):
-    """순수 텍스트에 키워드 치환을 적용한다."""
+def _prepare_keywords(keywords: dict[str, str]) -> list[tuple[str, str]]:
+    return sorted(keywords.items(), key=lambda item: len(item[0]), reverse=True)
+
+
+def _apply_keywords_to_text(text: str, sorted_keywords: list[tuple[str, str]]) -> str:
     for old, new in sorted_keywords:
         if old in text:
-            text = text.replace(old, new)
+            text = text.replace(old, sanitize_hwpx_text(new))
     return text
 
 
-def _apply_keywords_in_xml(xml_text, sorted_keywords):
-    """<hp:t> 태그 내부의 텍스트에만 키워드 치환을 적용한다.
+def _apply_keywords_in_xml(xml_text: str, sorted_keywords: list[tuple[str, str]]) -> str:
+    """Apply replacements only inside hp:t nodes."""
 
-    인라인 XML 요소(<hp:fwSpace/>, <hp:tab/> 등)가 키워드를
-    분리하는 경우를 처리하기 위해 태그 경계에서 텍스트를 분할하여
-    각 조각에 개별적으로 치환을 적용한다.
-    """
-    def replace_in_t(match):
-        inner = match.group(1)
-        # 인라인 XML 태그로 분할
-        parts = re.split(r"(<[^>]+>)", inner)
-        result = []
+    def replace_in_text_node(match: re.Match[str]) -> str:
+        parts = re.split(r"(<[^>]+>)", match.group(2))
+        rendered = []
         for part in parts:
-            if part.startswith("<"):
-                # XML 태그는 그대로 유지
-                result.append(part)
-            else:
-                # 텍스트 부분에만 키워드 치환 적용
-                result.append(_apply_keywords_to_text(part, sorted_keywords))
-        return "<hp:t>" + "".join(result) + "</hp:t>"
+            rendered.append(part if part.startswith("<") else _apply_keywords_to_text(part, sorted_keywords))
+        return match.group(1) + "".join(rendered) + match.group(3)
 
-    return re.sub(r"<hp:t>(.*?)</hp:t>", replace_in_t, xml_text, flags=re.DOTALL)
+    return TEXT_TAG_RE.sub(replace_in_text_node, xml_text)
 
 
-def clone(src_path, dst_path, replacements=None, keywords=None,
-          title=None, creator=None):
-    """HWPX 양식을 복제하고 텍스트를 치환한다.
-
-    Args:
-        src_path: 원본 .hwpx 파일 경로
-        dst_path: 출력 .hwpx 파일 경로
-        replacements: Phase 1 구문 치환 dict (old → new)
-        keywords: Phase 2 키워드 치환 dict (old → new), <hp:t> 내부에서만 적용
-        title: 문서 제목 (메타데이터)
-        creator: 작성자 (메타데이터)
-    """
+def clone(
+    src_path: str,
+    dst_path: str,
+    replacements: dict[str, str] | None = None,
+    keywords: dict[str, str] | None = None,
+    title: str | None = None,
+    creator: str | None = None,
+    fill_sections: dict[str, str] | None = None,
+    strict_fill: bool = False,
+    verify: bool = False,
+) -> dict[str, Any]:
+    """Clone a source form and replace only textual content."""
     replacements = replacements or {}
-    sorted_keywords = _prepare_keywords(keywords) if keywords else []
-
-    tmp_path = dst_path + ".tmp"
+    fill_sections = fill_sections or {}
+    sorted_keywords = _prepare_keywords(keywords or {}) if keywords else []
+    tmp_path = str(dst_path) + ".tmp"
+    report: dict[str, Any] = {"requested": list(fill_sections.keys()), "matched": [], "missing": []}
 
     with zipfile.ZipFile(src_path, "r") as zin:
         with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zout:
@@ -211,86 +195,263 @@ def clone(src_path, dst_path, replacements=None, keywords=None,
                 data = zin.read(item.filename)
 
                 if item.filename.startswith("Contents/") and item.filename.endswith(".xml"):
-                    text = data.decode("utf-8")
+                    if item.filename == HWPX_SECTION_PATH and fill_sections:
+                        text = data.decode("utf-8", errors="replace")
+                        for old, new in replacements.items():
+                            text = text.replace(old, sanitize_hwpx_text(new))
+                        if sorted_keywords:
+                            text = _apply_keywords_in_xml(text, sorted_keywords)
+                        data = text.encode("utf-8")
+                        data, fill_report = fill_section_xml_bytes(data, fill_sections, strict=strict_fill)
+                        report["matched"].extend(fill_report["matched"])
+                        report["missing"].extend(fill_report["missing"])
+                    else:
+                        text = data.decode("utf-8", errors="replace")
+                        for old, new in replacements.items():
+                            text = text.replace(old, sanitize_hwpx_text(new))
+                        if sorted_keywords:
+                            text = _apply_keywords_in_xml(text, sorted_keywords)
+                        if item.filename == "Contents/content.hpf":
+                            text = _update_metadata_xml(text, title, creator)
+                        data = text.encode("utf-8")
 
-                    # Phase 1: 구문 수준 치환 (전체 XML)
-                    for old, new in replacements.items():
-                        text = text.replace(old, new)
-
-                    # Phase 2: 키워드 수준 치환 (<hp:t> 내부만)
-                    if sorted_keywords:
-                        text = _apply_keywords_in_xml(text, sorted_keywords)
-
-                    # 메타데이터 치환 (content.hpf의 제목/작성자)
-                    if item.filename == "Contents/content.hpf":
-                        if title:
-                            text = re.sub(
-                                r"(<dc:title>).*?(</dc:title>)",
-                                rf"\1{title}\2",
-                                text,
-                            )
-                        if creator:
-                            text = re.sub(
-                                r"(<dc:creator>).*?(</dc:creator>)",
-                                rf"\1{creator}\2",
-                                text,
-                            )
-
-                    data = text.encode("utf-8")
-
-                # mimetype은 반드시 ZIP_STORED
                 if item.filename == "mimetype":
                     zout.writestr(item, data, compress_type=zipfile.ZIP_STORED)
                 else:
                     zout.writestr(item, data)
 
     os.replace(tmp_path, dst_path)
+    if verify:
+        report["verify"] = verify_clone(src_path, dst_path)
+    return report
 
 
-def validate_result(src_path, dst_path, replacements=None, keywords=None):
-    """치환 결과를 검증하고 남은 원본 키워드를 보고한다.
+def fill_section_xml_bytes(data: bytes, fill_sections: dict[str, str], strict: bool = False) -> tuple[bytes, dict[str, Any]]:
+    """Replace hp:t content after matching section headings without changing layout nodes."""
+    root = _xml_root(data)
+    report = fill_section_root(root, fill_sections)
+    if strict and report["missing"]:
+        raise RuntimeError("Missing fill targets: " + ", ".join(report["missing"]))
+    rendered = etree.tostring(root, encoding="utf-8", xml_declaration=True, standalone=True)
+    return rendered, report
 
-    Returns:
-        dict: {total_originals, replaced, remaining, remaining_texts, coverage_pct}
-    """
-    # 원본 텍스트 추출
-    orig_texts = extract_texts(src_path)
-    # 결과 텍스트 추출
+
+def fill_section_root(root: Any, fill_sections: dict[str, str]) -> dict[str, Any]:
+    containers = _text_containers(root)
+    all_aliases: list[str] = []
+    field_aliases: dict[str, list[str]] = {}
+    for field in fill_sections:
+        aliases = _aliases_for_field(field)
+        field_aliases[field] = aliases
+        all_aliases.extend(aliases)
+
+    report = {"matched": [], "missing": []}
+    used_targets: set[int] = set()
+    for field, raw_value in fill_sections.items():
+        value = sanitize_hwpx_text(raw_value)
+        if not value:
+            report["missing"].append(field)
+            continue
+
+        target_index: int | None = None
+        for index, container in enumerate(containers):
+            heading = _node_text(container)
+            if not _matches_any_alias(heading, field_aliases[field]):
+                continue
+            candidate = _find_fill_target(containers, index + 1, all_aliases, used_targets)
+            if candidate is not None:
+                target_index = candidate
+                break
+
+        if target_index is None:
+            report["missing"].append(field)
+            continue
+        _set_text_preserving_runs(containers[target_index], value)
+        used_targets.add(target_index)
+        report["matched"].append(field)
+    return report
+
+
+def _xml_root(data: bytes) -> Any:
+    return etree.fromstring(data, parser=etree.XMLParser(remove_blank_text=False, recover=False))
+
+
+def _local(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1] if "}" in tag else tag
+
+
+def _text_containers(root: Any) -> list[Any]:
+    return [node for node in root.iter() if _local(node.tag) == "p"]
+
+
+def _text_nodes(node: Any) -> list[Any]:
+    return [child for child in node.iter() if _local(child.tag) == "t"]
+
+
+def _node_text(node: Any) -> str:
+    return re.sub(r"\s+", " ", "".join(child.text or "" for child in _text_nodes(node))).strip()
+
+
+def _set_text_preserving_runs(node: Any, value: str) -> None:
+    nodes = _text_nodes(node)
+    if not nodes:
+        return
+    nodes[0].text = sanitize_hwpx_text(value)
+    for extra in nodes[1:]:
+        extra.text = ""
+
+
+def _normalize_label(text: str) -> str:
+    return re.sub(r"[^0-9a-zA-Z가-힣]+", "", str(text or "").lower())
+
+
+def _aliases_for_field(field: str) -> list[str]:
+    label = str(field or "").strip()
+    normalized = _normalize_label(label)
+    aliases = [label]
+    for key, values in DEFAULT_SECTION_ALIASES.items():
+        if key == normalized or any(
+            _normalize_label(value) in normalized or normalized in _normalize_label(value)
+            for value in values
+        ):
+            aliases.extend(values)
+    return list(dict.fromkeys(alias for alias in aliases if str(alias).strip()))
+
+
+def _matches_any_alias(text: str, aliases: list[str]) -> bool:
+    normalized_text = _normalize_label(text)
+    if not normalized_text:
+        return False
+    for alias in aliases:
+        normalized_alias = _normalize_label(alias)
+        if normalized_alias and (normalized_alias in normalized_text or normalized_text in normalized_alias):
+            return True
+    return False
+
+
+def _looks_like_heading(text: str, all_aliases: list[str]) -> bool:
+    value = text.strip()
+    if not value:
+        return False
+    if _matches_any_alias(value, all_aliases):
+        return True
+    normalized = _normalize_label(value)
+    return len(normalized) <= 28 and bool(re.match(r"^(\d+|[ivx]+|[a-z])", normalized, re.I))
+
+
+def _is_placeholder_text(text: str) -> bool:
+    value = text.strip()
+    return (
+        not value
+        or len(value) <= 12
+        or any(token in value for token in ("작성", "입력", "기재", "내용", "예시", "OO", "ㅇㅇ"))
+    )
+
+
+def _find_fill_target(
+    containers: list[Any],
+    start_index: int,
+    all_aliases: list[str],
+    used_targets: set[int],
+) -> int | None:
+    first_empty: int | None = None
+    for index in range(start_index, len(containers)):
+        if index in used_targets:
+            continue
+        text = _node_text(containers[index])
+        if not text:
+            if first_empty is None:
+                first_empty = index
+            continue
+        if _looks_like_heading(text, all_aliases):
+            return first_empty
+        if _is_placeholder_text(text) or first_empty is None:
+            return index
+        return first_empty
+    return first_empty
+
+
+def _update_metadata_xml(text: str, title: str | None = None, creator: str | None = None) -> str:
+    safe_title = sanitize_hwpx_text(title) if title else ""
+    safe_creator = sanitize_hwpx_text(creator) if creator else ""
+    if safe_title:
+        text = re.sub(
+            r"(<(?:dc|opf):title\b[^>]*>).*?(</(?:dc|opf):title>)",
+            lambda match: f"{match.group(1)}{html.escape(safe_title)}{match.group(2)}",
+            text,
+            flags=re.DOTALL,
+        )
+    if safe_creator:
+        text = re.sub(
+            r"(<(?:dc|opf):creator\b[^>]*>).*?(</(?:dc|opf):creator>)",
+            lambda match: f"{match.group(1)}{html.escape(safe_creator)}{match.group(2)}",
+            text,
+            flags=re.DOTALL,
+        )
+    return text
+
+
+def verify_clone(src_path: str, dst_path: str) -> dict[str, Any]:
+    verify_script = SCRIPT_DIR / "verify_hwpx.py"
+    if not verify_script.exists():
+        return {"status": "SKIPPED", "warnings": ["verify_hwpx.py not found"]}
+    report_path = Path(str(dst_path) + ".verify.json")
+    env = os.environ.copy()
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+    completed = subprocess.run(
+        [
+            sys.executable or "python",
+            str(verify_script),
+            "--source",
+            str(src_path),
+            "--result",
+            str(dst_path),
+            "--json",
+            str(report_path),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=env,
+    )
+    if report_path.exists():
+        try:
+            return json.loads(report_path.read_text(encoding="utf-8"))
+        finally:
+            report_path.unlink(missing_ok=True)
+    return {"status": "FAIL" if completed.returncode else "PASS", "stdout": completed.stdout, "stderr": completed.stderr}
+
+
+def validate_result(
+    src_path: str,
+    dst_path: str,
+    replacements: dict[str, str] | None = None,
+    keywords: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Report whether exact replacement keys still remain in the result."""
     result_texts = extract_texts(dst_path)
-
-    all_old_terms = set()
+    all_old_terms: set[str] = set()
     if replacements:
         all_old_terms.update(replacements.keys())
     if keywords:
         all_old_terms.update(keywords.keys())
 
-    # 결과에서 원본 키워드가 남아있는지 확인
-    remaining = []
     result_full = " ".join(result_texts)
-    for term in sorted(all_old_terms, key=len, reverse=True):
-        if term in result_full:
-            remaining.append(term)
+    remaining = [term for term in sorted(all_old_terms, key=len, reverse=True) if term in result_full]
+    replaced = len(all_old_terms) - len(remaining)
+    coverage = (replaced / max(len(all_old_terms), 1)) * 100
 
-    total = len(orig_texts)
-    replaced = total - len(remaining)
-    coverage = (1 - len(remaining) / max(total, 1)) * 100
-
-    print(f"\n=== 치환 검증 ===")
-    print(f"원본 텍스트 조각: {total}개")
-    print(f"치환 완료: {replaced}개")
-    print(f"미치환 키워드: {len(remaining)}개")
-    print(f"커버리지: {coverage:.1f}%")
-
-    if remaining:
-        print(f"\n미치환 키워드:")
-        for r in remaining[:20]:
-            display = r[:60] + "..." if len(r) > 60 else r
-            print(f"  - {display}")
-        if len(remaining) > 20:
-            print(f"  ... 외 {len(remaining) - 20}개")
+    print("\n=== Replacement validation ===")
+    print(f"Replacement terms: {len(all_old_terms)}")
+    print(f"Replaced: {replaced}")
+    print(f"Remaining: {len(remaining)}")
+    print(f"Coverage: {coverage:.1f}%")
+    for term in remaining[:20]:
+        print(f"  - {term[:80]}")
 
     return {
-        "total_originals": total,
+        "total_originals": len(all_old_terms),
         "replaced": replaced,
         "remaining": len(remaining),
         "remaining_texts": remaining,
@@ -298,85 +459,78 @@ def validate_result(src_path, dst_path, replacements=None, keywords=None):
     }
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="HWPX 양식 복제 도구 (Workflow F)",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-예시:
-  # 양식 분석
-  python clone_form.py --analyze sample.hwpx
-
-  # JSON 맵으로 복제
-  python clone_form.py sample.hwpx output.hwpx --map replacements.json
-
-  # 키워드 폴백 추가
-  python clone_form.py sample.hwpx output.hwpx --map map.json --keywords kw.json
-
-  # CLI 직접 치환
-  python clone_form.py sample.hwpx output.hwpx --replace "원본=대체" "A=B"
-""",
-    )
-    parser.add_argument("source", help="원본 HWPX 파일")
-    parser.add_argument("output", nargs="?", help="출력 HWPX 파일")
-    parser.add_argument("--analyze", action="store_true", help="양식 분석 모드")
-    parser.add_argument("--auto-analyze", metavar="JSON", help="자동 분석 + 치환 맵 템플릿 JSON 출력")
-    parser.add_argument("--map", help="구문 치환 JSON 파일 (Phase 1)")
-    parser.add_argument("--keywords", help="키워드 치환 JSON 파일 (Phase 2)")
-    parser.add_argument("--replace", nargs="*", help="CLI 치환 쌍 (old=new)")
-    parser.add_argument("--title", help="문서 제목 메타데이터")
-    parser.add_argument("--creator", help="작성자 메타데이터")
-    parser.add_argument("--validate", action="store_true", help="치환 후 검증 실행")
-
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Clone an HWPX form and replace text in-place")
+    parser.add_argument("source", help="Source HWPX file")
+    parser.add_argument("output", nargs="?", help="Output HWPX file")
+    parser.add_argument("--analyze", action="store_true", help="Print form analysis")
+    parser.add_argument("--auto-analyze", metavar="JSON", help="Write an empty exact-text replacement map")
+    parser.add_argument("--map", help="Exact whole-XML string replacement JSON")
+    parser.add_argument("--keywords", help="hp:t-only keyword replacement JSON")
+    parser.add_argument("--fill-sections", help="Heading-to-content JSON map for in-place form filling")
+    parser.add_argument("--strict-fill", action="store_true", help="Fail when any --fill-sections key is not matched")
+    parser.add_argument("--verify-structure", action="store_true", help="Run verify_hwpx.py after cloning")
+    parser.add_argument("--replace", nargs="*", help="CLI replacement pairs: old=new")
+    parser.add_argument("--title", help="Document title metadata")
+    parser.add_argument("--creator", help="Document creator metadata")
+    parser.add_argument("--validate", action="store_true", help="Validate exact replacement coverage")
     args = parser.parse_args()
 
     if not os.path.exists(args.source):
-        print(f"Error: 파일을 찾을 수 없음: {args.source}")
+        print(f"ERROR: file not found: {args.source}", file=sys.stderr)
         sys.exit(1)
 
-    # 분석 모드
     if args.analyze:
         analyze(args.source)
         return
 
-    # 자동 분석 모드
     if args.auto_analyze:
         auto_analyze(args.source, args.auto_analyze)
         return
 
-    # 복제 모드
     if not args.output:
-        print("Error: 출력 파일을 지정하세요.")
+        print("ERROR: output file is required.", file=sys.stderr)
         sys.exit(1)
 
-    # 치환 맵 구성
-    replacements = {}
+    replacements: dict[str, str] = {}
     if args.map:
-        with open(args.map, "r", encoding="utf-8") as f:
-            replacements = json.load(f)
-        print(f"구문 치환 맵: {len(replacements)}개 항목 ({args.map})")
+        replacements = json.loads(Path(args.map).read_text(encoding="utf-8"))
+        print(f"Exact replacements: {len(replacements)} ({args.map})")
 
     if args.replace:
         for pair in args.replace:
             if "=" not in pair:
-                print(f"Warning: 잘못된 치환 쌍 무시: {pair}")
+                print(f"WARNING: invalid replacement ignored: {pair}")
                 continue
             old, new = pair.split("=", 1)
             replacements[old] = new
-        print(f"CLI 치환: {len(args.replace)}개 추가")
+        print(f"CLI replacements added: {len(args.replace)}")
 
     keywords = None
     if args.keywords:
-        with open(args.keywords, "r", encoding="utf-8") as f:
-            keywords = json.load(f)
-        print(f"키워드 폴백 맵: {len(keywords)}개 항목 ({args.keywords})")
+        keywords = json.loads(Path(args.keywords).read_text(encoding="utf-8"))
+        print(f"Keyword replacements: {len(keywords)} ({args.keywords})")
 
-    # 복제 실행
-    clone(args.source, args.output, replacements, keywords,
-          title=args.title, creator=args.creator)
-    print(f"복제 완료: {args.output}")
+    fill_sections = None
+    if args.fill_sections:
+        fill_sections = json.loads(Path(args.fill_sections).read_text(encoding="utf-8"))
+        print(f"In-place section fills: {len(fill_sections)} ({args.fill_sections})")
 
-    # 검증
+    report = clone(
+        args.source,
+        args.output,
+        replacements=replacements,
+        keywords=keywords,
+        title=args.title,
+        creator=args.creator,
+        fill_sections=fill_sections,
+        strict_fill=args.strict_fill,
+        verify=args.verify_structure,
+    )
+    print(f"Clone complete: {args.output}")
+    if fill_sections:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+
     if args.validate:
         validate_result(args.source, args.output, replacements, keywords)
 

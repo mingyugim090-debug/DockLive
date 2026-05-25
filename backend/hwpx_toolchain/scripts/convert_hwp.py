@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Convert binary HWP files to HWPX.
 
-This wrapper uses jkf87/hwp2hwpx-python-refactor when available. It also checks
-the common local development paths used by LiveDock and can clone the converter
-repository when git/network access is available.
+This wrapper uses jkf87/hwp2hwpx-python-refactor when available. Text-only
+fallback is disabled by default because it destroys official form layout.
 
 Usage:
     python convert_hwp.py input.hwp -o output.hwpx
@@ -40,7 +39,7 @@ def _ensure_dependencies() -> None:
     if _import_or_none("olefile") is None:
         missing.append("olefile")
     if _import_or_none("hwp5") is None:
-        missing.append("pyhwp")
+        missing.append("pyhwp/pyhwp2 (module hwp5)")
     if _import_or_none("lxml") is None:
         missing.append("lxml")
 
@@ -58,6 +57,10 @@ def _ensure_preview_text_dependencies() -> None:
             "HWP 텍스트 fallback에 필요한 Python 패키지가 설치되어 있지 않습니다: olefile. "
             "requirements.txt 또는 배포 이미지에 olefile을 설치해 주세요."
         )
+
+
+def _text_fallback_allowed() -> bool:
+    return os.getenv("HWP2HWPX_ALLOW_TEXT_FALLBACK", "").strip().lower() in {"1", "true", "yes"}
 
 
 def _candidate_roots() -> list[Path]:
@@ -126,8 +129,12 @@ def convert_with_result(input_path: str, output_path: str | None = None) -> dict
             "audit": audit,
         }
     except Exception as primary_exc:
-        if os.getenv("HWP2HWPX_DISABLE_TEXT_FALLBACK", "").strip().lower() in {"1", "true", "yes"}:
-            raise
+        if not _text_fallback_allowed():
+            raise RuntimeError(
+                "HWP structure-preserving conversion failed. Text fallback is disabled because it loses "
+                "tables, layout, and styles. Install/fix hwp2hwpx, pyhwp/pyhwp2, olefile, and lxml, or set "
+                "HWP2HWPX_ALLOW_TEXT_FALLBACK=true only for explicit debugging."
+            ) from primary_exc
 
         fallback = _convert_with_preview_text_fallback(input_path, output, primary_exc)
         audit = _conversion_audit(input_path, fallback, "preview-text-to-hwpx-fallback")
@@ -376,7 +383,15 @@ def main() -> int:
     parser.add_argument("-o", "--output", help="Output .hwpx file path")
     parser.add_argument("--info", action="store_true", help="Print document metadata without conversion")
     parser.add_argument("--json", action="store_true", help="Print JSON output")
+    parser.add_argument(
+        "--allow-text-fallback",
+        action="store_true",
+        help="Allow lossy preview-text fallback. Disabled by default to preserve HWP form layout.",
+    )
     args = parser.parse_args()
+
+    if args.allow_text_fallback:
+        os.environ["HWP2HWPX_ALLOW_TEXT_FALLBACK"] = "true"
 
     input_path = Path(args.input)
     if not input_path.exists():

@@ -10,7 +10,7 @@ profiles:
         command: python -m unittest discover -s tools/harness/tests -p test_*.py
       - name: backend-contracts
         cwd: .
-        command: python -m unittest backend.tests.contracts.test_agent_mvp_contracts
+        command: python -m unittest discover -s backend/tests/contracts -p test_*.py
 
   backend:
     description: Backend contract and syntax gate.
@@ -20,7 +20,7 @@ profiles:
         command: python -m compileall -q -x "(venv|\.venv|__pycache__|\.pytest_cache|\.livedock_storage|\.tmp|node_modules|\.next)" backend
       - name: backend-contracts
         cwd: .
-        command: python -m unittest backend.tests.contracts.test_agent_mvp_contracts
+        command: python -m unittest discover -s backend/tests/contracts -p test_*.py
 
   agent:
     description: Deterministic Agent MVP fixture evaluation.

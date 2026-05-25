@@ -169,12 +169,13 @@ def extract_text_from_hwpx(content: bytes) -> tuple[str, list[str]]:
 def convert_hwp_to_hwpx(content: bytes, filename: str) -> tuple[bytes, list[str]]:
     """Convert HWP bytes to HWPX through the configured HWPX toolchain."""
     warnings: list[str] = []
-    scripts = _require_hwpx_scripts("convert_hwp.py", "fix_namespaces.py", "validate.py")
+    scripts = _require_hwpx_scripts("convert_hwp.py", "fix_namespaces.py", "validate.py", "verify_hwpx.py")
 
     tmpdir = _make_tmp_dir()
     try:
         input_path = tmpdir / (Path(filename or "input.hwp").name or "input.hwp")
         output_path = tmpdir / f"{input_path.stem}.hwpx"
+        verify_path = tmpdir / "verify.json"
         input_path.write_bytes(content)
 
         try:
@@ -194,7 +195,13 @@ def convert_hwp_to_hwpx(content: bytes, filename: str) -> tuple[bytes, list[str]
                 errors="replace",
                 env=_hwpx_subprocess_env(),
             )
-            warnings.extend(_conversion_warnings_from_stdout(convert_result.stdout))
+            conversion_payload = _conversion_payload_from_stdout(convert_result.stdout)
+            conversion_method = str(conversion_payload.get("conversion_method") or "")
+            if "fallback" in conversion_method.lower():
+                raise AnalysisError(
+                    "HWP 변환기가 텍스트 fallback 결과를 반환했습니다. 원본 표/서식 보존을 위해 fallback 출력은 사용할 수 없습니다."
+                )
+            warnings.extend(_conversion_warnings_from_payload(conversion_payload))
             subprocess.run(
                 [sys.executable or "python", str(scripts["fix_namespaces.py"]), str(output_path)],
                 check=True,
@@ -213,6 +220,31 @@ def convert_hwp_to_hwpx(content: bytes, filename: str) -> tuple[bytes, list[str]
                 errors="replace",
                 env=_hwpx_subprocess_env(),
             )
+            verify_result = subprocess.run(
+                [
+                    sys.executable or "python",
+                    str(scripts["verify_hwpx.py"]),
+                    "--result",
+                    str(output_path),
+                    "--json",
+                    str(verify_path),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                env=_hwpx_subprocess_env(),
+            )
+            if verify_path.exists():
+                try:
+                    verify_payload = json.loads(verify_path.read_text(encoding="utf-8"))
+                    if verify_payload.get("status") not in {"PASS", "WARN"}:
+                        raise AnalysisError("HWPX 구조 검증에 실패했습니다: " + "; ".join(verify_payload.get("issues", [])))
+                    for item in verify_payload.get("warnings", []):
+                        warnings.append(str(item))
+                except json.JSONDecodeError:
+                    warnings.append(f"verify_hwpx.py JSON 결과를 해석하지 못했습니다: {verify_result.stdout[:300]}")
         except subprocess.CalledProcessError as exc:
             detail = "\n".join(part for part in [exc.stdout, exc.stderr] if part).strip()
             raise AnalysisError(
@@ -222,29 +254,36 @@ def convert_hwp_to_hwpx(content: bytes, filename: str) -> tuple[bytes, list[str]
 
         if not output_path.exists():
             raise AnalysisError("HWP 변환은 완료되었지만 출력 HWPX 파일을 찾지 못했습니다.")
-        warnings.append("HWP 원본을 HWPX로 변환한 뒤 텍스트를 추출했습니다.")
+        warnings.append("HWP 원본을 구조 보존 HWPX로 변환한 뒤 텍스트를 추출했습니다.")
         return output_path.read_bytes(), warnings
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def _conversion_warnings_from_stdout(stdout: str) -> list[str]:
+def _conversion_payload_from_stdout(stdout: str) -> dict:
     if not stdout.strip():
-        return []
+        return {}
     try:
-        payload = json.loads(stdout)
+        return json.loads(stdout)
     except json.JSONDecodeError:
         match = re.search(r"\{[\s\S]+\}\s*$", stdout.strip())
         if not match:
-            return []
+            return {}
         try:
-            payload = json.loads(match.group(0))
+            return json.loads(match.group(0))
         except json.JSONDecodeError:
-            return []
+            return {}
+
+
+def _conversion_warnings_from_payload(payload: dict) -> list[str]:
     warnings = payload.get("warnings", []) if isinstance(payload, dict) else []
     if not isinstance(warnings, list):
         return []
     return [str(item).strip() for item in warnings if str(item).strip()]
+
+
+def _conversion_warnings_from_stdout(stdout: str) -> list[str]:
+    return _conversion_warnings_from_payload(_conversion_payload_from_stdout(stdout))
 
 
 def _parsed_document_from_hwpx_analysis(

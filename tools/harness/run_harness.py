@@ -43,11 +43,11 @@ def base_profiles(include_hwpx: bool = False) -> dict[str, list[GateCommand]]:
         "quick": [
             GateCommand("python-compile", py_args("-m", "compileall", "-q", "-x", COMPILE_EXCLUDE, "backend", "tools/harness")),
             GateCommand("harness-self-tests", py_args("-m", "unittest", "discover", "-s", "tools/harness/tests", "-p", "test_*.py")),
-            GateCommand("backend-contracts", py_args("-m", "unittest", "backend.tests.contracts.test_agent_mvp_contracts")),
+            GateCommand("backend-contracts", py_args("-m", "unittest", "discover", "-s", "backend/tests/contracts", "-p", "test_*.py")),
         ],
         "backend": [
             GateCommand("backend-compile", py_args("-m", "compileall", "-q", "-x", COMPILE_EXCLUDE, "backend")),
-            GateCommand("backend-contracts", py_args("-m", "unittest", "backend.tests.contracts.test_agent_mvp_contracts")),
+            GateCommand("backend-contracts", py_args("-m", "unittest", "discover", "-s", "backend/tests/contracts", "-p", "test_*.py")),
         ],
         "agent": [
             GateCommand(

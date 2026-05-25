@@ -27,6 +27,7 @@ Usage:
 """
 
 import argparse
+import json
 import shutil
 import sys
 import tempfile
@@ -251,6 +252,50 @@ def build(
             print(f"  Section: {section_override}")
 
 
+def build_from_source_clone(
+    source: Path,
+    fill_sections: Path | None,
+    title: str | None,
+    creator: str | None,
+    output: Path,
+    strict_fill: bool = False,
+) -> None:
+    """Build by cloning an uploaded source HWPX and replacing hp:t text in-place."""
+    if not source.is_file():
+        raise SystemExit(f"Source HWPX not found: {source}")
+
+    from clone_form import clone
+
+    fill_map = {}
+    if fill_sections:
+        if not fill_sections.is_file():
+            raise SystemExit(f"Fill map not found: {fill_sections}")
+        fill_map = json.loads(fill_sections.read_text(encoding="utf-8"))
+
+    report = clone(
+        str(source),
+        str(output),
+        title=title,
+        creator=creator,
+        fill_sections=fill_map,
+        strict_fill=strict_fill,
+        verify=True,
+    )
+    errors = validate_hwpx(output)
+    if errors:
+        raise SystemExit("Cloned HWPX failed validation: " + "; ".join(errors))
+    verify_status = (report.get("verify") or {}).get("status")
+    if verify_status == "FAIL":
+        raise SystemExit("Cloned HWPX failed source-structure verification")
+
+    print(f"VALID: {output}")
+    print(f"  Source clone: {source}")
+    if fill_map:
+        print(f"  In-place fills: {len(report.get('matched', []))}/{len(fill_map)}")
+        if report.get("missing"):
+            print(f"  Missing fill targets: {', '.join(report['missing'])}", file=sys.stderr)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Build HWPX document from templates and XML overrides"
@@ -284,7 +329,33 @@ def main() -> None:
         required=True,
         help="Output .hwpx file path",
     )
+    parser.add_argument(
+        "--source",
+        type=Path,
+        help="Source HWPX form to clone. When set, base/template generation is skipped.",
+    )
+    parser.add_argument(
+        "--fill-sections",
+        type=Path,
+        help="Heading-to-content JSON map used with --source for in-place text filling.",
+    )
+    parser.add_argument(
+        "--strict-fill",
+        action="store_true",
+        help="Fail when any --fill-sections key is not matched.",
+    )
     args = parser.parse_args()
+
+    if args.source:
+        build_from_source_clone(
+            source=args.source,
+            fill_sections=args.fill_sections,
+            title=args.title,
+            creator=args.creator,
+            output=args.output,
+            strict_fill=args.strict_fill,
+        )
+        return
 
     build(
         template=args.template,

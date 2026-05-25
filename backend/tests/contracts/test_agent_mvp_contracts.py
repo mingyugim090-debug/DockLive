@@ -320,7 +320,7 @@ class AgentMvpContractTests(unittest.TestCase):
         self.assertEqual(detected, "hwp")
         self.assertTrue(any(".hwpx" in warning for warning in warnings))
 
-    def test_hwp_conversion_preserves_converter_warnings(self):
+    def test_hwp_conversion_rejects_text_fallback(self):
         if convert_hwp_to_hwpx is None:
             self.skipTest("backend dependencies are not installed in this Python environment")
 
@@ -349,7 +349,10 @@ class AgentMvpContractTests(unittest.TestCase):
             return subprocess.CompletedProcess(command, 0, stdout="ok", stderr="")
 
         with patch.object(document_ingestion.subprocess, "run", side_effect=fake_run):
-            content, warnings = convert_hwp_to_hwpx(b"hwp bytes", "sample.hwp")
+            with self.assertRaises(Exception) as ctx:
+                convert_hwp_to_hwpx(b"hwp bytes", "sample.hwp")
+        self.assertIn("fallback", str(ctx.exception).lower())
+        return
 
         self.assertEqual(content, b"PK\x03\x04converted")
         self.assertIn("fallback warning", warnings)
