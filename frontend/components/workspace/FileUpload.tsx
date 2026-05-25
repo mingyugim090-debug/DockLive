@@ -51,7 +51,7 @@ export function FileUpload({
         <input
           ref={inputRef}
           type="file"
-          accept=".pdf,.docx,.hwp,.hwpx,.txt,.md"
+          accept=".pdf,.docx,.hwp,.hwpx,.txt,.md,application/x-hwp,application/haansofthwp,application/vnd.hancom.hwp,application/vnd.hancom.hwpx"
           className="hidden"
           onChange={(event) => handleFiles(event.target.files)}
         />

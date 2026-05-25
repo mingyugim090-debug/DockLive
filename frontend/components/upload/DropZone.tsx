@@ -30,6 +30,8 @@ export function DropZone({ onFileAccepted, isLoading = false }: DropZoneProps) {
       'application/pdf': ['.pdf'],
       'application/vnd.hancom.hwpx': ['.hwpx'],
       'application/x-hwp': ['.hwp'],
+      'application/haansofthwp': ['.hwp'],
+      'application/vnd.hancom.hwp': ['.hwp'],
       'application/octet-stream': ['.hwp', '.hwpx'],
     },
     maxFiles: 1,
@@ -79,9 +81,9 @@ export function DropZone({ onFileAccepted, isLoading = false }: DropZoneProps) {
               className="flex flex-col items-center gap-1"
             >
               <p className="text-base font-semibold text-text">
-                {isDragOver ? 'PDF를 여기에 놓으세요' : 'PDF 공고문을 드래그하거나 클릭하세요'}
+                {isDragOver ? '문서를 여기에 놓으세요' : 'PDF, HWP, HWPX 공고문을 드래그하거나 클릭하세요'}
               </p>
-              <p className="text-sm text-text2">최대 20MB · PDF 형식 지원</p>
+              <p className="text-sm text-text2">최대 20MB · PDF, HWP, HWPX 형식 지원</p>
             </motion.div>
           )}
         </AnimatePresence>

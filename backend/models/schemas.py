@@ -13,6 +13,7 @@ DraftStatus = Literal["empty", "needs_input", "drafted", "revised", "confirmed"]
 WorkflowStatus = Literal["analyzed", "collecting_inputs", "drafting", "reviewing", "confirmed", "finalized"]
 DraftStreamEventType = Literal["section_start", "delta", "section_done", "workflow_done", "error"]
 ExportJobStatus = Literal["pending", "success", "failed", "validation_failed"]
+ParsedDocumentBlockType = Literal["paragraph", "table", "checkboxGroup", "heading", "spacer", "signature"]
 
 
 class TimelineItem(BaseModel):
@@ -228,6 +229,42 @@ class ExportMetadata(BaseModel):
 class ExportListResponse(BaseModel):
     success: bool
     data: list[ExportMetadata] = Field(default_factory=list)
+
+
+class ParsedTableCell(BaseModel):
+    text: str = ""
+    row_index: int = 0
+    col_index: int = 0
+    row_span: int = 1
+    col_span: int = 1
+    source_ref: dict[str, Any] = Field(default_factory=dict)
+
+
+class ParsedTable(BaseModel):
+    id: str
+    rows: list[list[ParsedTableCell]] = Field(default_factory=list)
+    text: str = ""
+    source_ref: dict[str, Any] = Field(default_factory=dict)
+
+
+class ParsedDocumentBlock(BaseModel):
+    id: str
+    type: ParsedDocumentBlockType = "paragraph"
+    text: str = ""
+    rows: list[list[ParsedTableCell]] = Field(default_factory=list)
+    section_index: int = 0
+    source_ref: dict[str, Any] = Field(default_factory=dict)
+
+
+class ParsedDocument(BaseModel):
+    source_type: SourceType
+    source_name: str
+    text: str = ""
+    paragraphs: list[str] = Field(default_factory=list)
+    tables: list[ParsedTable] = Field(default_factory=list)
+    blocks: list[ParsedDocumentBlock] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
 
 
 class HwpxStatusResponse(BaseModel):

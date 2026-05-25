@@ -25,7 +25,11 @@ try:
     )
     from services.ai_provider import provider_name, should_use_mock_ai  # noqa: E402
     from services.analyzer import build_analysis_result  # noqa: E402
-    from services.document_ingestion import convert_hwp_to_hwpx, ingest_uploaded_document  # noqa: E402
+    from services.document_ingestion import (  # noqa: E402
+        detect_uploaded_document_type,
+        convert_hwp_to_hwpx,
+        ingest_uploaded_document,
+    )
     from services.drafting_service import (  # noqa: E402
         build_template_replacements,
         clone_hwpx_template,
@@ -73,6 +77,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - local minimal Python fa
     update_inputs = None
     ingest_uploaded_document = None
     convert_hwp_to_hwpx = None
+    detect_uploaded_document_type = None
     get_mock_result = None
     list_export_files = None
     load_export_file = None
@@ -261,6 +266,21 @@ class AgentMvpContractTests(unittest.TestCase):
         self.assertEqual(ingested.source_type, "hwpx")
         self.assertGreater(len(ingested.text), 20)
         self.assertEqual(ingested.source_name, sample.name)
+        self.assertEqual(ingested.parsed.source_type, "hwpx")
+        self.assertGreater(len(ingested.parsed.blocks), 0)
+        self.assertGreater(len(ingested.parsed.tables), 0)
+
+    def test_upload_type_detection_uses_magic_number_before_extension(self):
+        if detect_uploaded_document_type is None:
+            self.skipTest("backend dependencies are not installed in this Python environment")
+
+        detected, warnings = detect_uploaded_document_type(b"PK\x03\x04fake zip", "legacy-name.hwp")
+        self.assertEqual(detected, "hwpx")
+        self.assertTrue(any(".hwp" in warning for warning in warnings))
+
+        detected, warnings = detect_uploaded_document_type(bytes.fromhex("D0CF11E0A1B11AE1") + b"fake ole", "modern-name.hwpx")
+        self.assertEqual(detected, "hwp")
+        self.assertTrue(any(".hwpx" in warning for warning in warnings))
 
     def test_hwp_conversion_preserves_converter_warnings(self):
         if convert_hwp_to_hwpx is None:
