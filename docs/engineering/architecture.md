@@ -13,6 +13,9 @@ flowchart LR
   API --> Store["InsForge Postgres / Storage"]
   API --> Cache["Redis or file cache fallback"]
   API --> HWPX["HWPX ZIP/XML Toolchain"]
+  Dev["Codex / Claude Code"] --> Harness["Harness: context, gates, error memory"]
+  Harness --> API
+  Harness --> FE
 ```
 
 ## Core Data Flow
@@ -84,3 +87,12 @@ LiveDock의 최종 한국 문서 포맷은 HWPX입니다.
 - HWP 입력은 HWPX로 변환한 뒤 분석 또는 양식 처리로 이어갑니다.
 
 HWPX가 실패해도 사용자가 작업을 잃지 않도록 HTML export와 placeholder map은 항상 fallback 경로로 유지합니다.
+
+## Development Harness
+
+Dock Live 개발은 `harness/`와 `tools/harness/`를 통해 반복 가능한 검증 루프로 운영합니다.
+
+- `AGENTS.md`와 `harness/state-spec.yaml`이 Codex, Claude Code, QA Agent의 공통 맥락을 고정합니다.
+- `tools/harness/run_harness.py`는 backend contract, deterministic agent eval, frontend build를 동일한 방식으로 실행합니다.
+- 실패 로그는 `harness/runs/`에 저장하고, 반복 오류 fingerprint는 `harness/errors/registry.json`에 남깁니다.
+- GitHub Actions는 `python tools/harness/run_harness.py --profile full`을 기본 품질 게이트로 실행합니다.

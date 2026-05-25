@@ -10,6 +10,7 @@
 docs/
   README.md
   product/       제품 방향, 개발 계획, 작업 목록, 디자인 메모
+    archive/     이전 디자인 요청과 사용하지 않는 UI 초안 보관
   engineering/   시스템 아키텍처, 환경변수, 배포, Codex 운영
   agent/         Agent harness, skills, MCP workflow
   hwpx/          HWPX export, Gemma, HWP MCP 가이드
@@ -23,6 +24,7 @@ docs/
 - [product/development-plan.md](./product/development-plan.md): 마일스톤 단위 개발 계획
 - [product/tasks.md](./product/tasks.md): 현재 작업 백로그와 완료된 작업
 - [product/designs.md](./product/designs.md): UI와 workflow 설계 메모
+- [product/archive/](./product/archive/): 이전 프론트엔드 디자인 참고와 사용하지 않는 랜딩 컴포넌트 보관
 
 ## 시스템과 개발
 
@@ -30,12 +32,14 @@ docs/
 - [engineering/environment.md](./engineering/environment.md): 로컬 환경변수와 설정 안내
 - [engineering/deployment.md](./engineering/deployment.md): Vercel 프론트엔드와 Render 백엔드 배포 메모
 - [engineering/codex.md](./engineering/codex.md): 이 repository에서 Codex를 사용하는 방식
+- [engineering/insforge.md](./engineering/insforge.md): InsForge SDK/MCP 규칙
 
 ## Agent, Skills, MCP
 
 - [agent/agent-harness.md](./agent/agent-harness.md): Agent harness와 테스트 workflow
 - [agent/skills.md](./agent/skills.md): 문서 자동화 skill 사용 방향
 - [agent/skills-mcp-architecture.md](./agent/skills-mcp-architecture.md): Claude skills와 MCP 구조 정리
+- [../harness/](../harness/): 실행 가능한 하네스 state spec, quality gates, error memory
 
 ## HWPX
 

@@ -40,6 +40,9 @@ LiveDock/
   README.md                    GitHub 메인 소개 문서
   AGENTS.md                    Codex 개발 규칙과 Agent MVP 지침
   render.yaml                  Render 백엔드 배포 설정
+  harness/                     실행 가능한 하네스 spec, quality gates, 오류 기억 registry
+  scripts/                     Windows 로컬 실행 wrapper
+  .github/workflows/           CI 품질 게이트
 
   frontend/                    Next.js 14 프론트엔드
     README.md                  프론트엔드 실행/구조 안내
@@ -61,6 +64,7 @@ LiveDock/
   docs/                        제품, 개발, Agent, HWPX, 평가 문서
     README.md                  문서 인덱스
     product/                   제품 방향, 개발 계획, 작업 목록, 디자인 메모
+      archive/                 이전 디자인 자료와 사용하지 않는 UI 초안
     engineering/               아키텍처, 환경변수, 배포, Codex 운영 문서
     agent/                     Agent harness, skills, MCP 운영 문서
     hwpx/                      HWPX export, Gemma, HWP MCP 문서
@@ -74,6 +78,7 @@ LiveDock/
 
   tools/                       로컬 보조 도구
     README.md                  도구 폴더 안내
+    harness/                   품질 게이트 실행과 오류 fingerprint 도구
     hwp-mcp/                   Windows HWP 자동화 MCP 서버
       README.md                HWP MCP 도구 안내
       hwp_mcp_stdio_server.py  MCP stdio 서버 entrypoint
@@ -90,6 +95,8 @@ LiveDock/
 | `frontend/` | 사용자가 공고를 업로드하고 분석 결과, 체크리스트, 초안, export 흐름을 확인하는 Next.js 앱 |
 | `backend/` | 공고 파싱, AI 분석, draft 생성, workflow 상태 관리, HWPX export API를 담당하는 FastAPI 서버 |
 | `docs/` | 제품 방향, 아키텍처, 배포, 평가, HWPX, skills/MCP 문서를 범주별로 보관 |
+| `harness/` | Agent 작업을 반복 가능하게 만드는 state spec, quality gates, 오류 기억 registry |
+| `tools/harness/` | 로컬/CI에서 quality gate를 실행하고 실패 fingerprint를 기록하는 표준 라이브러리 도구 |
 | `.claude/` | LiveDock 업무에 맞춘 로컬 Agent skill과 MCP 설정 예시 |
 | `tools/hwp-mcp/` | Windows 한글 프로그램을 제어하기 위한 로컬 MCP helper |
 
@@ -104,6 +111,7 @@ LiveDock/
 - `backend/.env`
 - `__pycache__/`
 - `outputs/`
+- `harness/runs/`
 - `.uv-cache/`
 - `tools/hwp-mcp/.venv/`
 - `tools/hwp-mcp/*.log`
@@ -177,6 +185,16 @@ npm run dev
 
 ## 검증 명령
 
+권장 하네스:
+
+```powershell
+.\scripts\harness.ps1 -Profile quick
+.\scripts\harness.ps1 -Profile agent
+.\scripts\harness.ps1 -Profile full
+```
+
+실패하면 raw log는 `harness/runs/`에 저장되고, 반복 오류 fingerprint는 `harness/errors/registry.json`에 기록됩니다.
+
 Frontend build:
 
 ```powershell
@@ -207,3 +225,4 @@ python tests/manual/manual_hwpx_soccer_application.py
 - [Deployment](./docs/engineering/deployment.md)
 - [Evaluation guide](./docs/evaluation/evals.md)
 - [Codex project guide](./AGENTS.md)
+- [Harness guide](./harness/README.md)

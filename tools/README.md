@@ -9,6 +9,7 @@
 ```text
 tools/
   README.md
+  harness/      Dock Live 품질 게이트와 오류 기억 도구
   hwp-mcp/      Windows HWP 자동화 MCP 서버
 ```
 
@@ -17,3 +18,12 @@ tools/
 - 서비스 배포 코드와 로컬 자동화 도구를 분리합니다.
 - 도구별 README와 tests를 도구 폴더 안에 둡니다.
 - `.venv`, log, cache, generated files는 커밋하지 않습니다.
+
+## Harness
+
+하네스 도구는 repository root에서 실행합니다.
+
+```powershell
+python tools\harness\run_harness.py --profile quick
+python tools\harness\error_memory.py list
+```

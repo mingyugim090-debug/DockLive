@@ -1,0 +1,63 @@
+profiles:
+  quick:
+    description: Fast local confidence gate.
+    commands:
+      - name: python-compile
+        cwd: .
+        command: python -m compileall -q -x "(venv|\.venv|__pycache__|\.pytest_cache|\.livedock_storage|\.tmp|node_modules|\.next)" backend tools/harness
+      - name: harness-self-tests
+        cwd: .
+        command: python -m unittest discover -s tools/harness/tests -p test_*.py
+      - name: backend-contracts
+        cwd: .
+        command: python -m unittest backend.tests.contracts.test_agent_mvp_contracts
+
+  backend:
+    description: Backend contract and syntax gate.
+    commands:
+      - name: backend-compile
+        cwd: .
+        command: python -m compileall -q -x "(venv|\.venv|__pycache__|\.pytest_cache|\.livedock_storage|\.tmp|node_modules|\.next)" backend
+      - name: backend-contracts
+        cwd: .
+        command: python -m unittest backend.tests.contracts.test_agent_mvp_contracts
+
+  agent:
+    description: Deterministic Agent MVP fixture evaluation.
+    commands:
+      - name: deterministic-fixture-e2e
+        cwd: .
+        command: python backend/tests/evals/run_fixture_e2e.py --mode deterministic --min-score 80
+
+  frontend:
+    description: Frontend test and Next.js production build gate.
+    commands:
+      - name: frontend-tests
+        cwd: frontend
+        command: npm run test
+      - name: frontend-build
+        cwd: frontend
+        command: npm run build
+
+  full:
+    description: Backend, agent, and frontend gates.
+    extends:
+      - backend
+      - agent
+      - frontend
+
+  hwpx:
+    description: Optional HWPX package validation path.
+    commands:
+      - name: deterministic-fixture-e2e-hwpx
+        cwd: .
+        command: python backend/tests/evals/run_fixture_e2e.py --mode deterministic --min-score 80 --include-hwpx
+
+failure_policy:
+  record_registry: harness/errors/registry.json
+  write_logs: harness/runs
+  fingerprint_parts:
+    - command
+    - exit_code
+    - representative_error_line
+    - related_file_paths

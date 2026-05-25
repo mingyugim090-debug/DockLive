@@ -18,9 +18,10 @@
 작업 전 확인:
 
 1. 관련 파일을 먼저 읽는다.
-2. `AGENTS.md`와 `docs/README.md`의 우선순위를 확인한다.
-3. API 계약 변경 시 backend schema와 frontend type을 함께 수정한다.
-4. 한국어 문자열이 깨진 파일을 만지면 해당 영역을 정상 한국어로 복구한다.
+2. `AGENTS.md`, `harness/state-spec.yaml`, `docs/README.md`의 우선순위를 확인한다.
+3. `harness/errors/registry.json`에서 같은 실패가 이미 기록되어 있는지 확인한다.
+4. API 계약 변경 시 backend schema와 frontend type을 함께 수정한다.
+5. 한국어 문자열이 깨진 파일을 만지면 해당 영역을 정상 한국어로 복구한다.
 
 ## Agent 계약 규칙
 
@@ -43,6 +44,12 @@
 - XML run을 직접 갈아엎어 서식을 망가뜨리지 않는다.
 
 ## Verification
+
+권장 하네스:
+
+```bash
+python tools/harness/run_harness.py --profile quick
+```
 
 Frontend 변경:
 

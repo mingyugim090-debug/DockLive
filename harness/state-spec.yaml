@@ -1,0 +1,106 @@
+product:
+  name: Dock Live
+  purpose: >
+    Analyze public notices and official forms, collect only missing user inputs,
+    draft submission documents section by section, and export editable HTML/HWPX.
+  priority:
+    - grounded_document_ingestion
+    - fact_based_analysis
+    - missing_input_collection
+    - section_drafting
+    - user_confirmation
+    - validated_export
+
+agent_collaboration:
+  codex:
+    role: implementation_verification_driver
+    responsibilities:
+      - inspect_existing_context_before_changes
+      - implement_scoped_changes
+      - run_harness_quality_gates
+      - record_or_resolve_repeat_failures
+  claude_code:
+    role: broad_implementation_collaborator
+    responsibilities:
+      - follow_context_layer
+      - keep_changes_inside_existing_boundaries
+      - leave_verifiable_outputs_for_codex
+  qa_agent:
+    role: test_first_guardrail_author
+    responsibilities:
+      - turn_feature_specs_into_tests
+      - mock_external_services
+      - cover_happy_edge_and_error_paths
+
+contracts:
+  analysis_result:
+    must_include:
+      - doc_type
+      - title
+      - organization
+      - summary
+      - timeline
+      - checklist
+      - document_sections
+      - eligibility
+      - submission_method
+      - evaluation_criteria
+      - benefits
+      - cautions
+      - uncertain_fields
+      - evidence_quotes
+      - source_evidence
+    forbidden:
+      - invented_deadlines
+      - invented_organizations
+      - invented_required_documents
+      - inferred_support_amounts_without_source
+  draft:
+    must:
+      - use_analysis_output_and_user_inputs_only
+      - draft_by_section
+      - preserve_confirmation_required
+      - avoid_final_submission_claims_before_confirmation
+  export:
+    must:
+      - preserve_user_work_when_hwpx_fails
+      - provide_html_fallback
+      - include_validation_summary_when_available
+
+api_boundaries:
+  backend:
+    framework: FastAPI
+    owns:
+      - parsing
+      - ai_provider_calls
+      - analysis_normalization
+      - workflow_state
+      - export_generation
+  frontend:
+    framework: Next.js 14
+    owns:
+      - upload_flow
+      - analysis_review
+      - user_input_collection
+      - draft_review
+      - export_ui
+  tools:
+    owns:
+      - local_developer_automation
+      - optional_hwp_mcp
+      - harness_runner
+
+hwpx_rules:
+  package_type: zip_xml
+  hwp_input: convert_or_parse_before_analysis
+  official_forms: prefer_clone_and_replace
+  validation:
+    - fix_namespaces
+    - validate_package
+    - extract_text_for_expected_content
+
+non_goals:
+  - community_feed
+  - team_recruiting
+  - social_profiles
+  - speculative_notice_completion

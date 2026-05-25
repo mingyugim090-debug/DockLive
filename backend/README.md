@@ -48,6 +48,12 @@ python -m uvicorn main:app --reload
 ## 검증
 
 ```powershell
-python -m pytest tests/contracts/test_agent_mvp_contracts.py
+python -m unittest tests.contracts.test_agent_mvp_contracts
 python tests/manual/manual_hwpx_soccer_application.py
+```
+
+Repository root에서 전체 하네스를 실행할 때:
+
+```powershell
+.\scripts\harness.ps1 -Profile quick
 ```

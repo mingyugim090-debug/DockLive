@@ -57,6 +57,7 @@ htmlcov/
 coverage/
 .uv-cache/
 outputs/
+harness/runs/
 tools/hwp-mcp/pytest-cache-files-*/
 .livedock_storage/
 backend/.livedock_storage/

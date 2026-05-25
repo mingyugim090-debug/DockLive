@@ -1,133 +1,81 @@
 ---
-description: Instructions building apps with MCP
+description: Dock Live agent harness and repository operating rules
 globs: *
 alwaysApply: true
 ---
 
-# InsForge SDK Documentation - Overview
+# Dock Live Agent Harness
 
-## What is InsForge?
+Dock Live is an Agent MVP for notice ingestion, grounded analysis, section-by-section drafting, user confirmation, and HWPX export. Treat this repository structure as part of the prompt: follow the existing boundaries before adding new ones.
 
-Backend-as-a-service (BaaS) platform providing:
+## Product Priority
 
-- **Database**: PostgreSQL with PostgREST API
-- **Authentication**: Email/password + OAuth (Google, GitHub)
-- **Storage**: File upload/download
-- **AI**: OpenRouter key provisioning and model catalog for direct OpenAI-compatible integrations
-- **Functions**: Serverless function deployment
-- **Realtime**: WebSocket pub/sub (database + client events)
+1. Reliable HWP/HWPX/PDF/URL/text ingestion
+2. Strictly grounded announcement analysis
+3. User input collection for missing facts
+4. Section-level draft generation with confirmation gates
+5. HTML/HWPX export validation
+6. Persistence through InsForge when storage/auth work is in scope
 
-## Installation
+Do not start community, feed, team recruiting, or social features unless the user explicitly asks for them.
 
-The following is a step-by-step guide to installing and using the InsForge TypeScript SDK for Web applications. If you are building other types of applications, please refer to:
-- [Swift SDK documentation](/sdks/swift/overview) for iOS, macOS, tvOS, and watchOS applications.
-- [Kotlin SDK documentation](/sdks/kotlin/overview) for Android applications.
-- [REST API documentation](/sdks/rest/overview) for direct HTTP API access.
+## Collaboration Roles
 
-### 🚨 CRITICAL: Follow these steps in order
+- Codex is the implementation and verification driver: inspect the repo, make scoped changes, run harness gates, and record repeat errors.
+- Claude Code is the broad implementation collaborator: when Claude changes code, Codex should verify with the same harness gates before accepting the result.
+- Gemini-style QA prompts are treated as test-first harness input: convert them into tests, fixtures, or quality gates instead of production behavior.
+- Humans make final product judgments; agents must expose uncertainty, failures, and verification results.
 
-### Step 1: Download Template
+## Context Layer
 
-Use the `download-template` MCP tool to create a new project with your backend URL and anon key pre-configured.
+Before changing code:
 
-### Step 2: Install SDK
+1. Read the relevant files and the nearest README/docs.
+2. Read `harness/state-spec.yaml` for product invariants.
+3. Check `harness/errors/registry.json` for active recurring failures.
+4. Keep backend, frontend, docs, tools, and harness responsibilities separate.
+5. If touching InsForge SDK or infrastructure code, first consult `docs/engineering/insforge.md`.
 
-```bash
-npm install @insforge/sdk@latest
+## Implementation Rules
+
+- Never invent facts from source documents. Missing document facts must remain `미명시`, `정보 없음`, `uncertain_fields`, or confirmation-required items.
+- Keep API contract changes synchronized across `backend/models/schemas.py`, `frontend/lib/types.ts`, and client code.
+- Preserve HWPX structure whenever working with official forms. Prefer clone/replace workflows for complex templates.
+- Avoid moving app code unless a task explicitly calls for a refactor. New support tooling belongs in `tools/` or `harness/`.
+- Do not commit runtime outputs, logs, local env files, or generated caches.
+
+## Verification Layer
+
+Use the harness runner from the repository root:
+
+```powershell
+.\scripts\harness.ps1 -Profile quick
 ```
 
-### Step 3: Create SDK Client
+Quality gates:
 
-You must create a client instance using `createClient()` with your base URL and anon key:
+- `quick`: compile Python, run harness self-tests, run backend contract tests.
+- `backend`: backend compile and backend contracts.
+- `agent`: deterministic fixture E2E eval.
+- `frontend`: Next.js production build.
+- `full`: backend, agent, and frontend gates.
+- `hwpx`: deterministic fixture E2E with HWPX validation.
 
-```javascript
-import { createClient } from '@insforge/sdk';
+If a command fails, the harness records a fingerprint in `harness/errors/registry.json` and stores the raw run log under ignored `harness/runs/`.
 
-const client = createClient({
-  baseUrl: 'https://your-app.region.insforge.app',  // Your InsForge backend URL
-  anonKey: 'your-anon-key-here'       // Get this from backend metadata
-});
+## HWPX Rules
 
-```
+- HWPX is a ZIP/XML package.
+- HWP input must be converted or parsed before analysis.
+- After HWPX generation, run namespace fix and validation when the toolchain is available.
+- Verify extracted text for expected title/content before treating export as ready.
+- Do not directly rewrite XML runs in ways that destroy table, image, or style structure.
 
-**API BASE URL**: Your API base URL is `https://your-app.region.insforge.app`.
+## Commit-Ready Checklist
 
-## Getting Detailed Documentation
-
-### 🚨 CRITICAL: Always Fetch Documentation Before Writing Code
-
-InsForge provides official SDKs and REST APIs, use them to interact with InsForge services from your application code.
-
-- [TypeScript SDK](/sdks/typescript/overview) - JavaScript/TypeScript
-- [Swift SDK](/sdks/swift/overview) - iOS, macOS, tvOS, and watchOS
-- [Kotlin SDK](/sdks/kotlin/overview) - Android and Kotlin Multiplatform
-- [REST API](/sdks/rest/overview) - Direct HTTP API access
-
-Before writing or editing any InsForge integration code, you **MUST** call the `fetch-docs` or `fetch-sdk-docs` MCP tool to get the latest SDK documentation. This ensures you have accurate, up-to-date implementation patterns.
-
-### Use the InsForge `fetch-docs` MCP tool to get specific SDK documentation:
-
-Available documentation types:
-
-- `"instructions"` - Essential backend setup (START HERE)
-- `"real-time"` - Real-time pub/sub (database + client events) via WebSockets
-- `"db-sdk-typescript"` - Database operations with TypeScript SDK
-- **Authentication** - Choose based on implementation:
-  - `"auth-sdk-typescript"` - TypeScript SDK methods for custom auth flows
-  - `"auth-components-react"` - Pre-built auth UI for React+Vite (singlepage App)
-  - `"auth-components-react-router"` - Pre-built auth UI for React(Vite+React Router) (Multipage App)
-  - `"auth-components-nextjs"` - Pre-built auth UI for Nextjs (SSR App)
-- `"storage-sdk"` - File storage operations
-- `"functions-sdk"` - Serverless functions invocation
-- `"ai-integration-sdk"` - AI integration with the provisioned OpenRouter key and OpenAI SDK
-- `"real-time"` - Real-time pub/sub (database + client events) via WebSockets
-- `"deployment"` - Deploy frontend applications via MCP tool
-
-These documentations are mostly for TypeScript SDK. For other languages, you can also use `fetch-sdk-docs` mcp tool to get specific documentation.
-
-### Use the InsForge `fetch-sdk-docs` MCP tool to get specific SDK documentation
-
-You can fetch sdk documentation using the `fetch-sdk-docs` MCP tool with specific feature type and language.
-
-Available feature types:
-- db - Database operations
-- storage - File storage operations
-- functions - Serverless functions invocation
-- auth - User authentication
-- ai - AI integration with the provisioned OpenRouter key and OpenAI SDK
-- realtime - Real-time pub/sub (database + client events) via WebSockets
-
-Available languages:
-- typescript - JavaScript/TypeScript SDK
-- swift - Swift SDK (for iOS, macOS, tvOS, and watchOS)
-- kotlin - Kotlin SDK (for Android and JVM applications)
-- rest-api - REST API
-
-## When to Use SDK vs MCP Tools
-
-### Always SDK for Application Logic:
-
-- Authentication (register, login, logout, profiles)
-- Database CRUD (select, insert, update, delete)
-- Storage operations (upload, download files)
-- AI integration via the provisioned OpenRouter key with the OpenAI SDK or OpenRouter HTTP API
-- Serverless function invocation
-
-### Use MCP Tools for Infrastructure:
-
-- Project scaffolding (`download-template`) - Download starter templates with InsForge integration
-- Backend setup and metadata (`get-backend-metadata`)
-- Database schema management (`run-raw-sql`, `get-table-schema`)
-- Storage bucket creation (`create-bucket`, `list-buckets`, `delete-bucket`)
-- Serverless function deployment (`create-function`, `update-function`, `delete-function`)
-- Frontend deployment (`create-deployment`) - Deploy frontend apps to InsForge hosting
-
-## Important Notes
-
-- For auth: use `auth-sdk` for custom UI, or framework-specific components for pre-built UI
-- SDK returns `{data, error}` structure for all operations
-- Database inserts require array format: `[{...}]`
-- Serverless functions have single endpoint (no subpaths)
-- Storage: Upload files to buckets, store URLs in database
-- AI integrations should call OpenRouter directly with `baseURL: "https://openrouter.ai/api/v1"` and a server-side `OPENROUTER_API_KEY`
-- **EXTRA IMPORTANT**: Use Tailwind CSS 3.4 (do not upgrade to v4). Lock these dependencies in `package.json`
+- [ ] Scope stays within Agent MVP or the user's explicit request.
+- [ ] No new unsupported factual claims are introduced.
+- [ ] API schemas and frontend types still match.
+- [ ] User-visible errors are clear.
+- [ ] Relevant harness profile was run.
+- [ ] New recurring failures are recorded or resolved in the error registry.

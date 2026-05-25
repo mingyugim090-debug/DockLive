@@ -40,5 +40,12 @@ npm run dev
 ## 검증
 
 ```powershell
+npm run test
 npm run build
+```
+
+Repository root에서 하네스 profile로 실행할 수도 있습니다.
+
+```powershell
+.\scripts\harness.ps1 -Profile frontend
 ```
