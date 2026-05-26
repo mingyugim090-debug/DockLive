@@ -371,6 +371,7 @@ class HwpxEditableRegion(BaseModel):
     bbox: dict[str, float] = Field(default_factory=dict)
     value: str = ""
     prompt: str = ""
+    placeholder_hint: str = ""
     draft_status: Literal["empty", "drafted", "revised"] = "empty"
     source_ref: dict[str, Any] = Field(default_factory=dict)
 

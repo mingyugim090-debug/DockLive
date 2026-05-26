@@ -315,6 +315,7 @@ export interface HwpxEditableRegion {
   bbox: { x: number; y: number; width: number; height: number };
   value: string;
   prompt: string;
+  placeholder_hint: string;
   draft_status: 'empty' | 'drafted' | 'revised';
   source_ref: Record<string, unknown>;
 }

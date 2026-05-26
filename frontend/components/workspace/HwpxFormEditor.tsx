@@ -2,7 +2,6 @@
 
 import { useMemo, useRef, useState, type RefObject } from 'react';
 import {
-  addHwpxComponent,
   createHwpxFormSession,
   draftHwpxRegion,
   exportHwpxFormSession,
@@ -11,20 +10,11 @@ import {
 import type { ExportResponse, HwpxEditableRegion, HwpxFormSession, HwpxTemplateBlock, HwpxTemplateCell } from '@/lib/types';
 import { Button } from '@/components/ui/Button';
 
-type WorkflowStep = 'upload' | 'edit' | 'review';
-type ComponentKind = 'text' | 'textarea' | 'signature' | 'table';
+type WorkflowStep = 'upload' | 'edit';
 
 const workflowSteps: Array<{ id: WorkflowStep; label: string; description: string }> = [
   { id: 'upload', label: '1. 파일 업로드', description: 'HWP/HWPX 원본 선택' },
-  { id: 'edit', label: '2. 문서 편집', description: '문단과 표 셀을 직접 수정' },
-  { id: 'review', label: '3. 다운로드', description: '원본 구조 그대로 HWPX 생성' },
-];
-
-const componentOptions: Array<{ kind: ComponentKind; label: string }> = [
-  { kind: 'table', label: '표' },
-  { kind: 'signature', label: '서명' },
-  { kind: 'text', label: '문구' },
-  { kind: 'textarea', label: '긴 글' },
+  { id: 'edit', label: '2. 편집 및 다운로드', description: '항목 입력 후 HWPX 생성' },
 ];
 
 function downloadExport(exported: ExportResponse) {
@@ -57,14 +47,6 @@ function compactText(value: unknown, fallback = ''): string {
 
 function truncate(value: string, limit: number): string {
   return value.length > limit ? `${value.slice(0, limit - 1)}...` : value;
-}
-
-function writingRegions(regions: HwpxEditableRegion[]): HwpxEditableRegion[] {
-  return regions.filter(
-    (region) =>
-      region.kind === 'textarea' ||
-      /소개|동기|계획|내용|목표|방법|사유|자기|활동|지원|서술|작성/.test(region.label),
-  );
 }
 
 function getAnalysisBlocks(session: HwpxFormSession): HwpxTemplateBlock[] {
@@ -115,27 +97,13 @@ function cellAddress(cell: HwpxTemplateCell, rowIndex: number, cellIndex: number
   };
 }
 
-function localDraftText(session: HwpxFormSession, region: HwpxEditableRegion, baseInput: string, promptText: string): string {
-  const facts = [baseInput, region.value].filter(Boolean).join('\n').trim();
-  if (region.kind === 'text' || region.kind === 'checkbox' || region.kind === 'signature') {
-    return facts || promptText || `${region.label} 입력값`;
-  }
-  return [
-    `${session.analysis.title || session.source_filename}의 ${region.label} 항목 초안입니다.`,
-    facts || '제공된 기본 정보를 바탕으로 목적, 필요성, 실행 내용을 구체적으로 정리했습니다.',
-    promptText ? `요청사항: ${promptText}` : '제출용 문체로 간결하고 명확하게 작성했습니다.',
-  ].join('\n');
-}
 
 export function HwpxFormEditor() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<WorkflowStep>('upload');
   const [session, setSession] = useState<HwpxFormSession | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [baseInput, setBaseInput] = useState('');
   const [prompt, setPrompt] = useState('');
-  const [globalBaseInput, setGlobalBaseInput] = useState('');
-  const [globalPrompt, setGlobalPrompt] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -145,7 +113,6 @@ export function HwpxFormEditor() {
     [orderedRegions, selectedId],
   );
   const stepIndex = workflowSteps.findIndex((item) => item.id === step);
-  const completedCount = orderedRegions.filter((region) => region.value.trim()).length;
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
@@ -160,10 +127,7 @@ export function HwpxFormEditor() {
       const firstRegion = sortRegions(response.data.regions)[0] ?? null;
       setSession(response.data);
       setSelectedId(firstRegion?.id ?? null);
-      setBaseInput('');
       setPrompt('');
-      setGlobalBaseInput('');
-      setGlobalPrompt('');
       setStep('edit');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'HWPX 문서를 불러오지 못했습니다.');
@@ -175,45 +139,40 @@ export function HwpxFormEditor() {
   function reset() {
     setSession(null);
     setSelectedId(null);
-    setBaseInput('');
     setPrompt('');
-    setGlobalBaseInput('');
-    setGlobalPrompt('');
     setError(null);
     setStep('upload');
   }
 
   function selectRegion(region: HwpxEditableRegion) {
     setSelectedId(region.id);
-    setBaseInput(region.value);
     setPrompt(region.prompt);
   }
 
-  function setRegionLocal(region: HwpxEditableRegion, value: string, nextPrompt = prompt) {
+  function setRegionLocal(region: HwpxEditableRegion, value: string) {
     if (!session) return;
     setSession({
       ...session,
       status: 'editing',
       regions: session.regions.map((item) =>
         item.id === region.id
-          ? { ...item, value, prompt: nextPrompt, draft_status: value.trim() ? 'revised' : 'empty' }
+          ? { ...item, value, draft_status: value.trim() ? 'revised' : 'empty' }
           : item,
       ),
     });
   }
 
   async function persistRegion(region: HwpxEditableRegion, value = region.value, nextPrompt = region.prompt) {
-    if (!session) return session;
+    if (!session) return;
     const response = await updateHwpxRegion(session.id, region.id, { value, prompt: nextPrompt });
     setSession(response.data);
-    return response.data;
   }
 
-  async function persistAllRegions(current = session) {
-    if (!current) return current;
-    let latest = current;
-    for (const region of current.regions) {
-      const response = await updateHwpxRegion(current.id, region.id, {
+  async function persistAllRegions() {
+    if (!session) return;
+    let latest = session;
+    for (const region of session.regions) {
+      const response = await updateHwpxRegion(session.id, region.id, {
         value: region.value,
         prompt: region.prompt,
       });
@@ -223,32 +182,15 @@ export function HwpxFormEditor() {
     return latest;
   }
 
-  async function go(nextStep: WorkflowStep) {
-    setError(null);
-    if (session && nextStep === 'review') {
-      setBusy('save');
-      try {
-        await persistAllRegions();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : '입력값 저장에 실패했습니다.');
-        setBusy(null);
-        return;
-      }
-      setBusy(null);
-    }
-    setStep(nextStep);
-  }
-
   async function generateSelectedDraft() {
     if (!session || !selected) return;
     setBusy('draft');
     setError(null);
     try {
-      const nextPrompt = prompt || selected.prompt || `${selected.label} 항목을 제출용 문장으로 작성해줘.`;
-      const nextBaseInput = [baseInput, selected.value].filter(Boolean).join('\n\n');
+      const nextPrompt = prompt || `${selected.label} 항목을 제출용 문장으로 작성해줘.`;
       await persistRegion(selected, selected.value, nextPrompt);
       const response = await draftHwpxRegion(session.id, selected.id, {
-        baseInput: nextBaseInput,
+        baseInput: selected.value,
         prompt: nextPrompt,
       });
       const updated = response.data.regions.find((region) => region.id === selected.id);
@@ -256,71 +198,7 @@ export function HwpxFormEditor() {
       setSelectedId(selected.id);
       setPrompt(updated?.prompt ?? nextPrompt);
     } catch (err) {
-      const fallback = localDraftText(session, selected, baseInput, prompt);
-      setRegionLocal(selected, fallback, prompt);
-      setError(
-        err instanceof Error
-          ? `${err.message} 로컬 초안으로 먼저 반영했습니다.`
-          : 'AI 초안 생성 응답이 지연되어 로컬 초안으로 먼저 반영했습니다.',
-      );
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function generateCompleteDraft() {
-    if (!session) return;
-    setBusy('complete');
-    setError(null);
-    try {
-      let latest = await persistAllRegions();
-      if (!latest) return;
-      const ordered = sortRegions(latest.regions);
-      const targets = ordered.filter((region) => region.kind === 'textarea' || !region.value.trim());
-      const regionsToDraft = targets.length ? targets : ordered;
-      for (const region of regionsToDraft) {
-        const baseForRegion = [globalBaseInput, region.value].filter(Boolean).join('\n\n');
-        const promptForRegion = globalPrompt || region.prompt || `${region.label} 항목을 공고문 문체에 맞게 구체적으로 작성해줘.`;
-        try {
-          const response = await draftHwpxRegion(latest.id, region.id, {
-            baseInput: baseForRegion,
-            prompt: promptForRegion,
-          });
-          latest = response.data;
-        } catch {
-          const fallback = localDraftText(latest, region, baseForRegion, promptForRegion);
-          latest = {
-            ...latest,
-            status: 'editing',
-            regions: latest.regions.map((item) =>
-              item.id === region.id ? { ...item, value: fallback, prompt: promptForRegion, draft_status: 'drafted' } : item,
-            ),
-          };
-        }
-        setSession(latest);
-      }
-      setSelectedId(sortRegions(latest.regions)[0]?.id ?? null);
-      setStep('review');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'AI 완성본 생성에 실패했습니다.');
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function addComponent(kind: ComponentKind) {
-    if (!session) return;
-    setBusy('component');
-    setError(null);
-    try {
-      const label = componentOptions.find((item) => item.kind === kind)?.label ?? '추가 영역';
-      const response = await addHwpxComponent(session.id, { kind, label: `추가 ${label}` });
-      const nextRegions = sortRegions(response.data.regions);
-      const created = nextRegions[nextRegions.length - 1] ?? null;
-      setSession(response.data);
-      if (created) selectRegion(created);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '구성요소 추가에 실패했습니다.');
+      setError(err instanceof Error ? err.message : 'AI 초안 생성에 실패했습니다.');
     } finally {
       setBusy(null);
     }
@@ -356,10 +234,8 @@ export function HwpxFormEditor() {
           regions={orderedRegions}
           selected={selected}
           busy={busy}
-          baseInput={baseInput}
           prompt={prompt}
           onSelect={selectRegion}
-          onBaseInput={setBaseInput}
           onPrompt={setPrompt}
           onLocalChange={setRegionLocal}
           onSaveSelected={async () => {
@@ -374,21 +250,8 @@ export function HwpxFormEditor() {
             }
           }}
           onGenerateSelected={generateSelectedDraft}
-          onAddComponent={addComponent}
           onBack={reset}
-          onNext={() => go('review')}
-        />
-      ) : null}
-
-      {session && step === 'review' ? (
-        <ReviewStep
-          session={session}
-          regions={orderedRegions}
-          selected={selected}
-          busy={busy}
-          onSelect={selectRegion}
-          onBack={() => go('edit')}
-          onDownload={exportFile}
+          onExport={exportFile}
         />
       ) : null}
     </div>
@@ -484,287 +347,68 @@ function UploadStep({
   );
 }
 
-function AnalysisStep({
-  session,
-  regions,
-  completedCount,
-  onBack,
-  onNext,
-}: {
-  session: HwpxFormSession;
-  regions: HwpxEditableRegion[];
-  completedCount: number;
-  onBack: () => void;
-  onNext: () => void;
-}) {
-  const stats = session.analysis.stats as Record<string, number> | undefined;
-  const title = compactText(session.analysis.title, session.source_filename) || session.source_filename;
-  const organization = compactText(session.analysis.organization, '기관 미확인') || '기관 미확인';
-  const conciseSummary = truncate(
-    compactText(session.analysis.summary, '업로드한 HWPX의 표 구조, 문단, 입력 영역을 분석했습니다.'),
-    220,
-  );
-  const fields = Array.isArray(session.analysis.fields) ? session.analysis.fields : [];
-  const sections = Array.isArray(session.analysis.sections) ? session.analysis.sections : [];
-  const longRegions = writingRegions(regions);
-  const keyItems = [
-    `${regions.length}개 입력 영역을 원본 순서대로 정리했습니다.`,
-    `${longRegions.length}개 영역은 AI 초안 작성 대상으로 분류했습니다.`,
-    `${stats?.tables ?? 0}개 표와 ${stats?.sections ?? 0}개 섹션을 구조 보존 대상으로 감지했습니다.`,
-  ];
-
-  return (
-    <section className="rounded-2xl border border-[#DDE7E2] bg-white p-6 shadow-sm">
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <p className="text-sm font-bold text-[#3A7A68]">AI 분석 결과</p>
-          <h2 className="mt-2 text-2xl font-bold text-[#24312D]">{title}</h2>
-          <p className="mt-2 text-sm leading-7 text-[#65736E]">{conciseSummary}</p>
-        </div>
-        <div className="rounded-2xl border border-[#DDE7E2] bg-[#F8FBFA] px-4 py-3 text-sm">
-          <p className="font-bold text-[#24312D]">{organization}</p>
-          <p className="mt-1 text-[#65736E]">{session.source_filename}</p>
-        </div>
-      </div>
-
-      {session.warnings.length ? (
-        <div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50 px-5 py-4 text-sm leading-6 text-amber-800">
-          {session.warnings.map((warning) => <p key={warning}>{warning}</p>)}
-        </div>
-      ) : null}
-
-      <div className="mt-6 grid gap-4 md:grid-cols-4">
-        <Metric label="입력 영역" value={`${regions.length}개`} />
-        <Metric label="긴 글 작성" value={`${longRegions.length}개`} />
-        <Metric label="작성 완료" value={`${completedCount}개`} />
-        <Metric label="표/섹션" value={`${stats?.tables ?? 0} / ${stats?.sections ?? 0}`} />
-      </div>
-
-      <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <div className="rounded-2xl border border-[#E4EBE7] bg-[#F8FBFA] p-4">
-          <p className="text-sm font-bold text-[#24312D]">핵심 요약</p>
-          <div className="mt-3 space-y-2">
-            {keyItems.map((item) => (
-              <p key={item} className="rounded-xl bg-white px-3 py-2 text-sm leading-6 text-[#40504B]">
-                {item}
-              </p>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-[#E4EBE7] bg-[#F8FBFA] p-4">
-          <p className="text-sm font-bold text-[#24312D]">원본에서 찾은 주요 섹션</p>
-          <div className="mt-3 grid gap-2 md:grid-cols-2">
-            {(sections.length ? sections : fields).slice(0, 8).map((item, index) => {
-              const label = 'heading' in item ? item.heading : item.label;
-              const body = 'body' in item ? item.body : item.value;
-              return (
-                <div key={`${label}-${index}`} className="rounded-xl border border-[#DDE7E2] bg-white px-3 py-2 text-sm">
-                  <p className="font-bold text-[#24312D]">{truncate(label || `섹션 ${index + 1}`, 34)}</p>
-                  {body ? <p className="mt-1 truncate text-xs text-[#65736E]">{body}</p> : null}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-6 rounded-2xl border border-[#E4EBE7] bg-[#F8FBFA] p-4">
-        <p className="text-sm font-bold text-[#24312D]">추출된 입력 영역</p>
-          <div className="mt-3 grid gap-2 md:grid-cols-2">
-            {regions.slice(0, 28).map((region, index) => (
-              <div key={region.id} className="rounded-xl border border-[#DDE7E2] bg-white px-3 py-2 text-sm">
-                <span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#E7F1ED] text-xs font-bold text-[#245D50]">
-                  {regionNumber(region, index)}
-                </span>
-                <span className="font-semibold text-[#24312D]">{region.label}</span>
-              </div>
-            ))}
-          </div>
-      </div>
-
-      <div className="mt-6 flex justify-end gap-2">
-        <Button variant="secondary" onClick={onBack}>다시 업로드</Button>
-        <Button onClick={onNext}>섹션별 입력 시작</Button>
-      </div>
-    </section>
-  );
-}
-
 function EditStep(props: {
   session: HwpxFormSession;
   regions: HwpxEditableRegion[];
   selected: HwpxEditableRegion | null;
   busy: string | null;
-  baseInput: string;
   prompt: string;
   onSelect: (region: HwpxEditableRegion) => void;
-  onBaseInput: (value: string) => void;
   onPrompt: (value: string) => void;
-  onLocalChange: (region: HwpxEditableRegion, value: string, prompt?: string) => void;
+  onLocalChange: (region: HwpxEditableRegion, value: string) => void;
   onSaveSelected: () => void;
   onGenerateSelected: () => void;
-  onAddComponent: (kind: ComponentKind) => void;
   onBack: () => void;
-  onNext: () => void;
+  onExport: () => void;
 }) {
   const filled = props.regions.filter((region) => region.value.trim()).length;
-  const tableCells = props.regions.filter((region) => sourceRefText(region, 'type') === 'table_cell').length;
-  const paragraphs = props.regions.filter((region) => sourceRefText(region, 'type') === 'paragraph').length;
+  const total = props.regions.length;
 
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
       <section className="rounded-2xl border border-[#DDE7E2] bg-white p-5 shadow-sm xl:col-span-2">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xs font-bold text-[#3A7A68]">{props.session.source_filename}</p>
-            <h2 className="mt-1 text-2xl font-bold text-[#24312D]">클릭해서 바로 수정하세요.</h2>
-            <p className="mt-2 text-sm leading-6 text-[#65736E]">
-              원본에서 추출한 문단과 표 셀을 모두 편집 목록으로 만들었습니다. 서명란도 표 안에 있으면 표 구조 안에서 그대로 수정됩니다.
-            </p>
+            <h2 className="mt-1 text-xl font-bold text-[#24312D]">빈 칸을 클릭해 직접 입력하거나 AI에게 요청하세요.</h2>
           </div>
-          <div className="grid grid-cols-3 gap-5 text-right text-sm">
-            <div>
+          <div className="flex items-center gap-6 text-sm">
+            <div className="text-right">
               <p className="text-xs font-bold text-[#65736E]">전체 항목</p>
-              <p className="mt-1 text-lg font-extrabold text-[#24312D]">{props.regions.length}개</p>
+              <p className="mt-0.5 text-lg font-extrabold text-[#24312D]">{total}개</p>
             </div>
-            <div>
-              <p className="text-xs font-bold text-[#65736E]">문단/표 셀</p>
-              <p className="mt-1 text-lg font-extrabold text-[#24312D]">{paragraphs}/{tableCells}</p>
-            </div>
-            <div>
-              <p className="text-xs font-bold text-[#65736E]">값 있음</p>
-              <p className="mt-1 text-lg font-extrabold text-[#24312D]">{filled}개</p>
+            <div className="text-right">
+              <p className="text-xs font-bold text-[#65736E]">채워짐</p>
+              <p className="mt-0.5 text-lg font-extrabold text-[#3A7A68]">{filled}개</p>
             </div>
           </div>
         </div>
       </section>
+
       <DocumentPreview session={props.session} regions={props.regions} selected={props.selected} onSelect={props.onSelect} />
+
       <aside className="space-y-4">
-        <RegionEditor {...props} />
+        <RegionEditor
+          selected={props.selected}
+          busy={props.busy}
+          prompt={props.prompt}
+          onPrompt={props.onPrompt}
+          onLocalChange={props.onLocalChange}
+          onSaveSelected={props.onSaveSelected}
+          onGenerateSelected={props.onGenerateSelected}
+        />
         <RegionProgress regions={props.regions} selected={props.selected} onSelect={props.onSelect} />
       </aside>
-      <div className="flex justify-end gap-2 xl:col-span-2">
+
+      <div className="flex items-center justify-between xl:col-span-2">
         <Button variant="secondary" onClick={props.onBack}>새 파일 업로드</Button>
-        <Button onClick={props.onNext} disabled={Boolean(props.busy)}>
-          {props.busy === 'save' ? '저장 중...' : '검토 후 다운로드'}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function GenerateStep({
-  session,
-  regions,
-  globalBaseInput,
-  globalPrompt,
-  busy,
-  onGlobalBaseInput,
-  onGlobalPrompt,
-  onGenerate,
-  onBack,
-  onSkip,
-}: {
-  session: HwpxFormSession;
-  regions: HwpxEditableRegion[];
-  globalBaseInput: string;
-  globalPrompt: string;
-  busy: string | null;
-  onGlobalBaseInput: (value: string) => void;
-  onGlobalPrompt: (value: string) => void;
-  onGenerate: () => void;
-  onBack: () => void;
-  onSkip: () => void;
-}) {
-  const targets = writingRegions(regions);
-  return (
-    <section className="rounded-2xl border border-[#DDE7E2] bg-white p-6 shadow-sm">
-      <p className="text-sm font-bold text-[#3A7A68]">AI 완성본 자동 생성</p>
-      <h2 className="mt-2 text-2xl font-bold text-[#24312D]">요청사항을 바탕으로 문서 전체 초안을 채웁니다.</h2>
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
-        <Metric label="전체 입력 영역" value={`${session.regions.length}개`} />
-        <Metric label="우선 작성 영역" value={`${targets.length}개`} />
-        <Metric label="현재 상태" value={busy === 'complete' ? '작성 중' : '대기'} />
-      </div>
-
-      <div className="mt-6 grid gap-4 lg:grid-cols-2">
-        <label className="block">
-          <span className="text-sm font-bold text-[#24312D]">전체 기본 입력사항</span>
-          <textarea
-            value={globalBaseInput}
-            onChange={(event) => onGlobalBaseInput(event.target.value)}
-            className="mt-2 min-h-[220px] w-full resize-y rounded-xl border border-[#DDE7E2] bg-[#FBFCFB] px-4 py-3 text-sm leading-6 outline-none focus:border-[#6A9C89]"
-            placeholder="AI가 전체 문서 작성에 참고할 사실, 활동 경험, 팀 정보, 지원 동기 등을 적어주세요."
-          />
-        </label>
-        <label className="block">
-          <span className="text-sm font-bold text-[#24312D]">전체 AI 요청 프롬프트</span>
-          <textarea
-            value={globalPrompt}
-            onChange={(event) => onGlobalPrompt(event.target.value)}
-            className="mt-2 min-h-[220px] w-full resize-y rounded-xl border border-[#DDE7E2] bg-[#FBFCFB] px-4 py-3 text-sm leading-6 outline-none focus:border-[#6A9C89]"
-            placeholder="예: 공고문 문체에 맞게 구체적으로, 과장 없이, 제출용 문장으로 작성해줘."
-          />
-        </label>
-      </div>
-
-      <div className="mt-6 flex justify-end gap-2">
-        <Button variant="secondary" onClick={onBack}>섹션 입력으로</Button>
-        <Button variant="secondary" onClick={onSkip}>건너뛰고 검토</Button>
-        <Button onClick={onGenerate} disabled={busy === 'complete'}>
-          {busy === 'complete' ? 'AI 완성본 생성 중...' : 'AI 완성본 자동 생성'}
-        </Button>
-      </div>
-    </section>
-  );
-}
-
-function ReviewStep({
-  session,
-  regions,
-  selected,
-  busy,
-  onSelect,
-  onBack,
-  onDownload,
-}: {
-  session: HwpxFormSession;
-  regions: HwpxEditableRegion[];
-  selected: HwpxEditableRegion | null;
-  busy: string | null;
-  onSelect: (region: HwpxEditableRegion) => void;
-  onBack: () => void;
-  onDownload: () => void;
-}) {
-  return (
-    <div className="space-y-5">
-      <section className="rounded-2xl border border-[#DDE7E2] bg-white p-5 shadow-sm">
-        <p className="text-sm font-bold text-[#3A7A68]">다운로드 전 확인</p>
-        <h2 className="mt-1 text-2xl font-bold text-[#24312D]">입력한 내용으로 원본 HWPX를 다시 생성합니다.</h2>
-        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-          {regions.map((region, index) => (
-            <button
-              key={region.id}
-              type="button"
-              onClick={() => onSelect(region)}
-              className="rounded-xl border border-[#E4EBE7] bg-[#F8FBFA] px-3 py-2 text-left text-sm hover:bg-[#F0F7F3]"
-            >
-              <p className="font-bold text-[#24312D]">
-                {regionNumber(region, index)}. {region.label}
-              </p>
-              <p className="mt-1 truncate text-xs text-[#65736E]">{region.value || '빈 값'}</p>
-            </button>
-          ))}
-        </div>
-        <div className="mt-5 flex justify-end gap-2">
-          <Button variant="secondary" onClick={onBack}>다시 수정</Button>
-          <Button onClick={onDownload} disabled={Boolean(busy)}>
-            {busy === 'export' ? 'HWPX 생성 중...' : 'HWPX 다운로드'}
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-[#65736E]">진행: {filled}/{total} 항목 완료</span>
+          <Button onClick={props.onExport} disabled={Boolean(props.busy)}>
+            {props.busy === 'export' ? 'HWPX 생성 중...' : '최종 HWPX 생성 →'}
           </Button>
         </div>
-      </section>
-      <DocumentPreview session={session} regions={regions} selected={selected} onSelect={onSelect} compact />
+      </div>
     </div>
   );
 }
@@ -989,7 +633,6 @@ function HtmlTableBlock({
               const region = regions.find((item) => isTableRegion(item, tableIndex, address.row, address.col));
               const active = selected?.id === region?.id;
               const filled = Boolean(region?.value.trim());
-              const displayValue = region?.value || cell.text;
               const width = cell.width ? `${Math.max(5, Math.min(100, cell.width))}%` : undefined;
               return (
                 <td
@@ -1007,17 +650,16 @@ function HtmlTableBlock({
                       type="button"
                       onClick={() => onSelect(region)}
                       className={[
-                        'group relative flex min-h-[32px] w-full items-center gap-1 px-2 py-1 text-left transition',
+                        'group relative flex min-h-[32px] w-full items-start gap-1 px-2 py-1.5 text-left transition',
                         active ? 'bg-[#E7F1ED] ring-2 ring-inset ring-[#245D50]' : 'hover:bg-[#F5FAF7]',
-                        filled ? 'text-[#111827]' : 'text-[#93A19B]',
                         cell.align === 'center' ? 'justify-center text-center' : cell.align === 'right' ? 'justify-end text-right' : '',
                       ].join(' ')}
                     >
-                      <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-white px-1 text-[10px] font-bold text-[#245D50] shadow-sm">
+                      <span className="mt-0.5 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-white px-1 text-[10px] font-bold text-[#245D50] shadow-sm">
                         {regionNumber(region, regions.findIndex((item) => item.id === region.id))}
                       </span>
-                      <span className="min-w-0 whitespace-pre-wrap break-words">
-                        {displayValue || '입력 필요'}
+                      <span className={['min-w-0 whitespace-pre-wrap break-words text-[12px]', filled ? 'text-[#111827]' : 'text-[#93A19B] italic'].join(' ')}>
+                        {filled ? region.value : (region.placeholder_hint || '입력 필요')}
                       </span>
                     </button>
                   ) : (
@@ -1043,95 +685,76 @@ function HtmlTableBlock({
 function RegionEditor({
   selected,
   busy,
-  baseInput,
   prompt,
-  onBaseInput,
   onPrompt,
   onLocalChange,
   onSaveSelected,
   onGenerateSelected,
-  onAddComponent,
 }: {
   selected: HwpxEditableRegion | null;
   busy: string | null;
-  baseInput: string;
   prompt: string;
-  onBaseInput: (value: string) => void;
   onPrompt: (value: string) => void;
-  onLocalChange: (region: HwpxEditableRegion, value: string, prompt?: string) => void;
+  onLocalChange: (region: HwpxEditableRegion, value: string) => void;
   onSaveSelected: () => void;
   onGenerateSelected: () => void;
-  onAddComponent: (kind: ComponentKind) => void;
 }) {
+  const isLong = selected?.kind === 'textarea';
+
   return (
     <section className="rounded-2xl border border-[#DDE7E2] bg-white p-5 shadow-sm">
       <p className="text-xs font-bold text-[#3A7A68]">선택한 항목</p>
       {selected ? (
         <div className="mt-3 space-y-4">
+          <div>
+            <p className="text-sm font-bold text-[#24312D]">{selected.label}</p>
+            {selected.placeholder_hint ? (
+              <p className="mt-1 text-xs leading-5 text-[#65736E]">{selected.placeholder_hint}</p>
+            ) : null}
+          </div>
+
           <label className="block">
-            <span className="text-sm font-bold text-[#24312D]">{selected.label}</span>
+            <span className="text-xs font-bold text-[#65736E]">직접 입력</span>
             <textarea
               value={selected.value}
-              onChange={(event) => onLocalChange(selected, event.target.value, prompt)}
-              className="mt-2 min-h-[170px] w-full resize-y rounded-xl border border-[#DDE7E2] bg-[#FBFCFB] px-4 py-3 text-sm leading-6 text-[#24312D] outline-none focus:border-[#6A9C89]"
-              placeholder="이 영역에 들어갈 내용을 입력하세요."
+              onChange={(event) => onLocalChange(selected, event.target.value)}
+              className={[
+                'mt-1 w-full resize-y rounded-xl border border-[#DDE7E2] bg-[#FBFCFB] px-4 py-3 text-sm leading-6 text-[#24312D] outline-none focus:border-[#6A9C89]',
+                isLong ? 'min-h-[140px]' : 'min-h-[56px]',
+              ].join(' ')}
+              placeholder={selected.placeholder_hint || '내용을 입력하세요.'}
             />
           </label>
-          <div className="grid grid-cols-2 gap-2">
-            <Button variant="secondary" onClick={onSaveSelected} disabled={busy === 'save'}>
-              {busy === 'save' ? '저장 중...' : '저장'}
-            </Button>
-            <Button onClick={onGenerateSelected} disabled={busy === 'draft'}>
-              {busy === 'draft' ? '작성 중...' : '초안 도움'}
-            </Button>
-          </div>
-          <details className="rounded-xl border border-[#E4EBE7] bg-[#F8FBFA] px-3 py-2">
-            <summary className="cursor-pointer text-sm font-bold text-[#24312D]">초안 도움 옵션</summary>
-            <div className="mt-3 space-y-3">
+
+          <Button variant="secondary" className="w-full" onClick={onSaveSelected} disabled={busy === 'save'}>
+            {busy === 'save' ? '저장 중...' : '저장'}
+          </Button>
+
+          {isLong ? (
+            <>
+              <div className="flex items-center gap-2 text-xs text-[#B0BDB8]">
+                <span className="flex-1 border-t border-[#E4EBE7]" />
+                <span>또는 AI에게 요청</span>
+                <span className="flex-1 border-t border-[#E4EBE7]" />
+              </div>
               <label className="block">
-                <span className="text-xs font-bold text-[#65736E]">참고 정보</span>
-                <textarea
-                  value={baseInput}
-                  onChange={(event) => onBaseInput(event.target.value)}
-                  className="mt-1 min-h-[90px] w-full resize-y rounded-xl border border-[#DDE7E2] bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#6A9C89]"
-                  placeholder="활동 경험, 팀 정보, 꼭 들어가야 할 사실을 적어주세요."
-                />
-              </label>
-              <label className="block">
-                <span className="text-xs font-bold text-[#65736E]">요청 문장</span>
+                <span className="text-xs font-bold text-[#65736E]">AI 요청 내용</span>
                 <textarea
                   value={prompt}
-                  onChange={(event) => {
-                    onPrompt(event.target.value);
-                    onLocalChange(selected, selected.value, event.target.value);
-                  }}
-                  className="mt-1 min-h-[90px] w-full resize-y rounded-xl border border-[#DDE7E2] bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-[#6A9C89]"
-                  placeholder="예: 제출용 문체로 짧고 구체적으로 정리"
+                  onChange={(event) => onPrompt(event.target.value)}
+                  className="mt-1 min-h-[90px] w-full resize-y rounded-xl border border-[#DDE7E2] bg-[#FBFCFB] px-3 py-2 text-sm leading-6 outline-none focus:border-[#6A9C89]"
+                  placeholder={`예: ${selected.label}을 200자 이내 제출용 문체로 작성해줘`}
                 />
               </label>
-            </div>
-          </details>
+              <Button onClick={onGenerateSelected} disabled={busy === 'draft'} className="w-full">
+                {busy === 'draft' ? 'AI 작성 중...' : 'AI 초안 생성'}
+              </Button>
+            </>
+          ) : null}
         </div>
       ) : (
-        <p className="mt-3 text-sm leading-6 text-[#65736E]">왼쪽 HWPX 화면에서 수정할 항목을 선택하세요.</p>
+        <p className="mt-3 text-sm leading-6 text-[#65736E]">왼쪽 문서에서 수정할 항목을 클릭하세요.</p>
       )}
-
-      <details className="mt-5 border-t border-[#E4EBE7] pt-4">
-        <summary className="cursor-pointer text-sm font-bold text-[#24312D]">원본에 없는 항목 추가</summary>
-        <div className="mt-3 grid grid-cols-4 gap-2">
-          {componentOptions.map((item) => (
-            <button
-              key={item.kind}
-              type="button"
-              disabled={busy === 'component'}
-              onClick={() => onAddComponent(item.kind)}
-              className="rounded-xl border border-[#DDE7E2] bg-[#F8FBFA] px-2 py-2 text-xs font-bold text-[#245D50] transition hover:bg-[#EDF7F2] disabled:opacity-50"
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      </details>
     </section>
   );
 }
@@ -1174,11 +797,3 @@ function RegionProgress({
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-[#E4EBE7] bg-[#F8FBFA] p-4">
-      <p className="text-xs font-bold text-[#65736E]">{label}</p>
-      <p className="mt-2 truncate text-lg font-extrabold text-[#24312D]">{value}</p>
-    </div>
-  );
-}

@@ -260,7 +260,8 @@ def _extract_editable_regions(content: bytes, page_count: int) -> list[dict[str,
                     continue
                 text = _node_text(para)
                 if _should_expose_paragraph(text):
-                    kind = "textarea" if len(text) > 80 or _is_long_text_label(text) else "text"
+                    hint = text if _is_hint_text(text) else ""
+                    kind = "textarea" if len(text) > 40 or _is_long_text_label(text) else "text"
                     regions.append(
                         _region(
                             section_path,
@@ -268,12 +269,13 @@ def _extract_editable_regions(content: bytes, page_count: int) -> list[dict[str,
                             len(regions),
                             page_count,
                             _paragraph_label(text, current_paragraph_index),
-                            text,
+                            "",
                             {
                                 "type": "paragraph",
                                 "section_path": section_path,
                                 "paragraph_index": current_paragraph_index,
                             },
+                            placeholder_hint=hint,
                         )
                     )
     return regions
@@ -287,10 +289,12 @@ def _table_regions(section_path: str, table: Any, table_index: int, start_order:
         texts = [_node_text(cell) for cell in cells]
         for cell_index, cell in enumerate(cells):
             text = texts[cell_index].strip()
+            if not _is_editable_cell(text):
+                continue
             prev = texts[cell_index - 1].strip() if cell_index > 0 else ""
-            next_text = texts[cell_index + 1].strip() if cell_index + 1 < len(texts) else ""
+            hint = text if text.startswith("*") or _is_hint_text(text) else ""
             label = _label_for_cell(prev, text, row_index, cell_index)
-            kind = "textarea" if _is_long_text_label(label) else "text"
+            kind = "textarea" if (len(hint) > 40 or _is_long_text_label(label)) else "text"
             order = start_order + len(regions)
             source_ref = {
                 "type": "table_cell",
@@ -299,11 +303,11 @@ def _table_regions(section_path: str, table: Any, table_index: int, start_order:
                 "row": _int_attr(_first_child(cell, "cellAddr"), "rowAddr", row_index),
                 "col": _int_attr(_first_child(cell, "cellAddr"), "colAddr", cell_index),
             }
-            regions.append(_region(section_path, kind, order, page_count, label, text, source_ref))
+            regions.append(_region(section_path, kind, order, page_count, label, "", source_ref, placeholder_hint=hint))
     return regions
 
 
-def _region(section_path: str, kind: str, order: int, page_count: int, label: str, value: str, source_ref: dict[str, Any]) -> dict[str, Any]:
+def _region(section_path: str, kind: str, order: int, page_count: int, label: str, value: str, source_ref: dict[str, Any], *, placeholder_hint: str = "") -> dict[str, Any]:
     page_index = min(page_count - 1, order // 14)
     slot = order % 14
     return {
@@ -315,6 +319,7 @@ def _region(section_path: str, kind: str, order: int, page_count: int, label: st
         "bbox": {"x": 7.0, "y": 7.0 + slot * 6.2, "width": 86.0, "height": 5.4 if kind == "text" else 9.5},
         "value": value.strip(),
         "prompt": "",
+        "placeholder_hint": placeholder_hint,
         "draft_status": "empty",
         "source_ref": source_ref,
     }
@@ -700,13 +705,36 @@ def _looks_like_writing_paragraph(text: str) -> bool:
     return 8 <= len(text) <= 120 and _is_long_text_label(text)
 
 
+def _is_editable_cell(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return True
+    if stripped.startswith("*"):
+        return True
+    if any(kw in stripped for kw in ("이내 작성", "작성하세요", "입력하세요", "입력 필요", "작성 필요")):
+        return True
+    return False
+
+
+def _is_hint_text(text: str) -> bool:
+    stripped = text.strip()
+    return (
+        stripped.startswith("*")
+        or any(kw in stripped for kw in ("이내 작성", "작성하세요", "입력하세요", "입력 필요"))
+    )
+
+
 def _should_expose_paragraph(text: str) -> bool:
     value = text.strip()
     if not value:
         return False
     if any(token in value for token in ("LiveDock", "DockLive", "자동화 예시", "자동작성")):
         return False
-    return True
+    if value.startswith("*"):
+        return True
+    if any(kw in value for kw in ("이내 작성", "작성하세요", "입력하세요", "입력 필요")):
+        return True
+    return False
 
 
 def _paragraph_label(text: str, paragraph_index: int) -> str:
