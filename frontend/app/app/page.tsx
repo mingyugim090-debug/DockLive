@@ -515,6 +515,13 @@ function InputStep({
               {t === 'file' ? 'PDF / HWP 업로드' : t === 'url' ? 'URL 입력' : '텍스트 붙여넣기'}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={onHwpxMode}
+            className="flex-1 rounded-lg px-3 py-2 text-sm font-bold transition text-[#65736E] hover:text-[#24312D]"
+          >
+            HWPX 양식 편집
+          </button>
         </div>
 
         <div className="mt-5">
@@ -645,20 +652,6 @@ function InputStep({
         </div>
       </section>
 
-      {/* Secondary option */}
-      <section className="rounded-2xl border border-[#E4EBE7] bg-[#F8FBFA] p-5">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-sm font-bold text-[#24312D]">공식 HWPX 양식 직접 작성</p>
-            <p className="mt-1 text-xs leading-5 text-[#65736E]">
-              공고에서 요구하는 공식 양식 파일(HWP/HWPX)을 업로드하고 항목을 바로 채워 다운로드할 수 있습니다.
-            </p>
-          </div>
-          <Button variant="secondary" onClick={onHwpxMode}>
-            양식 직접 편집
-          </Button>
-        </div>
-      </section>
     </div>
   );
 }
