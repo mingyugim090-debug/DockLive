@@ -112,21 +112,79 @@ def parse_hwpx_document(
 
 
 def parse_hwp_document(content: bytes, filename: str, extra_warnings: list[str] | None = None) -> ParsedDocument:
-    """Parse legacy HWP through the pure-Python HWP→HWPX path, then normalize."""
-    converted, conversion_warnings = convert_hwp_to_hwpx(content, filename)
-    metadata = {
-        "original_source_type": "hwp",
-        "canonical_format": "hwpx",
-        "canonical_source_name": f"{Path(filename or 'input.hwp').stem}.hwpx",
-        "parser": "pyhwp/hwp2hwpx-python-refactor",
-    }
-    return parse_hwpx_document(
-        converted,
-        filename,
-        source_type="hwp",
-        extra_warnings=[*(extra_warnings or []), *conversion_warnings],
-        metadata=metadata,
-    )
+    """Parse legacy HWP for analysis.
+
+    Structure-preserving HWPX conversion is preferred, but announcement analysis
+    must not be blocked when the converter is unavailable. In that case, fall
+    back to HWP preview/raw text extraction and keep strict conversion behavior
+    for endpoints that actually promise an HWPX output.
+    """
+    try:
+        converted, conversion_warnings = convert_hwp_to_hwpx(content, filename)
+        metadata = {
+            "original_source_type": "hwp",
+            "canonical_format": "hwpx",
+            "canonical_source_name": f"{Path(filename or 'input.hwp').stem}.hwpx",
+            "parser": "pyhwp/hwp2hwpx-python-refactor",
+        }
+        return parse_hwpx_document(
+            converted,
+            filename,
+            source_type="hwp",
+            extra_warnings=[*(extra_warnings or []), *conversion_warnings],
+            metadata=metadata,
+        )
+    except AnalysisError as exc:
+        text = extract_text_from_hwp_preview(content, filename)
+        warnings = [
+            *(extra_warnings or []),
+            "HWP 구조 보존 HWPX 변환은 실패했지만, 공고문 분석을 위해 HWP preview/raw 텍스트를 추출했습니다.",
+            f"HWPX 변환 실패 사유: {str(exc)[:700]}",
+        ]
+        parsed = _parsed_text_document(text, "hwp", filename, warnings)
+        parsed.metadata.update(
+            {
+                "original_source_type": "hwp",
+                "canonical_format": "text",
+                "parser": "hwp-preview-text-fallback",
+                "conversion_error": str(exc)[:1000],
+            }
+        )
+        return parsed
+
+
+def extract_text_from_hwp_preview(content: bytes, filename: str = "uploaded.hwp") -> str:
+    """Extract analyzable text directly from a legacy HWP binary."""
+    text = ""
+    try:
+        import olefile  # type: ignore
+
+        tmpdir = _make_tmp_dir()
+        try:
+            path = tmpdir / (Path(filename or "input.hwp").name or "input.hwp")
+            path.write_bytes(content)
+            with olefile.OleFileIO(str(path)) as ole:
+                for stream_name in ("PrvText", "PrvText/Section0"):
+                    if not ole.exists(stream_name):
+                        continue
+                    data = ole.openstream(stream_name).read()
+                    text = _decode_hwp_text(data)
+                    if text.strip():
+                        break
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+    except Exception:
+        text = ""
+
+    if not text.strip():
+        text = _scan_utf16le_text(content)
+
+    cleaned = _clean_hwp_text(text)
+    if len(cleaned) < 20:
+        raise PDFParseError(
+            "HWP에서 분석 가능한 텍스트를 추출하지 못했습니다. 암호화되었거나 preview 텍스트가 없는 레거시 HWP일 수 있습니다."
+        )
+    return cleaned
 
 
 def extract_text_from_hwpx(content: bytes) -> tuple[str, list[str]]:
@@ -414,6 +472,56 @@ def _parsed_text_document(text: str, source_type: str, source_name: str, warning
         paragraphs=paragraphs,
         blocks=blocks,
         warnings=list(dict.fromkeys(item for item in warnings if item)),
+    )
+
+
+def _decode_hwp_text(data: bytes) -> str:
+    for encoding in ("utf-16-le", "utf-8", "cp949"):
+        try:
+            return data.decode(encoding, errors="replace")
+        except Exception:
+            continue
+    return ""
+
+
+def _clean_hwp_text(text: str) -> str:
+    text = (text or "").replace("\x00", "").replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"[ \t]+", " ", text)
+    noise = {"Root Entry", "FileHeader", "HwpSummaryInformation", "DocInfo"}
+    lines = [line.strip() for line in text.splitlines()]
+    text = "\n".join(line for line in lines if line and line not in noise)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _scan_utf16le_text(data: bytes) -> str:
+    runs: list[str] = []
+    i = 0
+    while i < len(data) - 1 and len(runs) < 800:
+        code = data[i] | (data[i + 1] << 8)
+        if _looks_like_text_codepoint(code):
+            run: list[str] = []
+            while i < len(data) - 1:
+                current = data[i] | (data[i + 1] << 8)
+                if not _looks_like_text_codepoint(current):
+                    break
+                run.append(chr(current))
+                i += 2
+            candidate = "".join(run).strip()
+            if len(candidate) >= 2:
+                runs.append(candidate)
+        else:
+            i += 2
+    return _clean_hwp_text("\n".join(runs))
+
+
+def _looks_like_text_codepoint(code: int) -> bool:
+    return (
+        code in {0x0009, 0x000A, 0x000D, 0x0020}
+        or 0x0021 <= code <= 0x007E
+        or 0x3131 <= code <= 0x318F
+        or 0xAC00 <= code <= 0xD7A3
+        or 0x4E00 <= code <= 0x9FFF
     )
 
 

@@ -29,6 +29,7 @@ try:
         detect_uploaded_document_type,
         convert_hwp_to_hwpx,
         ingest_uploaded_document,
+        parse_hwp_document,
     )
     from services.drafting_service import (  # noqa: E402
         build_template_replacements,
@@ -79,6 +80,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - local minimal Python fa
     ingest_uploaded_document = None
     convert_hwp_to_hwpx = None
     detect_uploaded_document_type = None
+    parse_hwp_document = None
     get_mock_result = None
     _validate_result = None
     list_export_files = None
@@ -352,11 +354,25 @@ class AgentMvpContractTests(unittest.TestCase):
             with self.assertRaises(Exception) as ctx:
                 convert_hwp_to_hwpx(b"hwp bytes", "sample.hwp")
         self.assertIn("fallback", str(ctx.exception).lower())
-        return
 
-        self.assertEqual(content, b"PK\x03\x04converted")
-        self.assertIn("fallback warning", warnings)
-        self.assertTrue(any("HWP 원본을 HWPX로 변환" in warning for warning in warnings))
+    def test_hwp_analysis_falls_back_to_preview_text_when_conversion_is_unavailable(self):
+        if parse_hwp_document is None:
+            self.skipTest("backend dependencies are not installed in this Python environment")
+
+        from core.errors import AnalysisError
+        from services import document_ingestion
+
+        preview = "KAIST OverEdge 창업 아이디어 공모전\n마감일 2026-06-30\nProblem 풀고자 하는 문제"
+        raw_hwp_like = bytes.fromhex("D0CF11E0A1B11AE1") + b"\x00" * 128 + preview.encode("utf-16-le")
+
+        with patch.object(document_ingestion, "convert_hwp_to_hwpx", side_effect=AnalysisError("converter missing")):
+            parsed = parse_hwp_document(raw_hwp_like, "notice.hwp")
+
+        self.assertEqual(parsed.source_type, "hwp")
+        self.assertIn("KAIST OverEdge", parsed.text)
+        self.assertEqual(parsed.metadata.get("canonical_format"), "text")
+        self.assertEqual(parsed.metadata.get("parser"), "hwp-preview-text-fallback")
+        self.assertTrue(any("preview/raw" in warning for warning in parsed.warnings))
 
     def test_hwpx_template_analysis_preserves_table_spans_and_blank_cells(self):
         if analyze_hwpx_template_bytes is None:
