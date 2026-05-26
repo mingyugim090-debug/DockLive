@@ -5,7 +5,6 @@ import {
   analyzeDocument,
   analyzeText,
   analyzeUrl,
-  confirmWorkflow,
   createDraftStream,
   exportWorkflowHtml,
   exportWorkflowHwpx,
@@ -61,7 +60,6 @@ export default function AppPage() {
   const [error, setError] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [draftLog, setDraftLog] = useState<Array<{ section: string; done: boolean }>>([]);
-  const [confirmedItems, setConfirmedItems] = useState<string[]>([]);
   const [hwpxMode, setHwpxMode] = useState(false);
   const [loadingPhase, setLoadingPhase] = useState<string | null>(null);
   const [localEdits, setLocalEdits] = useState<Record<string, string>>({});
@@ -127,7 +125,6 @@ export default function AppPage() {
     setError(null);
     setAnswers({});
     setDraftLog([]);
-    setConfirmedItems([]);
     setHwpxMode(false);
     setLocalEdits({});
     setRevisingSectionId(null);
@@ -235,14 +232,7 @@ export default function AppPage() {
     setBusy('finalize');
     setError(null);
     try {
-      const needsConfirm = workflow.draft_sections.some((s) => s.confirmation_required.length > 0);
-      let wf = workflow;
-      if (needsConfirm) {
-        const res = await confirmWorkflow(workflow.id, confirmedItems);
-        wf = res.data;
-        setWorkflow(wf);
-      }
-      const res = await finalizeWorkflow(wf.id);
+      const res = await finalizeWorkflow(workflow.id);
       setWorkflow(res.data);
       setStep('download');
     } catch (err) {
@@ -385,13 +375,7 @@ export default function AppPage() {
         <ReviewStep
           workflow={workflow}
           localEdits={localEdits}
-          confirmedItems={confirmedItems}
           revisingSectionId={revisingSectionId}
-          onToggleConfirm={(item) =>
-            setConfirmedItems((prev) =>
-              prev.includes(item) ? prev.filter((i) => i !== item) : [...prev, item],
-            )
-          }
           onLocalEdit={handleLocalEdit}
           onAiRevise={handleAiRevise}
           busy={busy}
@@ -970,9 +954,7 @@ function DraftStep({
 function ReviewStep({
   workflow,
   localEdits,
-  confirmedItems,
   revisingSectionId,
-  onToggleConfirm,
   onLocalEdit,
   onAiRevise,
   busy,
@@ -981,18 +963,13 @@ function ReviewStep({
 }: {
   workflow: WorkflowSession;
   localEdits: Record<string, string>;
-  confirmedItems: string[];
   revisingSectionId: string | null;
-  onToggleConfirm: (item: string) => void;
   onLocalEdit: (sectionId: string, content: string) => void;
   onAiRevise: (sectionId: string, feedback: string) => void;
   busy: string | null;
   onBack: () => void;
   onFinalize: () => void;
 }) {
-  const allConfirmItems = workflow.draft_sections.flatMap((s) => s.confirmation_required);
-  const allChecked = allConfirmItems.every((item) => confirmedItems.includes(item));
-
   return (
     <section className="space-y-5">
       <div className="rounded-2xl border border-[#DDE7E2] bg-white p-6 shadow-sm">
@@ -1010,9 +987,7 @@ function ReviewStep({
           key={section.id}
           section={section}
           localContent={localEdits[section.section_id]}
-          confirmedItems={confirmedItems}
           isRevising={revisingSectionId === section.section_id}
-          onToggleConfirm={onToggleConfirm}
           onLocalEdit={(content) => onLocalEdit(section.section_id, content)}
           onAiRevise={(feedback) => onAiRevise(section.section_id, feedback)}
         />
@@ -1022,18 +997,10 @@ function ReviewStep({
         <Button variant="secondary" onClick={onBack}>
           초안 다시 생성
         </Button>
-        <Button
-          onClick={onFinalize}
-          disabled={Boolean(busy) || (allConfirmItems.length > 0 && !allChecked)}
-        >
+        <Button onClick={onFinalize} disabled={Boolean(busy)}>
           {busy === 'finalize' ? '최종 문서 생성 중...' : '최종 문서 생성'}
         </Button>
       </div>
-      {allConfirmItems.length > 0 && !allChecked && (
-        <p className="text-right text-xs text-amber-600">
-          모든 확인 필요 항목을 체크해야 최종 문서를 생성할 수 있습니다.
-        </p>
-      )}
     </section>
   );
 }
@@ -1056,17 +1023,13 @@ const STATUS_LABEL: Record<string, string> = {
 function DraftSectionCard({
   section,
   localContent,
-  confirmedItems,
   isRevising,
-  onToggleConfirm,
   onLocalEdit,
   onAiRevise,
 }: {
   section: DraftSection;
   localContent: string | undefined;
-  confirmedItems: string[];
   isRevising: boolean;
-  onToggleConfirm: (item: string) => void;
   onLocalEdit: (content: string) => void;
   onAiRevise: (feedback: string) => void;
 }) {
@@ -1207,26 +1170,6 @@ function DraftSectionCard({
           ))}
         </div>
       )}
-
-      {/* Confirmation checkboxes */}
-      {section.confirmation_required.length > 0 && (
-        <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
-          <p className="text-xs font-bold text-amber-800">확인 필요 항목</p>
-          <div className="mt-2 space-y-2">
-            {section.confirmation_required.map((item, i) => (
-              <label key={i} className="flex cursor-pointer items-start gap-3">
-                <input
-                  type="checkbox"
-                  checked={confirmedItems.includes(item)}
-                  onChange={() => onToggleConfirm(item)}
-                  className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-amber-300 accent-[#245D50]"
-                />
-                <span className="text-sm text-amber-800">{item}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -1262,26 +1205,6 @@ function DownloadStep({
         <p className="mt-2 text-sm text-[#65736E]">
           아래에서 원하는 형식으로 다운로드하세요.
         </p>
-      </div>
-
-      {/* Pre-download checklist */}
-      <div className="rounded-2xl border border-[#DDE7E2] bg-white p-5 shadow-sm">
-        <p className="text-sm font-bold text-[#24312D]">다운로드 전 최종 확인</p>
-        <div className="mt-3 grid gap-2 md:grid-cols-2">
-          {[
-            '마감일과 접수 방법을 다시 확인했나요?',
-            '제출 이메일/주소가 정확한가요?',
-            '공고에 없는 내용이 임의로 포함되지 않았나요?',
-            '필수 첨부서류를 모두 준비했나요?',
-            '개인정보 및 서명/날인이 필요한 부분을 확인했나요?',
-            '확인 필요로 표시된 항목을 모두 처리했나요?',
-          ].map((item, i) => (
-            <label key={i} className="flex cursor-pointer items-start gap-2 rounded-xl border border-[#E4EBE7] bg-[#F8FBFA] px-3 py-2 text-sm">
-              <input type="checkbox" className="mt-0.5 h-4 w-4 flex-shrink-0 accent-[#245D50]" />
-              <span className="text-[#40504B]">{item}</span>
-            </label>
-          ))}
-        </div>
       </div>
 
       {cautions.length > 0 && (

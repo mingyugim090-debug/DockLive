@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useParams, useRouter } from 'next/navigation';
 import {
-  confirmWorkflow,
   createWorkflowHwpxPlaceholderMap,
   downloadWorkflowExport,
   exportWorkflowHtml,
@@ -134,7 +133,6 @@ export default function ResultPage() {
   const [workflow, setLocalWorkflow] = useState<WorkflowSession | null>(workflowSession);
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
   const [feedbackValues, setFeedbackValues] = useState<Record<string, string>>({});
-  const [confirmedClaims, setConfirmedClaims] = useState<Record<string, boolean>>({});
   const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [templateMap, setTemplateMap] = useState('{}');
   const [placeholderMapPreview, setPlaceholderMapPreview] = useState('');
@@ -173,9 +171,6 @@ export default function ResultPage() {
     if (!workflow) return;
     setInputValues(Object.fromEntries(workflow.user_inputs.map((field) => [field.id, field.value])));
     setFeedbackValues(Object.fromEntries(workflow.draft_sections.map((draft) => [draft.section_id, draft.user_feedback])));
-    if (workflow.confirmed_items?.length) {
-      setConfirmedClaims(Object.fromEntries(workflow.confirmed_items.map((item) => [item, true])));
-    }
   }, [workflow]);
 
   useEffect(() => {
@@ -231,15 +226,7 @@ export default function ResultPage() {
   }, [activeAnalysis]);
 
   const draftReady = Boolean(workflow?.draft_sections.some((draft) => draft.content_markdown.trim()));
-  const confirmationItems = useMemo(() => {
-    if (!workflow) return [] as string[];
-    const items = workflow.draft_sections.flatMap((draft) => [...(draft.confirmation_required ?? []), ...(draft.needs_confirmation ?? [])]);
-    items.push(...workflow.analysis.uncertain_fields);
-    if (draftReady) items.push('공고 원문, 사용자 입력, 증빙 자료와 초안의 핵심 주장이 일치하는지 확인해 주세요.');
-    return Array.from(new Set(items.filter((item) => item.trim())));
-  }, [workflow, draftReady]);
-  const confirmationReady = confirmationItems.length === 0 || confirmationItems.every((item) => confirmedClaims[item]);
-  const canFinalize = draftReady && confirmationReady;
+  const canFinalize = draftReady;
 
   const refreshExports = async (workflowId: string) => {
     try {
@@ -336,8 +323,6 @@ export default function ResultPage() {
     setBusy(true);
     setError(null);
     try {
-      const confirmed = await confirmWorkflow(workflow.id, confirmationItems);
-      applyWorkflow(confirmed.data);
       const finalized = await finalizeWorkflow(workflow.id);
       applyWorkflow(finalized.data);
       setStep(4);
@@ -659,7 +644,7 @@ export default function ResultPage() {
           ) : null}
 
           {currentStep === 3 ? (
-            <SectionCard title="섹션별 초안" eyebrow="Draft" desc="각 섹션을 검토하고, 확인이 필요한 항목을 모두 체크해야 최종 문서를 생성할 수 있습니다." action={<Button type="button" variant="secondary" onClick={handleGenerateDraft} disabled={busy}>초안 다시 생성</Button>}>
+            <SectionCard title="섹션별 초안" eyebrow="Draft" desc="각 섹션을 검토하고 바로 최종 문서를 생성할 수 있습니다." action={<Button type="button" variant="secondary" onClick={handleGenerateDraft} disabled={busy}>초안 다시 생성</Button>}>
               <motion.div variants={stagger} initial={false} animate="show" className="space-y-4">
                 {workflow.draft_sections.length ? (
                   workflow.draft_sections.map((draft) => (
@@ -678,26 +663,6 @@ export default function ResultPage() {
                 )}
               </motion.div>
 
-              {confirmationItems.length ? (
-                <div className="mt-6 rounded-lg border border-amber-400/20 bg-amber-400/[0.06] p-4">
-                  <p className="text-sm font-semibold text-text">제출 전 확인이 필요한 항목</p>
-                  <div className="mt-3 space-y-2">
-                    {confirmationItems.map((item) => (
-                      <label key={item} className="flex gap-3 rounded-md border border-white/10 bg-bg/35 p-3 text-sm leading-6 text-text2">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(confirmedClaims[item])}
-                          onChange={(event) => setConfirmedClaims((prev) => ({ ...prev, [item]: event.target.checked }))}
-                          className="mt-1 h-4 w-4 shrink-0 accent-primary"
-                        />
-                        <span>{item}</span>
-                      </label>
-                    ))}
-                  </div>
-                  {!confirmationReady ? <p className="mt-3 text-xs text-amber-200">모든 확인 항목을 체크해야 최종 문서를 생성할 수 있습니다.</p> : null}
-                </div>
-              ) : null}
-
               <div className="mt-6 flex justify-end">
                 <Button type="button" onClick={handleFinalize} disabled={busy || !canFinalize}>확인 후 최종 문서 생성</Button>
               </div>
@@ -709,7 +674,7 @@ export default function ResultPage() {
               {!workflow.final_document ? (
                 <EmptyState
                   title="최종 문서가 아직 없습니다."
-                  desc="섹션별 초안을 검토하고 모든 확인 항목을 체크한 뒤 최종 문서를 생성하세요."
+                  desc="섹션별 초안을 검토한 뒤 최종 문서를 생성하세요."
                   action={<Button type="button" onClick={handleFinalize} disabled={busy || !canFinalize}>최종 문서 생성</Button>}
                 />
               ) : (

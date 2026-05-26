@@ -84,7 +84,7 @@ export function TemplateWorkflowPanel({
             className="mt-2 min-h-[110px]"
             value={request}
             onChange={(event) => setRequest(event.target.value)}
-            placeholder="예: 공고 평가 기준에 맞춰 사업계획서 초안을 만들고, 팀 강점과 실행 계획은 확인 필요 항목으로 표시해 주세요."
+            placeholder="예: 공고 평가 기준에 맞춰 사업계획서 초안을 만들고, 팀 강점과 실행 계획을 자연스럽게 반영해 주세요."
           />
         </label>
 

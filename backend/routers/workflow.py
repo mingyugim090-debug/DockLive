@@ -20,7 +20,6 @@ from models.schemas import (
 from services import storage
 from services.drafting_service import (
     clone_hwpx_template_with_validation,
-    confirmation_required_items,
     confirm_workflow,
     create_hwpx_placeholder_map,
     export_markdown_to_hwpx_with_validation,
@@ -57,8 +56,6 @@ def _save_and_respond(workflow: WorkflowSession) -> WorkflowResponse:
 
 def _ensure_finalized(workflow: WorkflowSession) -> WorkflowSession:
     if not workflow.final_document:
-        if workflow.status != "confirmed" and not workflow.confirmed_at and confirmation_required_items(workflow):
-            raise AnalysisError("확인 필요 항목을 모두 체크한 뒤 최종 문서를 생성할 수 있습니다.")
         workflow = finalize_document(workflow)
         _save_workflow(workflow)
     return workflow
@@ -172,8 +169,6 @@ async def confirm_draft(workflow_id: str, payload: ConfirmationRequest | None = 
 @router.post("/{workflow_id}/finalize", response_model=WorkflowResponse)
 async def finalize_workflow(workflow_id: str):
     workflow = _load_workflow_or_404(workflow_id)
-    if workflow.status != "confirmed" and not workflow.confirmed_at and confirmation_required_items(workflow):
-        raise AnalysisError("확인 필요 항목을 모두 체크한 뒤 최종 문서를 생성할 수 있습니다.")
     workflow = finalize_document(workflow)
     return _save_and_respond(workflow)
 

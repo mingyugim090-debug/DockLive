@@ -351,7 +351,7 @@ class AgentMvpContractTests(unittest.TestCase):
         workflow = finalize_document(workflow)
         self.assertEqual(workflow.status, "finalized")
         self.assertIsNotNone(workflow.final_document)
-        self.assertIn("제출 전 확인 필요", workflow.final_document.content_markdown)
+        self.assertNotIn("제출 전 확인 필요", workflow.final_document.content_markdown)
 
     def test_mock_stream_draft_events_emit_section_done(self):
         if AnalysisResult is None or stream_draft_events is None:

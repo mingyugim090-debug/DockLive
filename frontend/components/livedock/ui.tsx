@@ -745,7 +745,6 @@ export function DraftSectionCard({
   onRevise: () => void;
   busy: boolean;
 }) {
-  const confirmationItems = Array.from(new Set([...(draft.confirmation_required ?? []), ...(draft.needs_confirmation ?? [])]));
   const relatedCriteria = draft.related_criteria ?? [];
   const revisionNotes = draft.revision_notes ?? [];
   return (
@@ -758,15 +757,6 @@ export function DraftSectionCard({
         {streamState ? <StatusBadge label={streamState} tone="info" /> : <DraftStatusBadge status={draft.status} />}
       </div>
       <div className="space-y-4 p-4">
-        {confirmationItems.length > 0 ? (
-          <NoticeBanner tone="warning" title="제출 전 확인이 필요한 주장">
-            <ul className="space-y-1">
-              {confirmationItems.map((item) => (
-                <li key={item}>- {item}</li>
-              ))}
-            </ul>
-          </NoticeBanner>
-        ) : null}
         {draft.purpose || relatedCriteria.length || revisionNotes.length ? (
           <div className="grid gap-3 md:grid-cols-3">
             {draft.purpose ? (

@@ -31,16 +31,12 @@ from services.ai_provider import call_json, provider_name, should_use_mock_ai, s
 
 logger = logging.getLogger(__name__)
 
-SECTION_DRAFT_SYSTEM_PROMPT = """당신은 한국 공모전, 지원사업, 장학금, 연구과제 제출 문서를 작성하는 AI Agent입니다.
-공고 분석 결과와 사용자 입력만 근거로 섹션별 초안을 작성하세요.
-마감일, 자격, 금액, 기관명, 제출 방법처럼 중요한 사실을 새로 만들지 마세요.
-검증이 필요한 주장은 초안에 단정하지 말고 확인 필요 항목으로 남겨야 합니다."""
-
-SECTION_DRAFT_SYSTEM_PROMPT = """당신은 한국 공모전, 지원사업, 장학금, 연구과제 제출 문서를 작성하는 AI Agent입니다.
-공고 분석 결과와 사용자 입력만 근거로 섹션별 초안을 작성하세요.
-마감일, 자격, 금액, 기관명, 제출 방법처럼 중요한 사실을 새로 만들지 마세요.
-검증이 필요한 주장은 초안에 확정하지 말고 needs_confirmation 항목으로 남기세요.
-제출 전 사용자가 검토할 수 있도록 한국어 문장을 명확하고 차분하게 작성하세요."""
+SECTION_DRAFT_SYSTEM_PROMPT = """You are Dock Live's grant-document drafting agent.
+Use only the analyzed notice, source evidence, and user-provided inputs.
+Do not invent deadlines, eligibility, benefits, documents, amounts, or claims.
+Do not append "confirmation needed" checklists to the draft body.
+The `needs_confirmation` field is retained for backward compatibility only; always return it as an empty array.
+If a required fact is absent, write neutral wording based on the available source instead of guessing."""
 
 DRAFT_RESPONSE_SCHEMA = {
     "title": "generated_draft_sections",
@@ -219,11 +215,7 @@ def _profile_to_text(profile: CompanyProfile | None) -> str:
 
 
 def _confirmation_items(workflow: WorkflowSession) -> list[str]:
-    items = list(workflow.analysis.uncertain_fields)
-    items.append("제출 전 공고 원문, 사용자 입력, 증빙자료와 초안의 핵심 주장이 일치하는지 확인하세요.")
-    if not workflow.analysis.source_evidence:
-        items.append("핵심 주장과 수치가 공고 원문 및 사용자 입력에 근거하는지 확인하세요.")
-    return list(dict.fromkeys(item for item in items if item))
+    return []
 
 
 def _mock_draft_section(workflow: WorkflowSession, draft: DraftSection) -> DraftSection:
@@ -300,9 +292,9 @@ def _single_section_prompt(workflow: WorkflowSession, draft: DraftSection) -> st
         "target_section": draft.model_dump(mode="json"),
     }
     return (
-        f"'{draft.title}' 섹션의 한국어 마크다운 초안만 작성하세요. "
-        "JSON, 코드블록, 설명 문구 없이 본문만 출력하세요. "
-        "검증이 필요한 사실은 본문 끝에 '확인 필요' 목록으로 표시하세요.\n\n"
+        f"Write only the Korean markdown draft body for section '{draft.title}'. "
+        "Do not include confirmation-needed, checklist, or TODO sections. "
+        "When a fact is not present in the provided payload, do not guess it.\n\n"
         + json.dumps(payload, ensure_ascii=False)[: settings.MAX_DRAFT_INPUT_LENGTH]
     )
 
@@ -337,7 +329,7 @@ def generate_drafts(workflow: WorkflowSession) -> WorkflowSession:
                 draft.needs_confirmation = ["이 섹션 초안을 생성하지 못했습니다. 다시 시도해 주세요."]
                 draft.confirmation_required = draft.needs_confirmation
                 continue
-            confirmations = [str(v) for v in item.get("needs_confirmation", []) if str(v).strip()]
+            confirmations: list[str] = []
             draft.content_markdown = str(item.get("content_markdown", "")).strip()
             draft.purpose = str(item.get("purpose", "")).strip()
             draft.related_criteria = [str(v).strip() for v in item.get("related_criteria", []) if str(v).strip()]
@@ -449,9 +441,6 @@ def finalize_document(workflow: WorkflowSession) -> WorkflowSession:
         )
     if workflow.analysis.submission_method:
         lines.extend([f"- 제출 방법: {workflow.analysis.submission_method}", ""])
-    confirmations = sorted({item for draft in sections for item in draft.confirmation_required} | set(workflow.analysis.uncertain_fields))
-    if confirmations:
-        lines.extend(["## 제출 전 확인 필요", "", *[f"- {item}" for item in confirmations], ""])
     for draft in sections:
         content = draft.content_markdown.strip()
         first_line = content.split("\n", 1)[0].strip()
@@ -1231,24 +1220,11 @@ def _profile_to_text(profile: CompanyProfile | None) -> str:
 
 
 def confirmation_required_items(workflow: WorkflowSession) -> list[str]:
-    items: list[str] = []
-    items.extend(workflow.analysis.uncertain_fields)
-    for draft in workflow.draft_sections:
-        items.extend(draft.confirmation_required)
-        items.extend(draft.needs_confirmation)
-    if any(draft.content_markdown.strip() for draft in workflow.draft_sections):
-        items.append("공고 원문, 사용자 입력, 증빙 자료와 초안의 핵심 주장이 일치하는지 확인해 주세요.")
-    if not workflow.analysis.source_evidence:
-        items.append("핵심 주장과 수치가 공고 원문 또는 사용자 입력에 근거하는지 확인해 주세요.")
-    return list(dict.fromkeys(item.strip() for item in items if item and item.strip()))
+    return []
 
 
 def _confirmation_items(workflow: WorkflowSession) -> list[str]:
-    base = list(workflow.analysis.uncertain_fields)
-    base.append("공고 원문, 사용자 입력, 증빙 자료와 초안의 핵심 주장이 일치하는지 확인해 주세요.")
-    if not workflow.analysis.source_evidence:
-        base.append("핵심 주장과 수치가 공고 원문 또는 사용자 입력에 근거하는지 확인해 주세요.")
-    return list(dict.fromkeys(item.strip() for item in base if item and item.strip()))
+    return []
 
 
 def _mock_draft_section(workflow: WorkflowSession, draft: DraftSection) -> DraftSection:
@@ -1314,9 +1290,9 @@ def _single_section_prompt(workflow: WorkflowSession, draft: DraftSection) -> st
         "target_section": draft.model_dump(mode="json"),
     }
     return (
-        f"'{draft.title}' 섹션의 한국어 마크다운 초안만 작성하세요. "
-        "JSON, 코드블록, 설명 문구 없이 본문만 출력하세요. "
-        "검증이 필요한 사실은 본문 끝에 '확인 필요' 목록으로 표시하세요.\n\n"
+        f"Write only the Korean markdown draft body for section '{draft.title}'. "
+        "Do not include confirmation-needed, checklist, or TODO sections. "
+        "When a fact is not present in the provided payload, do not guess it.\n\n"
         + json.dumps(payload, ensure_ascii=False)[: settings.MAX_DRAFT_INPUT_LENGTH]
     )
 
@@ -1372,16 +1348,10 @@ def revise_section(workflow: WorkflowSession, section_id: str) -> WorkflowSessio
 
 
 def confirm_workflow(workflow: WorkflowSession, confirmed_items: list[str] | None = None) -> WorkflowSession:
-    required = confirmation_required_items(workflow)
-    confirmed = required if confirmed_items is None else list(dict.fromkeys(item.strip() for item in confirmed_items if item and item.strip()))
-    missing = [item for item in required if item not in confirmed]
-    if missing:
-        raise AnalysisError("최종 문서를 생성하려면 확인 필요 항목을 모두 체크해 주세요: " + ", ".join(missing[:5]))
-
     now = utc_now_iso()
     workflow.status = "confirmed"
     workflow.confirmed_at = now
-    workflow.confirmed_items = confirmed
+    workflow.confirmed_items = []
     workflow.updated_at = now
     for draft in workflow.draft_sections:
         if draft.content_markdown:
@@ -1420,10 +1390,6 @@ def finalize_document(workflow: WorkflowSession) -> WorkflowSession:
         )
     if workflow.analysis.submission_method:
         lines.extend([f"- 제출 방법: {workflow.analysis.submission_method}", ""])
-
-    confirmations = sorted({item for draft in sections for item in draft.confirmation_required} | set(workflow.analysis.uncertain_fields))
-    if confirmations:
-        lines.extend(["## 제출 전 확인 필요", "", *[f"- {item}" for item in confirmations], ""])
 
     for draft in sections:
         content = draft.content_markdown.strip()
