@@ -1,228 +1,204 @@
 # LiveDock
 
-LiveDock은 공고문을 분석하고, 필요한 사용자 정보를 수집한 뒤, 제출용 문서 초안과 최종 HWPX 파일까지 만들어 주는 문서 자동화 Agent MVP입니다.
+> 한국 공고문 → 제출용 문서 자동 생성 Agent
 
-사용자는 PDF, URL, 붙여넣은 텍스트, 예시 fixture 또는 HWPX 양식을 제공할 수 있습니다. LiveDock은 공고 요구사항을 근거와 함께 추출하고, 부족한 정보만 질문하고, 섹션별 초안을 만든 뒤, 사용자가 확인해야 할 중요한 주장을 표시합니다. 최종 목표 문서 형식은 한국어 행정 문서에서 자주 쓰이는 HWPX입니다.
+공모전·지원사업·장학금·연구과제 공고문을 PDF, URL, 텍스트로 입력하면 AI가 요구사항을 추출하고, 필요한 정보만 질문하고, 섹션별 초안을 생성해 **HWPX·PDF·HTML**로 내보냅니다.
 
-Production frontend: [dock-live.vercel.app](https://dock-live.vercel.app)
+**Production:** [dock-live.vercel.app](https://dock-live.vercel.app)
 
-## 핵심 방향
+---
 
-현재 우선순위는 커뮤니티 기능이 아니라 Agent MVP입니다.
+## 왜 만들었나
 
-LiveDock이 먼저 안정화해야 하는 일은 다음과 같습니다.
+공모전이나 지원사업에 지원할 때 가장 시간이 걸리는 건 공고문 해석과 양식 작성입니다.  
+공고마다 양식이 다르고, 한국 행정 문서는 HWPX(한글) 파일이 표준입니다.  
+LiveDock은 이 과정 전체를 6단계 Agent 워크플로우로 자동화합니다.
 
-- 공고문에서 마감일, 자격, 제출 서류, 평가 기준, 혜택, 주의사항을 근거와 함께 추출하기
-- 사용자가 작성해야 하는 항목과 추가로 필요한 정보를 식별하기
-- 자기소개서, 지원서, 연구계획서, 공문, 신청서 등 제출 문서 초안을 섹션별로 생성하기
-- 중요한 주장과 불확실한 정보는 사용자 확인을 받은 뒤 최종 문서에 반영하기
-- 공식 HWPX 양식의 표, 스타일, 문단 구조를 최대한 유지하면서 새 문서를 생성하기
+---
 
-## Agent Workflow
+## 6단계 워크플로우
 
-```mermaid
-flowchart LR
-  A["PDF, URL, 텍스트, 예시 파일"] --> B["공고문 분석"]
-  B --> C["요구사항과 원문 근거 추출"]
-  C --> D["부족한 사용자 정보 질문"]
-  D --> E["섹션별 초안 생성"]
-  E --> F["중요 주장 확인 요청"]
-  F --> G["최종 제출 문서 완성"]
-  G --> H["HWPX 등 편집 가능한 파일 export"]
+```
+1. Input      PDF / URL / 텍스트 / Demo 버튼
+      ↓
+2. Analysis   공고 핵심 정보 추출 (마감일·자격·서류·평가기준·혜택)
+      ↓
+3. Questions  부족한 정보만 사용자에게 질문
+      ↓
+4. Draft      섹션별 초안 SSE 스트리밍 생성
+      ↓
+5. Review     인라인 편집 / AI 재작성 / confirmation_required 확인
+      ↓
+6. Download   HWPX · PDF · HTML export
 ```
 
-Agent는 공고 원문에 없는 마감일, 자격 조건, 금액, 기관명, 제출 방법을 임의로 만들지 않습니다. 불확실한 항목은 `uncertain_fields` 또는 `confirmation_required`로 남기고 사용자 확인을 요청합니다.
+Agent는 공고 원문에 없는 마감일·자격·금액·기관명을 절대 임의로 생성하지 않습니다.  
+불확실한 항목은 `uncertain_fields` 또는 `confirmation_required`로 표시해 사용자 확인을 요청합니다.
 
-## 폴더 구조
+---
 
-```text
+## 기술 스택
+
+| 레이어 | 기술 |
+|--------|------|
+| Frontend | Next.js 14 (App Router), TypeScript, Tailwind CSS |
+| Backend | FastAPI, Python 3.11 |
+| AI | OpenAI GPT-4o (기본) / Gemini (선택) |
+| Document | HWPX toolchain (ZIP+XML), LibreOffice PDF 변환 |
+| 배포 | Vercel (frontend) · Render (backend) |
+
+---
+
+## 주요 기능
+
+- **다양한 입력** — PDF 업로드, URL 크롤링, 텍스트 붙여넣기, HWP/HWPX 양식 직접 업로드
+- **구조화된 분석** — `AnalysisResult`: 타임라인, 자격요건, 체크리스트, 누락 질문 자동 추출
+- **SSE 스트리밍 초안** — 섹션 단위 실시간 생성, 중간 저장 지원
+- **HWPX 소스 보존** — 사용자가 제공한 HWPX 양식의 표·스타일·문단 구조 유지
+- **워크플로우 복구** — 세션 중단 시 자동 복구 (`workflow_recovery`)
+- **Quality Gate** — 생성된 HWPX는 namespace fix → validation → verify 통과 후 제공
+
+---
+
+## 프로젝트 구조
+
+```
 LiveDock/
-  README.md                    GitHub 메인 소개 문서
-  AGENTS.md                    Codex 개발 규칙과 Agent MVP 지침
-  render.yaml                  Render 백엔드 배포 설정
-  harness/                     실행 가능한 하네스 spec, quality gates, 오류 기억 registry
-  scripts/                     Windows 로컬 실행 wrapper
-  .github/workflows/           CI 품질 게이트
-
-  frontend/                    Next.js 14 프론트엔드
-    README.md                  프론트엔드 실행/구조 안내
-    app/                       App Router 페이지와 레이아웃
-    components/                업로드, 체크리스트, 타임라인, 문서 UI
-    lib/                       API client, result cache, 공유 타입
-    vercel.json                Vercel 프론트엔드 배포 설정
-
-  backend/                     FastAPI 백엔드와 Agent workflow API
-    README.md                  백엔드 실행/구조 안내
-    core/                      런타임 설정, 공통 error helper
-    models/                    Pydantic request/response schema
-    routers/                   analyze, demo, workflow API route
-    services/                  파싱, AI provider, draft, storage, export 로직
-    tests/
-      contracts/               Agent API/schema 계약 테스트
-      manual/                  HWPX 생성 수동 검증 스크립트
-
-  docs/                        제품, 개발, Agent, HWPX, 평가 문서
-    README.md                  문서 인덱스
-    product/                   제품 방향, 개발 계획, 작업 목록, 디자인 메모
-      archive/                 이전 디자인 자료와 사용하지 않는 UI 초안
-    engineering/               아키텍처, 환경변수, 배포, Codex 운영 문서
-    agent/                     Agent harness, skills, MCP 운영 문서
-    hwpx/                      HWPX export, Gemma, HWP MCP 문서
-    evaluation/                평가 기준과 fixture
-    examples/                  HWPX 예시 산출물과 mapping
-
-  .claude/                     Claude/Codex 로컬 자동화 설정
-    README.md                  로컬 skills/MCP 안내
-    skills/                    LiveDock 전용 Agent/HWPX workflow skill
-    mcp/                       HWP MCP 로컬 설정 예시
-
-  tools/                       로컬 보조 도구
-    README.md                  도구 폴더 안내
-    harness/                   품질 게이트 실행과 오류 fingerprint 도구
-    hwp-mcp/                   Windows HWP 자동화 MCP 서버
-      README.md                HWP MCP 도구 안내
-      hwp_mcp_stdio_server.py  MCP stdio 서버 entrypoint
-      src/                     HWP 제어와 command parser 소스
-      tests/                   HWP MCP 단위 테스트
-      docs/                    HWP MCP 내부 구조 문서
-      security_module/         한글 보안 모듈 예시 DLL
+├── frontend/                  Next.js 14 프론트엔드
+│   ├── app/app/page.tsx       메인 6단계 워크플로우 UI
+│   ├── components/workspace/  HwpxFormEditor, 섹션 뷰어
+│   └── lib/                   API client, 타입 정의
+│
+├── backend/                   FastAPI 백엔드
+│   ├── routers/               analyze / workflow / hwpx API
+│   ├── services/
+│   │   ├── analyzer.py        공고문 AI 분석
+│   │   ├── drafting_service.py초안 생성 + HWPX export
+│   │   ├── hwpx_form_session.py HWPX 폼 세션 편집
+│   │   ├── source_preserving_export.py 소스 보존 export
+│   │   └── workflow_recovery.py세션 복구
+│   └── hwpx_toolchain/scripts/ HWPX 검증 스크립트 (수정 주의)
+│
+├── harness/                   Quality gate spec, 오류 fingerprint registry
+├── docs/                      제품·아키텍처·HWPX·평가 문서
+└── tools/hwp-mcp/             Windows 한글 자동화 로컬 MCP helper
 ```
 
-## 폴더 역할 요약
-
-| 위치 | 역할 |
-| --- | --- |
-| `frontend/` | 사용자가 공고를 업로드하고 분석 결과, 체크리스트, 초안, export 흐름을 확인하는 Next.js 앱 |
-| `backend/` | 공고 파싱, AI 분석, draft 생성, workflow 상태 관리, HWPX export API를 담당하는 FastAPI 서버 |
-| `docs/` | 제품 방향, 아키텍처, 배포, 평가, HWPX, skills/MCP 문서를 범주별로 보관 |
-| `harness/` | Agent 작업을 반복 가능하게 만드는 state spec, quality gates, 오류 기억 registry |
-| `tools/harness/` | 로컬/CI에서 quality gate를 실행하고 실패 fingerprint를 기록하는 표준 라이브러리 도구 |
-| `.claude/` | LiveDock 업무에 맞춘 로컬 Agent skill과 MCP 설정 예시 |
-| `tools/hwp-mcp/` | Windows 한글 프로그램을 제어하기 위한 로컬 MCP helper |
-
-## 포함하지 않는 로컬 생성물
-
-다음은 실행 중 생기는 캐시, 의존성, 개인 환경 파일이라 GitHub에 올리지 않습니다.
-
-- `frontend/node_modules/`
-- `frontend/.next/`
-- `frontend/.env.local`
-- `backend/venv/`
-- `backend/.env`
-- `__pycache__/`
-- `outputs/`
-- `harness/runs/`
-- `.uv-cache/`
-- `tools/hwp-mcp/.venv/`
-- `tools/hwp-mcp/*.log`
-
-## HWPX 생성 전략
-
-LiveDock에서 HWPX는 최종 한국어 편집 문서의 핵심 export 형식입니다.
-
-- HWPX는 XML 파일들을 담은 ZIP package로 다룹니다.
-- 복잡한 공식 양식은 사용자가 제공한 `.hwpx` 템플릿을 복제하고 필요한 텍스트를 치환합니다.
-- 표, 스타일, 이미지, 문단 구조, run 구조를 최대한 보존합니다.
-- 생성 후에는 namespace fix와 validation을 통과해야 준비 완료로 봅니다.
-- 사용자가 `.hwp`를 제공하면 먼저 `.hwpx`로 변환한 뒤 처리합니다.
-
-관련 문서:
-
-- [Gemma, skills, MCP, HWPX workflow](./docs/hwpx/gemma-hwpx-workflow.md)
-- [HWP MCP guide](./docs/hwpx/hwp-mcp-guide.md)
-- [Skills and MCP architecture](./docs/agent/skills-mcp-architecture.md)
-- [withUS HWPX example](./docs/examples/withus-hwpx/README.md)
+---
 
 ## 빠른 실행
 
-Backend:
+### Backend
 
 ```powershell
 cd backend
 python -m venv venv
 .\venv\Scripts\activate
 pip install -r requirements.txt
-copy .env.example .env
+copy .env.example .env        # OPENAI_API_KEY 설정
 python -m uvicorn main:app --reload
+# → http://localhost:8000
 ```
 
-Frontend:
+### Frontend
 
 ```powershell
 cd frontend
 npm install
-copy .env.example .env.local
+copy .env.example .env.local  # NEXT_PUBLIC_API_URL=http://localhost:8000
 npm run dev
+# → http://localhost:3000
 ```
 
-기본 로컬 주소:
-
-- Frontend: `http://localhost:3000`
-- Backend: `http://localhost:8000`
-- Backend health check: `http://localhost:8000/health`
+---
 
 ## 환경변수
 
-백엔드는 [backend/.env.example](./backend/.env.example)을 기준으로 `backend/.env`를 만듭니다.
+### Backend (`backend/.env`)
 
-주요 백엔드 값:
+| 변수 | 설명 | 기본값 |
+|------|------|--------|
+| `AI_PROVIDER` | `openai` 또는 `gemma` | `openai` |
+| `OPENAI_API_KEY` | OpenAI 사용 시 필수 | — |
+| `GEMINI_API_KEY` | Gemini 사용 시 필수 | — |
+| `MOCK_MODE` | 데모 fixture 사용 여부 | `false` |
+| `HWPX_EXPORT_ENABLED` | HWPX export toolchain 활성화 | `true` |
+| `REDIS_URL` | 워크플로우 세션 저장 (선택) | — |
 
-- `AI_PROVIDER`: 기본값은 `openai`, Gemma/Gemini 계열 사용 시 `gemma`
-- `OPENAI_API_KEY`: OpenAI provider 사용 시 필요
-- `GEMINI_API_KEY`: `AI_PROVIDER=gemma` 사용 시 필요
-- `MOCK_MODE`: demo 동작 사용 여부
-- `REDIS_URL`: workflow 결과 저장용 선택 설정
-- `HWPX_EXPORT_ENABLED`: HWPX export toolchain 사용 여부
-- `HWPX_SKILL_DIR`: 로컬 HWPX skill 경로
+### Frontend (`frontend/.env.local`)
 
-프론트엔드는 [frontend/.env.example](./frontend/.env.example)을 기준으로 `frontend/.env.local`을 만듭니다.
+| 변수 | 설명 |
+|------|------|
+| `NEXT_PUBLIC_API_URL` | 백엔드 API base URL |
 
-주요 프론트엔드 값:
+---
 
-- `NEXT_PUBLIC_API_URL`: 백엔드 API base URL
+## API 엔드포인트
 
-실제 `.env`와 `.env.local` 파일은 커밋하지 않습니다.
+```
+POST /api/analyze                          PDF·HWP·HWPX 업로드 분석
+POST /api/analyze/text                     텍스트 직접 분석
+POST /api/analyze/url                      URL 공고 분석
+GET  /api/demo                             데모 fixture (업로드 불필요)
 
-## 검증 명령
+GET  /api/workflow/{id}                    워크플로우 세션 조회
+POST /api/workflow/{id}/inputs             사용자 답변 저장
+GET  /api/workflow/{id}/draft/stream       SSE 스트리밍 초안 생성
+POST /api/workflow/{id}/draft/{sid}/revise 섹션 AI 재작성
+POST /api/workflow/{id}/confirm            확인 항목 체크
+POST /api/workflow/{id}/finalize           최종 문서 생성
+GET  /api/workflow/{id}/export/hwpx        HWPX export
+GET  /api/workflow/{id}/export/pdf         PDF export
+GET  /api/workflow/{id}/export/html        HTML export (fallback)
+```
 
-권장 하네스:
+---
+
+## HWPX 생성 전략
+
+HWPX는 한국 행정 문서의 표준 포맷입니다. LiveDock의 접근 방식:
+
+1. HWPX = ZIP + XML로 분해해 직접 파싱
+2. 사용자가 제공한 `.hwpx` 양식 → 텍스트 치환 방식으로 표·스타일·구조 보존
+3. `.hwp` 입력 시 먼저 `.hwpx`로 변환 후 처리
+4. 생성 후 namespace fix → `validate.py` → `verify_hwpx.py` 통과 필수
+
+---
+
+## 검증
 
 ```powershell
+# 하네스 (권장)
 .\scripts\harness.ps1 -Profile quick
 .\scripts\harness.ps1 -Profile agent
-.\scripts\harness.ps1 -Profile full
+
+# 프론트엔드 빌드
+cd frontend && npm run build
+
+# 백엔드 계약 테스트
+cd backend && python -m pytest tests/contracts/
+
+# HWPX 수동 검증
+cd backend && python tests/manual/manual_hwpx_soccer_application.py
 ```
 
-실패하면 raw log는 `harness/runs/`에 저장되고, 반복 오류 fingerprint는 `harness/errors/registry.json`에 기록됩니다.
+---
 
-Frontend build:
+## 개발 로드맵
 
-```powershell
-cd frontend
-npm run build
-```
+| Phase | 상태 | 내용 |
+|-------|------|------|
+| Phase 1 | ✅ 완료 | Demo 버튼, HWPX 다운로드, 세션 저장, 에러 복구 |
+| Phase 2 | ✅ 완료 | 인라인 편집, 섹션 AI 재작성, 스트리밍 delta |
+| Phase 3 | ✅ 완료 | 템플릿 갤러리, 문서 유형별 fixture 5종 |
+| Phase 4 | 🔜 예정 | 다운로드 이력, 공유 링크, 모바일 최적화 |
 
-Backend contract test:
+---
 
-```powershell
-cd backend
-python -m pytest tests/contracts/test_agent_mvp_contracts.py
-```
+## 문서
 
-Manual HWPX generation test:
-
-```powershell
-cd backend
-python tests/manual/manual_hwpx_soccer_application.py
-```
-
-## 문서 바로가기
-
-- [Docs index](./docs/README.md)
-- [Product plan](./docs/product/product-plan.md)
-- [Architecture](./docs/engineering/architecture.md)
-- [Environment setup](./docs/engineering/environment.md)
-- [Deployment](./docs/engineering/deployment.md)
-- [Evaluation guide](./docs/evaluation/evals.md)
-- [Codex project guide](./AGENTS.md)
-- [Harness guide](./harness/README.md)
+- [아키텍처](./docs/engineering/architecture.md)
+- [배포 가이드](./docs/engineering/deployment.md)
+- [HWPX export 상세](./docs/hwpx/gemma-hwpx-workflow.md)
+- [평가 기준](./docs/evaluation/evals.md)
+- [Codex 개발 규칙](./AGENTS.md)
