@@ -34,6 +34,9 @@ $Candidates = @(
 
 $Python = $null
 foreach ($Candidate in $Candidates) {
+  if (-not $Candidate) {
+    continue
+  }
   if ((Test-Path -LiteralPath $Candidate) -and (Test-PythonExecutable $Candidate)) {
     $Python = $Candidate
     break

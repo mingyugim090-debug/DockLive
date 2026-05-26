@@ -1,21 +1,25 @@
 'use client';
 
-import { useMemo, useRef, useState, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import {
   createHwpxFormSession,
   draftHwpxRegion,
   exportHwpxFormSession,
+  getHwpxFormSession,
   updateHwpxRegion,
 } from '@/lib/api';
 import type { ExportResponse, HwpxEditableRegion, HwpxFormSession, HwpxTemplateBlock, HwpxTemplateCell } from '@/lib/types';
 import { Button } from '@/components/ui/Button';
 
-type WorkflowStep = 'upload' | 'edit';
+type WorkflowStep = 'upload' | 'edit' | 'export';
 
 const workflowSteps: Array<{ id: WorkflowStep; label: string; description: string }> = [
-  { id: 'upload', label: '1. 파일 업로드', description: 'HWP/HWPX 원본 선택' },
-  { id: 'edit', label: '2. 편집 및 다운로드', description: '항목 입력 후 HWPX 생성' },
+  { id: 'upload', label: '1. 양식 업로드', description: '자동화할 HWP/HWPX 원본 선택' },
+  { id: 'edit', label: '2. 섹션별 지시', description: '가운데 문서에서 칸을 클릭하고 직접 입력 또는 AI 요청' },
+  { id: 'export', label: '3. HWPX 생성', description: '원본 HWPX 구조에 입력값만 주입해 다운로드' },
 ];
+
+const HWPX_SESSION_STORAGE_KEY = 'livedock_hwpx_form_session_id';
 
 function downloadExport(exported: ExportResponse) {
   const bytes = Uint8Array.from(atob(exported.content), (char) => char.charCodeAt(0));
@@ -114,6 +118,29 @@ export function HwpxFormEditor() {
   );
   const stepIndex = workflowSteps.findIndex((item) => item.id === step);
 
+  useEffect(() => {
+    const savedSessionId = localStorage.getItem(HWPX_SESSION_STORAGE_KEY);
+    if (!savedSessionId) return;
+    setBusy('restore');
+    getHwpxFormSession(savedSessionId)
+      .then((response) => {
+        const firstRegion = sortRegions(response.data.regions)[0] ?? null;
+        setSession(response.data);
+        setSelectedId(firstRegion?.id ?? null);
+        setPrompt(firstRegion?.prompt ?? '');
+        setStep(response.data.status === 'exported' ? 'export' : 'edit');
+      })
+      .catch(() => {
+        localStorage.removeItem(HWPX_SESSION_STORAGE_KEY);
+      })
+      .finally(() => setBusy(null));
+  }, []);
+
+  useEffect(() => {
+    if (!session?.id) return;
+    localStorage.setItem(HWPX_SESSION_STORAGE_KEY, session.id);
+  }, [session?.id]);
+
   async function handleFile(file: File | undefined) {
     if (!file) return;
     if (!/\.(hwp|hwpx)$/i.test(file.name)) {
@@ -127,7 +154,7 @@ export function HwpxFormEditor() {
       const firstRegion = sortRegions(response.data.regions)[0] ?? null;
       setSession(response.data);
       setSelectedId(firstRegion?.id ?? null);
-      setPrompt('');
+      setPrompt(firstRegion?.prompt ?? '');
       setStep('edit');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'HWPX 문서를 불러오지 못했습니다.');
@@ -142,6 +169,7 @@ export function HwpxFormEditor() {
     setPrompt('');
     setError(null);
     setStep('upload');
+    localStorage.removeItem(HWPX_SESSION_STORAGE_KEY);
   }
 
   function selectRegion(region: HwpxEditableRegion) {
@@ -213,6 +241,7 @@ export function HwpxFormEditor() {
       const exported = await exportHwpxFormSession(session.id);
       downloadExport(exported);
       setSession((current) => (current ? { ...current, status: 'exported' } : current));
+      setStep('export');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'HWPX 다운로드 생성에 실패했습니다.');
     } finally {
@@ -228,11 +257,12 @@ export function HwpxFormEditor() {
 
       {step === 'upload' ? <UploadStep inputRef={inputRef} busy={busy} onFile={handleFile} /> : null}
 
-      {session && step === 'edit' ? (
+      {session && step !== 'upload' ? (
         <EditStep
           session={session}
           regions={orderedRegions}
           selected={selected}
+          exported={step === 'export' || session.status === 'exported'}
           busy={busy}
           prompt={prompt}
           onSelect={selectRegion}
@@ -242,7 +272,7 @@ export function HwpxFormEditor() {
             if (!selected) return;
             setBusy('save');
             try {
-              await persistRegion(selected);
+              await persistRegion(selected, selected.value, prompt);
             } catch (err) {
               setError(err instanceof Error ? err.message : '입력값 저장에 실패했습니다.');
             } finally {
@@ -275,12 +305,12 @@ function WorkflowHeader({
     <section className="rounded-2xl border border-[#DDE7E2] bg-white p-6 shadow-sm">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="text-sm font-bold text-[#3A7A68]">HWPX 양식 편집</p>
+          <p className="text-sm font-bold text-[#3A7A68]">HWPX 양식 자동완성</p>
           <h1 className="mt-2 text-3xl font-bold tracking-normal text-[#24312D]">
-            원본 문서 구조를 보면서 필요한 항목만 채워 넣습니다.
+            원본 양식을 HTML처럼 클릭하고, 완성본은 HWPX로 받습니다.
           </h1>
           <p className="mt-3 max-w-3xl text-sm leading-7 text-[#65736E]">
-            문단, 표 셀, 서명란까지 클릭해서 수정하고 다운로드할 때는 원본 HWPX 패키지를 복제한 뒤 입력값만 반영합니다.
+            중앙에는 업로드한 문서 구조를 재구성해 보여주고, 오른쪽 패널에서는 선택한 표 셀이나 문단에 직접 입력하거나 AI에게 작성 지시를 남깁니다.
           </p>
         </div>
         {hasSession ? (
@@ -330,7 +360,7 @@ function UploadStep({
       />
       <button
         type="button"
-        disabled={busy === 'upload'}
+        disabled={Boolean(busy)}
         onClick={() => inputRef.current?.click()}
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
@@ -340,7 +370,11 @@ function UploadStep({
         className="flex min-h-[300px] w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#BFD1C9] bg-[#F8FBFA] px-6 text-center transition hover:border-[#6A9C89] hover:bg-[#F2F8F5] disabled:cursor-not-allowed disabled:opacity-60"
       >
         <span className="text-base font-bold text-[#245D50]">
-          {busy === 'upload' ? 'HWPX파일 업로드 중...' : 'HWPX파일 업로드'}
+          {busy === 'restore' ? '이전 HWPX 세션 불러오는 중...' : busy === 'upload' ? 'HWPX파일 업로드 중...' : '자동화할 HWPX 양식 업로드'}
+        </span>
+        <span className="mt-3 max-w-xl text-sm leading-6 text-[#65736E]">
+          HWPX를 권장하며, HWP 파일은 서버에서 HWPX로 변환한 뒤 같은 방식으로 편집합니다.
+          업로드 후 문서 가운데 영역에서 각 섹션과 표 셀을 클릭할 수 있습니다.
         </span>
       </button>
     </section>
@@ -351,6 +385,7 @@ function EditStep(props: {
   session: HwpxFormSession;
   regions: HwpxEditableRegion[];
   selected: HwpxEditableRegion | null;
+  exported: boolean;
   busy: string | null;
   prompt: string;
   onSelect: (region: HwpxEditableRegion) => void;
@@ -370,7 +405,10 @@ function EditStep(props: {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xs font-bold text-[#3A7A68]">{props.session.source_filename}</p>
-            <h2 className="mt-1 text-xl font-bold text-[#24312D]">빈 칸을 클릭해 직접 입력하거나 AI에게 요청하세요.</h2>
+            <h2 className="mt-1 text-xl font-bold text-[#24312D]">문서의 섹션과 표 셀을 클릭해 채울 내용을 지정하세요.</h2>
+            <p className="mt-2 text-sm leading-6 text-[#65736E]">
+              개인정보처럼 짧은 칸은 직접 수정하고, 긴 서술형 칸은 AI 요청 내용을 적은 뒤 초안을 생성하면 됩니다.
+            </p>
           </div>
           <div className="flex items-center gap-6 text-sm">
             <div className="text-right">
@@ -383,6 +421,11 @@ function EditStep(props: {
             </div>
           </div>
         </div>
+        {props.exported ? (
+          <div className="mt-4 rounded-xl border border-[#BFD8CC] bg-[#F0F8F4] px-4 py-3 text-sm font-semibold text-[#245D50]">
+            최종 HWPX가 생성되었습니다. 내용을 더 고치면 다시 생성할 수 있습니다.
+          </div>
+        ) : null}
       </section>
 
       <DocumentPreview session={props.session} regions={props.regions} selected={props.selected} onSelect={props.onSelect} />
@@ -405,7 +448,7 @@ function EditStep(props: {
         <div className="flex items-center gap-3">
           <span className="text-sm text-[#65736E]">진행: {filled}/{total} 항목 완료</span>
           <Button onClick={props.onExport} disabled={Boolean(props.busy)}>
-            {props.busy === 'export' ? 'HWPX 생성 중...' : '최종 HWPX 생성 →'}
+            {props.busy === 'export' ? 'HWPX 생성 중...' : props.exported ? '수정본 HWPX 다시 생성' : '최종 HWPX 생성'}
           </Button>
         </div>
       </div>
@@ -522,11 +565,12 @@ function HtmlHwpxDocument({
       {blocks.map((block, blockIndex) => {
         if (block.type === 'table') {
           tableIndex += 1;
+          const sourceTableIndex = blockSourceRefNumber(block, 'table_index');
           return (
             <HtmlTableBlock
               key={block.id || `table-${blockIndex}`}
               block={block}
-              tableIndex={tableIndex}
+              tableIndex={sourceTableIndex >= 0 ? sourceTableIndex : tableIndex}
               regions={regions}
               selected={selected}
               onSelect={onSelect}
@@ -727,30 +771,30 @@ function RegionEditor({
           </label>
 
           <Button variant="secondary" className="w-full" onClick={onSaveSelected} disabled={busy === 'save'}>
-            {busy === 'save' ? '저장 중...' : '저장'}
+            {busy === 'save' ? '저장 중...' : '직접 입력 저장'}
           </Button>
 
-          {isLong ? (
-            <>
-              <div className="flex items-center gap-2 text-xs text-[#B0BDB8]">
-                <span className="flex-1 border-t border-[#E4EBE7]" />
-                <span>또는 AI에게 요청</span>
-                <span className="flex-1 border-t border-[#E4EBE7]" />
-              </div>
-              <label className="block">
-                <span className="text-xs font-bold text-[#65736E]">AI 요청 내용</span>
-                <textarea
-                  value={prompt}
-                  onChange={(event) => onPrompt(event.target.value)}
-                  className="mt-1 min-h-[90px] w-full resize-y rounded-xl border border-[#DDE7E2] bg-[#FBFCFB] px-3 py-2 text-sm leading-6 outline-none focus:border-[#6A9C89]"
-                  placeholder={`예: ${selected.label}을 200자 이내 제출용 문체로 작성해줘`}
-                />
-              </label>
-              <Button onClick={onGenerateSelected} disabled={busy === 'draft'} className="w-full">
-                {busy === 'draft' ? 'AI 작성 중...' : 'AI 초안 생성'}
-              </Button>
-            </>
-          ) : null}
+          <div className="flex items-center gap-2 text-xs text-[#B0BDB8]">
+            <span className="flex-1 border-t border-[#E4EBE7]" />
+            <span>또는 AI에게 작성 지시</span>
+            <span className="flex-1 border-t border-[#E4EBE7]" />
+          </div>
+          <label className="block">
+            <span className="text-xs font-bold text-[#65736E]">AI 요청 내용</span>
+            <textarea
+              value={prompt}
+              onChange={(event) => onPrompt(event.target.value)}
+              className="mt-1 min-h-[96px] w-full resize-y rounded-xl border border-[#DDE7E2] bg-[#FBFCFB] px-3 py-2 text-sm leading-6 outline-none focus:border-[#6A9C89]"
+              placeholder={
+                isLong
+                  ? `예: ${selected.label}을 200자 이내 제출용 문체로 작성해줘`
+                  : `예: ${selected.label}에 들어갈 값을 사용자가 준 정보 기준으로 정리해줘`
+              }
+            />
+          </label>
+          <Button onClick={onGenerateSelected} disabled={busy === 'draft'} className="w-full">
+            {busy === 'draft' ? 'AI 작성 중...' : 'AI로 선택 항목 채우기'}
+          </Button>
         </div>
       ) : (
         <p className="mt-3 text-sm leading-6 text-[#65736E]">왼쪽 문서에서 수정할 항목을 클릭하세요.</p>

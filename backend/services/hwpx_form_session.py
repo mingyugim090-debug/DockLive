@@ -44,6 +44,7 @@ def create_form_session(raw_content: bytes, filename: str) -> dict[str, Any]:
     pages, render_warnings = _render_hwpx_pages(hwpx_content, source_filename, analysis.get("preview_image"))
     warnings.extend(render_warnings)
     regions = _extract_editable_regions(hwpx_content, max(1, len(pages)))
+    regions = _filter_regions_to_visible_blocks(regions, analysis) or regions
     if not regions:
         warnings.append("편집 가능한 입력 영역을 자동으로 찾지 못했습니다. 문서 전체 요약 영역을 대신 제공합니다.")
         regions = [_fallback_region()]
@@ -289,12 +290,14 @@ def _table_regions(section_path: str, table: Any, table_index: int, start_order:
         texts = [_node_text(cell) for cell in cells]
         for cell_index, cell in enumerate(cells):
             text = texts[cell_index].strip()
-            if not _is_editable_cell(text):
-                continue
             prev = texts[cell_index - 1].strip() if cell_index > 0 else ""
+            next_text = texts[cell_index + 1].strip() if cell_index + 1 < len(texts) else ""
+            if not _looks_editable_cell(text, prev, cell_index, next_text):
+                continue
             hint = text if text.startswith("*") or _is_hint_text(text) else ""
             label = _label_for_cell(prev, text, row_index, cell_index)
             kind = "textarea" if (len(hint) > 40 or _is_long_text_label(label)) else "text"
+            value = "" if hint or _is_placeholder(text) else _clean_region_value(text)
             order = start_order + len(regions)
             source_ref = {
                 "type": "table_cell",
@@ -303,8 +306,41 @@ def _table_regions(section_path: str, table: Any, table_index: int, start_order:
                 "row": _int_attr(_first_child(cell, "cellAddr"), "rowAddr", row_index),
                 "col": _int_attr(_first_child(cell, "cellAddr"), "colAddr", cell_index),
             }
-            regions.append(_region(section_path, kind, order, page_count, label, "", source_ref, placeholder_hint=hint))
+            regions.append(_region(section_path, kind, order, page_count, label, value, source_ref, placeholder_hint=hint))
     return regions
+
+
+def _filter_regions_to_visible_blocks(regions: list[dict[str, Any]], analysis: dict[str, Any]) -> list[dict[str, Any]]:
+    visible_tables: set[tuple[str, int]] = set()
+    visible_paragraphs: set[tuple[str, int]] = set()
+    for block in analysis.get("blocks") or []:
+        source_ref = block.get("source_ref") or {}
+        section_path = source_ref.get("section_path")
+        if not section_path:
+            continue
+        if source_ref.get("type") == "table":
+            visible_tables.add((str(section_path), int(source_ref.get("table_index") or 0)))
+        elif source_ref.get("type") == "paragraph":
+            visible_paragraphs.add((str(section_path), int(source_ref.get("paragraph_index") or 0)))
+
+    if not visible_tables and not visible_paragraphs:
+        return regions
+
+    filtered: list[dict[str, Any]] = []
+    for region in regions:
+        source_ref = region.get("source_ref") or {}
+        section_path = str(source_ref.get("section_path") or "")
+        if source_ref.get("type") == "table_cell":
+            key = (section_path, int(source_ref.get("table_index") or 0))
+            if key in visible_tables:
+                filtered.append(region)
+        elif source_ref.get("type") == "paragraph":
+            key = (section_path, int(source_ref.get("paragraph_index") or 0))
+            if key in visible_paragraphs:
+                filtered.append(region)
+        else:
+            filtered.append(region)
+    return filtered
 
 
 def _region(section_path: str, kind: str, order: int, page_count: int, label: str, value: str, source_ref: dict[str, Any], *, placeholder_hint: str = "") -> dict[str, Any]:
@@ -550,6 +586,7 @@ def _replace_paragraph(root: Any, source_ref: dict[str, Any], value: str) -> Non
 
 
 def _set_first_text(node: Any, value: str) -> None:
+    value = _clean_xml_text(value)
     text_nodes = [child for child in node.iter() if _local(child.tag) == "t"]
     if text_nodes:
         text_nodes[0].text = value
@@ -563,6 +600,13 @@ def _set_first_text(node: Any, value: str) -> None:
     if run is not None:
         text_node = etree.SubElement(run, f"{{{hp_ns}}}t")
         text_node.text = value
+
+
+def _clean_xml_text(value: str) -> str:
+    text = str(value or "").replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F]", "", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
 
 
 def _public_session(session: dict[str, Any]) -> dict[str, Any]:
@@ -649,6 +693,8 @@ def _int_attr(node: Any | None, name: str, fallback: int) -> int:
 
 
 def _looks_editable_cell(text: str, prev: str, cell_index: int, next_text: str = "") -> bool:
+    if text.strip().startswith("*") or _is_hint_text(text):
+        return True
     if cell_index == 0 and text and not _is_placeholder(text):
         return False
     if not text or _is_placeholder(text):
@@ -690,6 +736,10 @@ def _looks_like_title_label(text: str) -> bool:
 def _label_for_cell(prev: str, text: str, row: int, col: int) -> str:
     if prev and len(prev) <= 80:
         return prev
+    if text and _is_hint_text(text):
+        hint_label = _label_from_hint_text(text)
+        if hint_label:
+            return hint_label
     if text and not _is_placeholder(text):
         return text[:40]
     return f"{row + 1}행 {col + 1}열"
@@ -746,6 +796,18 @@ def _paragraph_label(text: str, paragraph_index: int) -> str:
 
 def _clean_label(label: str) -> str:
     return re.sub(r"[:：\s]+$", "", re.sub(r"\s+", " ", label)).strip()
+
+
+def _clean_region_value(value: str) -> str:
+    return _clean_xml_text(value)
+
+
+def _label_from_hint_text(text: str) -> str:
+    value = re.sub(r"\s+", " ", text.strip().lstrip("*")).strip()
+    value = re.split(r"\*|작성하세요|입력하세요|입력 필요", value, maxsplit=1)[0].strip()
+    value = re.sub(r"\s*\d+\s*자\s*이내\s*작성.*$", "", value).strip()
+    value = re.sub(r"\s*\([^)]*이내\s*작성[^)]*\)\s*$", "", value).strip()
+    return value[:80]
 
 
 def _fallback_region() -> dict[str, Any]:

@@ -37,7 +37,6 @@ FORBIDDEN_TERMS = (
     "LiveDock: 자동작성 내용",
     "DockLive: 자동작성 내용",
     "자동작성 초안",
-    "요약",
     "추가 입력 필요",
     "문서 제목:",
     "JSON 문자열",

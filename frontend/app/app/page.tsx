@@ -78,7 +78,7 @@ export default function AppPage() {
   const [error, setError] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [draftLog, setDraftLog] = useState<Array<{ section: string; done: boolean }>>([]);
-  const [hwpxMode, setHwpxMode] = useState(false);
+  const [hwpxMode, setHwpxMode] = useState(true);
   const [loadingPhase, setLoadingPhase] = useState<string | null>(null);
   const [localEdits, setLocalEdits] = useState<Record<string, string>>({});
   const [revisingSectionId, setRevisingSectionId] = useState<string | null>(null);
@@ -162,7 +162,7 @@ export default function AppPage() {
     setError(null);
     setAnswers({});
     setDraftLog([]);
-    setHwpxMode(false);
+    setHwpxMode(true);
     setLocalEdits({});
     setRevisingSectionId(null);
     setActiveDelta('');
@@ -333,10 +333,10 @@ export default function AppPage() {
       <div className="space-y-4">
         <button
           type="button"
-          onClick={reset}
+          onClick={() => setHwpxMode(false)}
           className="flex items-center gap-1 text-sm font-semibold text-[#3A7A68] hover:underline"
         >
-          ← 공고 분석으로 돌아가기
+          공고 분석 모드로 전환
         </button>
         <HwpxFormEditor />
       </div>
