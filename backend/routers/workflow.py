@@ -33,6 +33,7 @@ from services.drafting_service import (
     update_inputs,
 )
 from services.pdf_export_service import PDF_MEDIA_TYPE, convert_hwpx_bytes_to_pdf
+from services.source_preserving_export import build_source_preserving_hwpx, is_hwpx_like_source
 
 router = APIRouter()
 
@@ -208,6 +209,15 @@ async def export_hwp_compatible_html(workflow_id: str):
 async def export_hwpx(workflow_id: str):
     workflow = _ensure_finalized(_load_workflow_or_404(workflow_id))
     assert workflow.final_document is not None
+    source = storage.load_latest_source_file(workflow.id)
+    if _workflow_requires_source_preservation(workflow):
+        if not is_hwpx_like_source(source):
+            raise AnalysisError(
+                "이 workflow는 HWP/HWPX 원본 양식 기반으로 생성되어야 하지만 저장된 원본 파일을 찾지 못했습니다. "
+                "줄글 HWPX fallback은 차단했습니다. 원본 HWP/HWPX를 다시 업로드해 주세요."
+            )
+        return _export_source_preserving_hwpx(workflow, source)
+
     try:
         filename, content, validation_summary = export_markdown_to_hwpx_with_validation(
             workflow.final_document.content_markdown,
@@ -244,10 +254,19 @@ async def export_pdf(workflow_id: str):
     workflow = _ensure_finalized(_load_workflow_or_404(workflow_id))
     assert workflow.final_document is not None
     try:
-        hwpx_filename, hwpx_content, hwpx_validation = export_markdown_to_hwpx_with_validation(
-            workflow.final_document.content_markdown,
-            workflow.final_document.title,
-        )
+        source = storage.load_latest_source_file(workflow.id)
+        if _workflow_requires_source_preservation(workflow):
+            if not is_hwpx_like_source(source):
+                raise AnalysisError(
+                    "이 workflow는 HWP/HWPX 원본 양식 기반으로 PDF를 생성해야 하지만 저장된 원본 파일을 찾지 못했습니다. "
+                    "원본 HWP/HWPX를 다시 업로드해 주세요."
+                )
+            hwpx_filename, hwpx_content, hwpx_validation = build_source_preserving_hwpx(workflow, source)
+        else:
+            hwpx_filename, hwpx_content, hwpx_validation = export_markdown_to_hwpx_with_validation(
+                workflow.final_document.content_markdown,
+                workflow.final_document.title,
+            )
         filename, pdf_content, pdf_summary = convert_hwpx_bytes_to_pdf(
             hwpx_content,
             workflow.final_document.title,
@@ -372,6 +391,39 @@ async def export_hwpx_from_template(
 def _export_failure_status(exc: Exception) -> str:
     message = str(exc).lower()
     return "validation_failed" if "validate" in message or "validation" in message or "검증" in message else "failed"
+
+
+def _workflow_requires_source_preservation(workflow: WorkflowSession) -> bool:
+    return workflow.analysis.source_type in {"hwp", "hwpx"}
+
+
+def _export_source_preserving_hwpx(workflow: WorkflowSession, source: dict | None) -> ExportResponse:
+    try:
+        filename, content, validation_summary = build_source_preserving_hwpx(workflow, source)
+        storage.save_export_file(
+            workflow.id,
+            filename,
+            content,
+            "application/vnd.hancom.hwpx",
+            "hwpx_source_preserving",
+            status="success",
+            validation_summary=validation_summary,
+        )
+        return ExportResponse(
+            success=True,
+            filename=filename,
+            content_type="application/vnd.hancom.hwpx",
+            content=hwpx_bytes_to_base64(content),
+            encoding="base64",
+            warnings=validation_summary.get("warnings", []),
+            validation_summary=validation_summary,
+        )
+    except Exception as exc:
+        status = _export_failure_status(exc)
+        _save_failed_export(workflow.id, "hwpx_source_preserving", status, str(exc))
+        if isinstance(exc, AnalysisError):
+            raise
+        raise AnalysisError(f"원본 양식 보존 HWPX export 실패: {exc}") from exc
 
 
 def _save_failed_export(workflow_id: str, export_type: str, status: str, error_message: str) -> None:

@@ -371,15 +371,19 @@ def save_source_file(
     content: bytes,
     content_type: str = "application/octet-stream",
 ) -> Optional[dict]:
-    """Persist an uploaded source file in InsForge Storage when configured."""
+    """Persist an uploaded source file.
+
+    InsForge storage is preferred when configured, but local file-cache fallback is
+    intentionally used as well. HWP/HWPX exports need the original upload later so
+    the final document can clone the source form instead of falling back to
+    markdown-only HWPX generation.
+    """
     if not content:
         return None
     document_id = str(uuid4())
     safe_filename = _safe_storage_name(filename)
     storage_path = f"sources/{analysis_id}/{safe_filename}"
     uploaded_path = _insforge_upload(storage_path, content, content_type)
-    if not uploaded_path:
-        return None
 
     row = {
         "id": document_id,
@@ -388,12 +392,95 @@ def save_source_file(
         "filename": filename or safe_filename,
         "content_type": content_type,
         "size_bytes": len(content),
-        "storage_bucket": settings.INSFORGE_STORAGE_BUCKET,
-        "storage_path": uploaded_path,
+        "storage_bucket": settings.INSFORGE_STORAGE_BUCKET if uploaded_path else "file_cache",
+        "storage_path": uploaded_path or storage_path,
         "created_at": _utc_now(),
     }
-    if _insforge_insert(INSFORGE_DOCUMENT_TABLE, row):
+    if uploaded_path and _insforge_insert(INSFORGE_DOCUMENT_TABLE, row):
         return row
+
+    fallback_key = f"source:{analysis_id}:{document_id}"
+    fallback_row = {**row, "storage_bucket": "file_cache", "storage_path": fallback_key}
+    _save_file_cache(
+        fallback_key,
+        {
+            **fallback_row,
+            "content_base64": base64.b64encode(content).decode("ascii"),
+        },
+    )
+    list_key = f"sources:{analysis_id}"
+    existing = _load_file_cache(list_key) or {}
+    items = [item for item in existing.get("items", []) if isinstance(item, dict) and item.get("id") != document_id]
+    items.insert(0, fallback_row)
+    _save_file_cache(list_key, {"items": items})
+    return fallback_row
+
+
+def list_source_files(analysis_id: str) -> list[dict[str, Any]]:
+    """List uploaded source files for an analysis/workflow id."""
+    if not analysis_id:
+        return []
+
+    encoded_analysis_id = quote(analysis_id, safe="")
+    columns = (
+        "id,analysis_id,workflow_id,filename,content_type,size_bytes,"
+        "storage_bucket,storage_path,created_at"
+    )
+    path = (
+        f"/api/database/records/{INSFORGE_DOCUMENT_TABLE}"
+        f"?analysis_id=eq.{encoded_analysis_id}&select={columns}&order=created_at.desc"
+    )
+    rows = _insforge_select(path)
+    if rows:
+        return [dict(row) for row in rows]
+
+    fallback = _load_file_cache(f"sources:{analysis_id}") or {}
+    items = fallback.get("items", [])
+    return [dict(item) for item in items] if isinstance(items, list) else []
+
+
+def load_source_file(analysis_id: str, source_id: str) -> Optional[dict[str, Any]]:
+    """Load an uploaded source file and its bytes."""
+    if not analysis_id or not source_id:
+        return None
+
+    encoded_analysis_id = quote(analysis_id, safe="")
+    encoded_source_id = quote(source_id, safe="")
+    columns = (
+        "id,analysis_id,workflow_id,filename,content_type,size_bytes,"
+        "storage_bucket,storage_path,created_at"
+    )
+    path = (
+        f"/api/database/records/{INSFORGE_DOCUMENT_TABLE}"
+        f"?id=eq.{encoded_source_id}&analysis_id=eq.{encoded_analysis_id}&select={columns}&limit=1"
+    )
+    rows = _insforge_select(path)
+    if rows:
+        row = rows[0]
+        content = _insforge_download(row.get("storage_bucket") or settings.INSFORGE_STORAGE_BUCKET, row.get("storage_path", ""))
+        if content is not None:
+            return {**dict(row), "content": content}
+
+    fallback = _load_file_cache(f"source:{analysis_id}:{source_id}")
+    if not fallback:
+        return None
+    encoded_content = fallback.get("content_base64")
+    if not isinstance(encoded_content, str):
+        return None
+    try:
+        content = base64.b64decode(encoded_content.encode("ascii"))
+    except Exception as e:
+        logger.warning("Fallback source decode failed for analysis=%s source=%s: %s", analysis_id, source_id, e)
+        return None
+    return {**fallback, "content": content}
+
+
+def load_latest_source_file(analysis_id: str) -> Optional[dict[str, Any]]:
+    """Load the newest uploaded source file for an analysis/workflow id."""
+    for row in list_source_files(analysis_id):
+        source = load_source_file(analysis_id, str(row.get("id") or ""))
+        if source is not None:
+            return source
     return None
 
 

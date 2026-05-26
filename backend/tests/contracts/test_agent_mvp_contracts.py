@@ -51,7 +51,14 @@ try:
     )
     from services.mock_data import get_mock_result  # noqa: E402
     from services.openai_service import _validate_result  # noqa: E402
-    from services.storage import list_export_files, load_export_file, save_export_file  # noqa: E402
+    from services.source_preserving_export import build_source_preserving_hwpx, is_hwpx_like_source  # noqa: E402
+    from services.storage import (  # noqa: E402
+        list_export_files,
+        load_export_file,
+        load_latest_source_file,
+        save_export_file,
+        save_source_file,
+    )
 except ModuleNotFoundError as exc:  # pragma: no cover - local minimal Python fallback
     if exc.name != "pydantic":
         raise
@@ -83,9 +90,13 @@ except ModuleNotFoundError as exc:  # pragma: no cover - local minimal Python fa
     parse_hwp_document = None
     get_mock_result = None
     _validate_result = None
+    build_source_preserving_hwpx = None
+    is_hwpx_like_source = None
     list_export_files = None
     load_export_file = None
+    load_latest_source_file = None
     save_export_file = None
+    save_source_file = None
     WITHUS_TEMPLATE_ID = None
     compose_hwpx = None
     detect_template = None
@@ -261,6 +272,67 @@ class AgentMvpContractTests(unittest.TestCase):
         loaded = load_export_file(workflow_id, row["id"])
         self.assertIsNotNone(loaded)
         self.assertIn("계약 테스트".encode("utf-8"), loaded["content"])
+
+    def test_source_file_fallback_can_reload_for_preserving_export(self):
+        if save_source_file is None or load_latest_source_file is None:
+            self.skipTest("backend dependencies are not installed in this Python environment")
+
+        workflow_id = "contract-source-workflow"
+        content = b"PK\x03\x04contract hwpx source"
+        row = save_source_file(
+            workflow_id,
+            "contract-source.hwpx",
+            content,
+            "application/vnd.hancom.hwpx",
+        )
+
+        self.assertIsNotNone(row)
+        loaded = load_latest_source_file(workflow_id)
+        self.assertIsNotNone(loaded)
+        self.assertEqual(loaded["filename"], "contract-source.hwpx")
+        self.assertEqual(loaded["content"], content)
+
+    def test_source_preserving_export_clones_uploaded_hwpx_form(self):
+        if build_source_preserving_hwpx is None:
+            self.skipTest("backend dependencies are not installed in this Python environment")
+        sample = ROOT / "docs" / "examples" / "withus-hwpx" / "withus-sample-filled.hwpx"
+        skill_dir = Path.home() / ".codex" / "skills" / "hwpx"
+        if not skill_dir.exists():
+            self.skipTest("hwpx skill is not installed")
+
+        result = build_analysis_result(get_mock_result(), source_type="hwpx", source_name=sample.name)
+        workflow = create_workflow_session(result)
+        workflow = update_inputs(
+            workflow,
+            {
+                "applicant_name": "테스트팀",
+                "applicant_profile": "AI 문서 자동화 팀",
+                "project_summary": "원본 양식을 보존하면서 제출 초안을 작성",
+            },
+        )
+        workflow = finalize_document(generate_drafts(workflow))
+
+        old_enabled = settings.HWPX_EXPORT_ENABLED
+        old_skill_dir = settings.HWPX_SKILL_DIR
+        old_mock = settings.MOCK_MODE
+        try:
+            settings.HWPX_EXPORT_ENABLED = True
+            settings.HWPX_SKILL_DIR = str(skill_dir)
+            settings.MOCK_MODE = True
+            filename, content, summary = build_source_preserving_hwpx(
+                workflow,
+                {"filename": sample.name, "content": sample.read_bytes()},
+            )
+        finally:
+            settings.HWPX_EXPORT_ENABLED = old_enabled
+            settings.HWPX_SKILL_DIR = old_skill_dir
+            settings.MOCK_MODE = old_mock
+
+        self.assertTrue(filename.endswith(".hwpx"))
+        self.assertEqual(content[:2], b"PK")
+        self.assertEqual(summary["generation_method"], "source-preserving-compose")
+        self.assertTrue(summary["validation_passed"])
+        self.assertTrue(summary["structure_preserved"])
 
     def test_mock_workflow_reaches_final_document(self):
         if AnalysisResult is None:
