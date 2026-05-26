@@ -33,15 +33,16 @@ from services.drafting_service import (
 )
 from services.pdf_export_service import PDF_MEDIA_TYPE, convert_hwpx_bytes_to_pdf
 from services.source_preserving_export import build_source_preserving_hwpx, is_hwpx_like_source
+from services.workflow_recovery import load_or_recover_workflow
 
 router = APIRouter()
 
 
 def _load_workflow_or_404(workflow_id: str) -> WorkflowSession:
-    data = storage.load_workflow(workflow_id)
-    if data is None:
+    workflow = load_or_recover_workflow(workflow_id)
+    if workflow is None:
         raise WorkflowNotFoundError()
-    return WorkflowSession(**data)
+    return workflow
 
 
 def _save_workflow(workflow: WorkflowSession) -> None:
@@ -64,6 +65,20 @@ def _ensure_finalized(workflow: WorkflowSession) -> WorkflowSession:
 @router.get("/{workflow_id}", response_model=WorkflowResponse)
 async def get_workflow(workflow_id: str):
     return WorkflowResponse(success=True, data=_load_workflow_or_404(workflow_id))
+
+
+@router.post("/{workflow_id}/restore", response_model=WorkflowResponse)
+async def restore_workflow(workflow_id: str, payload: WorkflowSession):
+    if payload.id != workflow_id:
+        raise AnalysisError("복구하려는 workflow id가 요청 경로와 일치하지 않습니다.")
+    existing = storage.load_workflow(workflow_id)
+    if existing is not None:
+        try:
+            return WorkflowResponse(success=True, data=WorkflowSession(**existing))
+        except Exception:
+            pass
+    _save_workflow(payload)
+    return WorkflowResponse(success=True, data=payload)
 
 
 @router.get("/{workflow_id}/exports", response_model=ExportListResponse)

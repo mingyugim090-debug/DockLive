@@ -1,4 +1,28 @@
 {
   "version": 1,
-  "errors": []
+  "errors": [
+    {
+      "id": "ERR-20260526094246-752e8466",
+      "fingerprint": "752e846639dedd4c7b6e2463",
+      "symptom": "FAILED (errors=1)",
+      "root_cause": "Backend contract test imported FastAPI router directly in the lightweight harness Python environment, where fastapi is intentionally not installed.",
+      "fix_summary": "Moved workflow recovery into backend/services/workflow_recovery.py and changed tests to import the service instead of routers.workflow.",
+      "guard_test": "python tools/harness/run_harness.py --profile quick",
+      "first_seen": "2026-05-26T09:42:46+00:00",
+      "last_seen": "2026-05-26T09:42:46+00:00",
+      "occurrences": 1,
+      "status": "resolved",
+      "last_command": "C:\\Users\\alseh\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe -m unittest discover -s backend/tests/contracts -p test_*.py",
+      "last_exit_code": 1,
+      "last_error_line": "FAILED (errors=1)",
+      "last_log_path": "harness\\runs\\20260526-184244-quick\\03-backend-contracts.log",
+      "related_paths": [
+        "backend/tests/contracts",
+        "backend\\tests\\contracts\\test_agent_mvp_contracts.py",
+        "backend\\routers\\workflow.py",
+        "C:\\Users\\alseh\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\Lib\\unittest\\loader.py"
+      ],
+      "resolved_at": "2026-05-26T09:45:18+00:00"
+    }
+  ]
 }

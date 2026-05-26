@@ -13,6 +13,7 @@ import type {
   HwpxPlaceholderMapResponse,
   HwpxStatusResponse,
   HwpxTemplateAnalysisResponse,
+  WorkflowSession,
   WorkflowResponse,
 } from './types';
 
@@ -146,6 +147,16 @@ export async function getResult(id: string): Promise<ApiResponse> {
 export async function getWorkflow(id: string): Promise<WorkflowResponse> {
   const res = await fetch(`${API_URL}/api/workflow/${id}`);
   if (!res.ok) throw await readError(res, `워크플로 조회 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function restoreWorkflow(id: string, workflow: WorkflowSession): Promise<WorkflowResponse> {
+  const res = await fetch(`${API_URL}/api/workflow/${id}/restore`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(workflow),
+  });
+  if (!res.ok) throw await readError(res, `워크플로 복구 실패: ${res.status}`);
   return res.json();
 }
 

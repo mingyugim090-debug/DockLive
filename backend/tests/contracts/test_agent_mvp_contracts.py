@@ -13,6 +13,7 @@ if str(BACKEND) not in sys.path:
 os.environ.setdefault("MOCK_MODE", "true")
 
 try:
+    from services import storage  # noqa: E402
     from core.config import settings  # noqa: E402
     from models.schemas import (  # noqa: E402
         AnalysisResult,
@@ -52,6 +53,7 @@ try:
     from services.mock_data import get_mock_result  # noqa: E402
     from services.openai_service import _validate_result  # noqa: E402
     from services.source_preserving_export import build_source_preserving_hwpx, is_hwpx_like_source  # noqa: E402
+    from services.workflow_recovery import load_or_recover_workflow  # noqa: E402
     from services.storage import (  # noqa: E402
         list_export_files,
         load_export_file,
@@ -63,6 +65,8 @@ except ModuleNotFoundError as exc:  # pragma: no cover - local minimal Python fa
     if exc.name != "pydantic":
         raise
     settings = None
+    storage = None
+    load_or_recover_workflow = None
     AnalysisResult = None
     DocumentStyleProfile = None
     ExportMetadata = None
@@ -352,6 +356,20 @@ class AgentMvpContractTests(unittest.TestCase):
         self.assertEqual(workflow.status, "finalized")
         self.assertIsNotNone(workflow.final_document)
         self.assertNotIn("제출 전 확인 필요", workflow.final_document.content_markdown)
+
+    def test_missing_workflow_recovers_from_saved_analysis(self):
+        if AnalysisResult is None or storage is None or load_or_recover_workflow is None:
+            self.skipTest("backend dependencies are not installed in this Python environment")
+        result = build_analysis_result(get_mock_result(), source_type="demo", source_name="mock")
+        storage.save_result(result.id, result.model_dump(mode="json"))
+
+        recovered = load_or_recover_workflow(result.id)
+
+        self.assertIsNotNone(recovered)
+        assert recovered is not None
+        self.assertEqual(recovered.id, result.id)
+        self.assertEqual(recovered.analysis.id, result.id)
+        self.assertIsNotNone(storage.load_workflow(result.id))
 
     def test_mock_stream_draft_events_emit_section_done(self):
         if AnalysisResult is None or stream_draft_events is None:

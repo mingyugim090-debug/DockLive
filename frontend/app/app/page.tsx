@@ -13,6 +13,7 @@ import {
   getDemo,
   getWorkflow,
   reviseDraft,
+  restoreWorkflow,
   saveDraftFeedback,
   saveWorkflowInputs,
 } from '@/lib/api';
@@ -53,6 +54,23 @@ const LOADING_PHASES = [
   '질문 항목을 구성하고 있습니다...',
 ];
 
+interface SavedSession {
+  workflowId: string;
+  step: AgentStep;
+  workflow?: WorkflowSession;
+  answers?: Record<string, string>;
+  localEdits?: Record<string, string>;
+}
+
+function isWorkflowMissingError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return message.includes('워크플로를 찾을 수 없습니다') || message.includes('Workflow not found');
+}
+
+function answersFromWorkflow(workflow: WorkflowSession): Record<string, string> {
+  return Object.fromEntries(workflow.user_inputs.map((field) => [field.id, field.value ?? '']));
+}
+
 export default function AppPage() {
   const [step, setStep] = useState<AgentStep>('input');
   const [workflow, setWorkflow] = useState<WorkflowSession | null>(null);
@@ -72,22 +90,34 @@ export default function AppPage() {
     const saved = localStorage.getItem('livedock_session');
     if (!saved) return;
     try {
-      const { workflowId } = JSON.parse(saved) as { workflowId: string };
+      const session = JSON.parse(saved) as SavedSession;
+      const { workflowId } = session;
       if (!workflowId) return;
       setBusy('restore');
       getWorkflow(workflowId)
         .then((res) => {
-          const inputAnswers: Record<string, string> = {};
-          for (const field of res.data.user_inputs) {
-            inputAnswers[field.id] = field.value ?? '';
-          }
           setWorkflow(res.data);
-          setAnswers(inputAnswers);
+          setAnswers(session.answers ?? answersFromWorkflow(res.data));
+          setLocalEdits(session.localEdits ?? {});
           const hasDraft = res.data.draft_sections.length > 0;
           const isFinalized = res.data.status === 'finalized';
-          setStep(isFinalized ? 'download' : hasDraft ? 'review' : 'analysis');
+          setStep(session.step ?? (isFinalized ? 'download' : hasDraft ? 'review' : 'analysis'));
         })
-        .catch(() => localStorage.removeItem('livedock_session'))
+        .catch(async () => {
+          if (!session.workflow) {
+            localStorage.removeItem('livedock_session');
+            return;
+          }
+          try {
+            const restored = await restoreWorkflow(session.workflow.id, session.workflow);
+            setWorkflow(restored.data);
+            setAnswers(session.answers ?? answersFromWorkflow(restored.data));
+            setLocalEdits(session.localEdits ?? {});
+            setStep(session.step ?? 'questions');
+          } catch {
+            localStorage.removeItem('livedock_session');
+          }
+        })
         .finally(() => setBusy(null));
     } catch {
       localStorage.removeItem('livedock_session');
@@ -97,9 +127,16 @@ export default function AppPage() {
   // Persist session to localStorage whenever workflowId or step changes
   useEffect(() => {
     if (workflow?.id) {
-      localStorage.setItem('livedock_session', JSON.stringify({ workflowId: workflow.id, step }));
+      try {
+        localStorage.setItem(
+          'livedock_session',
+          JSON.stringify({ workflowId: workflow.id, step, workflow, answers, localEdits } satisfies SavedSession),
+        );
+      } catch {
+        localStorage.setItem('livedock_session', JSON.stringify({ workflowId: workflow.id, step } satisfies SavedSession));
+      }
     }
-  }, [workflow?.id, step]);
+  }, [workflow, answers, localEdits, step]);
 
   // Cycle loading phase messages during analysis
   useEffect(() => {
@@ -138,12 +175,8 @@ export default function AppPage() {
     try {
       const res = await apiCall();
       const wf = await getWorkflow(res.data.id);
-      const inputAnswers: Record<string, string> = {};
-      for (const field of wf.data.user_inputs) {
-        inputAnswers[field.id] = field.value ?? '';
-      }
       setWorkflow(wf.data);
-      setAnswers(inputAnswers);
+      setAnswers(answersFromWorkflow(wf.data));
       setStep('analysis');
     } catch (err) {
       setError(err instanceof Error ? err.message : '분석에 실패했습니다.');
@@ -158,7 +191,7 @@ export default function AppPage() {
     setError(null);
     try {
       const inputs = Object.entries(answers).map(([field_id, value]) => ({ field_id, value }));
-      const res = await saveWorkflowInputs(workflow.id, inputs);
+      const res = await withWorkflowRecovery((wf) => saveWorkflowInputs(wf.id, inputs));
       setWorkflow(res.data);
       setStep('draft');
       handleStartDraft(res.data.id);
@@ -178,8 +211,8 @@ export default function AppPage() {
     setRevisingSectionId(sectionId);
     setError(null);
     try {
-      await saveDraftFeedback(workflow.id, sectionId, feedback);
-      const res = await reviseDraft(workflow.id, sectionId);
+      await withWorkflowRecovery((wf) => saveDraftFeedback(wf.id, sectionId, feedback));
+      const res = await withWorkflowRecovery((wf) => reviseDraft(wf.id, sectionId));
       setWorkflow(res.data);
       // Clear local edit for this section so server content shows
       setLocalEdits((prev) => { const next = { ...prev }; delete next[sectionId]; return next; });
@@ -190,7 +223,7 @@ export default function AppPage() {
     }
   }
 
-  function handleStartDraft(workflowId: string) {
+  function handleStartDraft(workflowId: string, recovered = false) {
     setBusy('draft');
     setDraftLog([]);
     setActiveDelta('');
@@ -218,6 +251,19 @@ export default function AppPage() {
           setBusy(null);
         });
       } else if (event.type === 'error') {
+        if (!recovered && isWorkflowMissingError(event.content)) {
+          es.close();
+          esRef.current = null;
+          recoverWorkflowSession()
+            .then((restored) => {
+              if (restored) handleStartDraft(restored.id, true);
+              else {
+                setError(event.content);
+                setBusy(null);
+              }
+            });
+          return;
+        }
         setError(event.content);
         es.close();
         esRef.current = null;
@@ -232,7 +278,7 @@ export default function AppPage() {
     setBusy('finalize');
     setError(null);
     try {
-      const res = await finalizeWorkflow(workflow.id);
+      const res = await withWorkflowRecovery((wf) => finalizeWorkflow(wf.id));
       setWorkflow(res.data);
       setStep('download');
     } catch (err) {
@@ -248,14 +294,37 @@ export default function AppPage() {
     setError(null);
     try {
       let exported: ExportResponse;
-      if (format === 'hwpx') exported = await exportWorkflowHwpx(workflow.id);
-      else if (format === 'pdf') exported = await exportWorkflowPdf(workflow.id);
-      else exported = await exportWorkflowHtml(workflow.id);
+      if (format === 'hwpx') exported = await withWorkflowRecovery((wf) => exportWorkflowHwpx(wf.id));
+      else if (format === 'pdf') exported = await withWorkflowRecovery((wf) => exportWorkflowPdf(wf.id));
+      else exported = await withWorkflowRecovery((wf) => exportWorkflowHtml(wf.id));
       downloadExport(exported);
     } catch (err) {
       setError(err instanceof Error ? err.message : `${format.toUpperCase()} 다운로드에 실패했습니다.`);
     } finally {
       setBusy(null);
+    }
+  }
+
+  async function recoverWorkflowSession(): Promise<WorkflowSession | null> {
+    if (!workflow) return null;
+    try {
+      const restored = await restoreWorkflow(workflow.id, workflow);
+      setWorkflow(restored.data);
+      return restored.data;
+    } catch {
+      return null;
+    }
+  }
+
+  async function withWorkflowRecovery<T>(operation: (wf: WorkflowSession) => Promise<T>): Promise<T> {
+    if (!workflow) throw new Error('워크플로가 준비되지 않았습니다.');
+    try {
+      return await operation(workflow);
+    } catch (err) {
+      if (!isWorkflowMissingError(err)) throw err;
+      const restored = await recoverWorkflowSession();
+      if (!restored) throw err;
+      return operation(restored);
     }
   }
 
