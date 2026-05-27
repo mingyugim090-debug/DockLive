@@ -15,7 +15,7 @@ os.environ.setdefault("MOCK_MODE", "true")
 try:
     from core.config import settings  # noqa: E402
     from core.errors import AnalysisError  # noqa: E402
-    from services.hwpx_form_session import _clean_ai_draft_content, create_form_session, draft_all_regions, draft_region, draft_region_preview, export_form_session, get_form_session, update_region  # noqa: E402
+    from services.hwpx_form_session import _clean_ai_draft_content, _extract_length_intent, _fit_content_to_length, create_form_session, draft_all_regions, draft_region, draft_region_preview, export_form_session, get_form_session, update_region  # noqa: E402
 except ModuleNotFoundError as exc:  # pragma: no cover
     if exc.name not in {"pydantic", "fitz", "lxml"}:
         raise
@@ -27,6 +27,8 @@ except ModuleNotFoundError as exc:  # pragma: no cover
     export_form_session = None
     get_form_session = None
     _clean_ai_draft_content = None
+    _extract_length_intent = None
+    _fit_content_to_length = None
 
 
 class HwpxFormSessionTests(unittest.TestCase):
@@ -119,6 +121,52 @@ class HwpxFormSessionTests(unittest.TestCase):
             {"label": "동아리목표"},
         )
         self.assertEqual(cleaned, "본 동아리는 HWPX 문서 자동완성 역량을 중심으로 운영합니다.")
+
+    def test_length_intent_treats_rough_request_as_target_not_hard_cut(self):
+        if _extract_length_intent is None:
+            self.skipTest("backend document dependencies are not installed")
+
+        intent = _extract_length_intent(
+            {
+                "label": "3. AI 활용 역량",
+                "placeholder_hint": "AI Agent 활용 경험 및 현재 활용 현황",
+                "prompt": "500자 정도 AI 활용역량을 구체적으로 작성해줘.",
+            }
+        )
+
+        self.assertIsNone(intent["hard_limit"])
+        self.assertEqual(intent["target_chars"], 500)
+        self.assertEqual(intent["mode"], "target")
+
+    def test_length_intent_keeps_original_form_hard_limit_when_prompt_is_longer(self):
+        if _extract_length_intent is None:
+            self.skipTest("backend document dependencies are not installed")
+
+        intent = _extract_length_intent(
+            {
+                "label": "2. Solution *250자 이내 작성",
+                "placeholder_hint": "제품 차별성, 경쟁력 중심으로 소개",
+                "prompt": "500자 정도 구체적으로 작성해줘.",
+            }
+        )
+
+        self.assertEqual(intent["hard_limit"], 250)
+        self.assertEqual(intent["target_chars"], 500)
+        self.assertEqual(intent["mode"], "hard_limit_overrides_target")
+
+    def test_fit_content_to_length_trims_at_sentence_boundary(self):
+        if _fit_content_to_length is None:
+            self.skipTest("backend document dependencies are not installed")
+
+        content = (
+            "첫 문장은 제출용 설명으로 완결됩니다. "
+            "두 번째 문장은 제한을 넘기기 전에 끝납니다. "
+            "세 번째 문장은 시스템의 정확성과"
+        )
+        fitted = _fit_content_to_length(content, {"hard_limit": 60})
+
+        self.assertLessEqual(len(fitted), 60)
+        self.assertTrue(fitted.endswith("."))
 
     def test_hwpx_region_draft_preview_does_not_mutate_session(self):
         if create_form_session is None:

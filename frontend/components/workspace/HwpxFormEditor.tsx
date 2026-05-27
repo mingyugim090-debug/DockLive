@@ -200,6 +200,36 @@ function promptForInlineAction(action: InlineAiAction, region: HwpxEditableRegio
   return `${region.label} 내용을 중복 없이 다시 작성해줘.`;
 }
 
+function targetCharCount(region: HwpxEditableRegion): number | null {
+  const text = `${region.label} ${region.placeholder_hint} ${region.prompt}`;
+  const matches: number[] = [];
+  const pattern = /(\d{2,5})\s*자/g;
+  let match = pattern.exec(text);
+  while (match) {
+    const count = Number(match[1]);
+    if (count) matches.push(count);
+    match = pattern.exec(text);
+  }
+  if (!matches.length) return null;
+  return Math.max(...matches);
+}
+
+function hasGuideRemnant(value: string): boolean {
+  const compact = value.replace(/\s+/g, '');
+  if (compact.includes('작성안내') || compact.includes('삭제후제출')) return true;
+  return /(^|\n)\s*[※*]\s*\d{2,5}\s*자\s*(이내|내외|미만|까지)?\s*작성/.test(value);
+}
+
+function looksIncompleteSentence(value: string): boolean {
+  const text = compactText(value);
+  if (text.length < 40) return false;
+  if (/[.!?。！？]$/.test(text)) return false;
+  if (/(습니다|합니다|됩니다|입니다|했습니다|하겠습니다|된다|한다|이다|다|요|함|임|됨|음)$/.test(text)) {
+    return false;
+  }
+  return /(정확성과|효율성과|안정성과|가능성과|필요성과|그리고|또는|및|으로|로|하며|하고|통해|기반으로|중심으로)$/.test(text);
+}
+
 function scanQualityFindings(regions: HwpxEditableRegion[]): QualityFinding[] {
   const findings: QualityFinding[] = [];
   const seen = new Map<string, HwpxEditableRegion>();
@@ -224,6 +254,34 @@ function scanQualityFindings(regions: HwpxEditableRegion[]): QualityFinding[] {
         label: region.label,
         message: '원본 작성 안내 문구가 그대로 남아 있습니다.',
         actionPrompt: `${region.label} 항목의 안내 문구를 제거하고 제출용 본문으로 작성해줘.`,
+      });
+    }
+    if (hasGuideRemnant(region.value)) {
+      findings.push({
+        id: `${region.id}-guide`,
+        regionId: region.id,
+        label: region.label,
+        message: '작성 안내나 placeholder 문구가 남아 있습니다.',
+        actionPrompt: `${region.label} 항목에서 작성 안내와 placeholder를 제거하고 제출용 본문만 남겨줘.`,
+      });
+    }
+    if (looksIncompleteSentence(region.value)) {
+      findings.push({
+        id: `${region.id}-incomplete`,
+        regionId: region.id,
+        label: region.label,
+        message: '문장이 중간에 끊긴 것 같습니다.',
+        actionPrompt: `${region.label} 항목의 마지막 문장을 완결하고, 사용자의 요청사항을 빠짐없이 반영해 다시 작성해줘.`,
+      });
+    }
+    const targetChars = targetCharCount(region);
+    if (region.kind === 'textarea' && targetChars && value.length < Math.min(targetChars * 0.45, 180)) {
+      findings.push({
+        id: `${region.id}-target-short`,
+        regionId: region.id,
+        label: region.label,
+        message: '요청한 분량보다 내용이 부족합니다.',
+        actionPrompt: `${region.label} 항목을 요청한 분량에 맞게 더 구체적으로 확장하되 문장을 완결해줘.`,
       });
     }
     if (region.kind === 'textarea' && value.length < 45) {
@@ -744,18 +802,56 @@ function EditStep(props: {
           onFilter={props.onReviewFilter}
           onSelect={props.onSelect}
         />
+        <ExportDock
+          busy={props.busy}
+          exported={props.exported}
+          filled={filled}
+          total={total}
+          onExport={props.onExport}
+        />
       </aside>
 
       <div className="flex items-center justify-between xl:col-span-2">
         <Button variant="secondary" onClick={props.onBack}>새 파일 업로드</Button>
         <div className="flex items-center gap-3">
           <span className="text-sm text-[#65736E]">진행: {filled}/{total} 항목 완료</span>
-          <Button data-testid="hwpx-export-button" onClick={props.onExport} disabled={Boolean(props.busy)}>
+          <Button data-testid="hwpx-export-secondary-button" onClick={props.onExport} disabled={Boolean(props.busy)}>
             {props.busy === 'export' ? 'HWPX 생성 중...' : props.exported ? '수정본 HWPX 다시 생성' : '최종 HWPX 생성'}
           </Button>
         </div>
       </div>
     </div>
+  );
+}
+
+function ExportDock({
+  busy,
+  exported,
+  filled,
+  total,
+  onExport,
+}: {
+  busy: string | null;
+  exported: boolean;
+  filled: number;
+  total: number;
+  onExport: () => void;
+}) {
+  return (
+    <section className="sticky bottom-0 z-30 -mx-2 rounded-t-2xl border border-[#DDE7E2] bg-white/95 p-4 shadow-[0_-16px_36px_rgba(36,49,45,0.10)] backdrop-blur">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold text-[#3A7A68]">HWPX 최종 다운로드</p>
+          <p className="mt-1 text-xs text-[#65736E]">{filled}/{total} 항목 반영됨</p>
+        </div>
+        {exported ? (
+          <span className="rounded-full bg-[#EDF7F2] px-2.5 py-1 text-xs font-extrabold text-[#245D50]">생성 완료</span>
+        ) : null}
+      </div>
+      <Button data-testid="hwpx-export-button" className="w-full" onClick={onExport} disabled={Boolean(busy)}>
+        {busy === 'export' ? 'HWPX 생성 중...' : exported ? '수정본 HWPX 다시 다운로드' : '최종 HWPX 다운로드'}
+      </Button>
+    </section>
   );
 }
 

@@ -156,6 +156,7 @@ def draft_region_preview(session_id: str, region_id: str, base_input: str = "", 
 
 def draft_all_regions(session_id: str, base_input: str = "", global_prompt: str = "", overwrite_existing: bool = False) -> dict[str, Any]:
     session = _load_session(session_id)
+    draft_context = _build_batch_draft_context(session, base_input, global_prompt)
     drafted = 0
     skipped = 0
     for region in session.get("regions", []):
@@ -163,7 +164,7 @@ def draft_all_regions(session_id: str, base_input: str = "", global_prompt: str 
             skipped += 1
             continue
         prompt = _batch_prompt_for_region(region, global_prompt)
-        generated = _generate_region_text(session, region, base_input, prompt)
+        generated = _generate_region_text(session, region, base_input, prompt, draft_context=draft_context)
         if not generated.strip():
             skipped += 1
             continue
@@ -267,6 +268,8 @@ def _region_for_export(region: dict[str, Any]) -> dict[str, Any]:
 
 def _clean_export_value(value: str, region: dict[str, Any]) -> str:
     cleaned = _clean_ai_draft_content(value, region)
+    cleaned = _remove_export_guide_lines(cleaned)
+    cleaned = _fit_content_to_length(cleaned, _extract_length_intent(region))
     placeholder = str(region.get("placeholder_hint") or "").strip()
     if placeholder and compact_for_compare(cleaned) == compact_for_compare(placeholder):
         return ""
@@ -623,6 +626,50 @@ def _fallback_draft_text(session: dict[str, Any], region: dict[str, Any], base_i
     return "\n".join(lines)
 
 
+def _build_batch_draft_context(session: dict[str, Any], base_input: str, global_prompt: str) -> dict[str, Any]:
+    regions = sorted(session.get("regions") or [], key=lambda item: int(item.get("display_order") or 0))
+    outline: list[dict[str, Any]] = []
+    filled: list[dict[str, str]] = []
+    for region in regions:
+        outline.append(
+            {
+                "order": region.get("display_order"),
+                "section_heading": region.get("section_heading") or "",
+                "label": region.get("label") or "",
+                "placeholder_hint": region.get("placeholder_hint") or "",
+                "has_value": bool(str(region.get("value") or "").strip()),
+            }
+        )
+        value = str(region.get("value") or "").strip()
+        if value:
+            filled.append(
+                {
+                    "label": str(region.get("label") or ""),
+                    "value_summary": _context_excerpt(value, 180),
+                }
+            )
+
+    return {
+        "global_request": global_prompt.strip(),
+        "user_supplied_context": base_input.strip(),
+        "field_outline": outline[:60],
+        "filled_field_summaries": filled[:20],
+        "writing_rules": [
+            "각 칸은 원본 양식의 라벨과 작성 지침에 맞는 내용만 작성한다.",
+            "Problem은 해결할 문제, Solution은 해결 방식, AI 활용 역량은 실행 역량으로 연결한다.",
+            "이미 채워진 칸과 같은 문장을 반복하지 않는다.",
+            "모든 문장은 완결한다.",
+        ],
+    }
+
+
+def _context_excerpt(value: str, limit: int) -> str:
+    compacted = re.sub(r"\s+", " ", value or "").strip()
+    if len(compacted) <= limit:
+        return compacted
+    return compacted[: limit - 1].rstrip() + "..."
+
+
 def _should_batch_draft_region(region: dict[str, Any], overwrite_existing: bool) -> bool:
     kind = str(region.get("kind") or "text")
     if kind not in {"text", "textarea", "signature", "table"}:
@@ -653,7 +700,14 @@ def _batch_prompt_for_region(region: dict[str, Any], global_prompt: str = "") ->
     return "\n".join(prompt_parts)
 
 
-def _generate_region_text(session: dict[str, Any], region: dict[str, Any], base_input: str, prompt: str) -> str:
+def _generate_region_text(
+    session: dict[str, Any],
+    region: dict[str, Any],
+    base_input: str,
+    prompt: str,
+    *,
+    draft_context: dict[str, Any] | None = None,
+) -> str:
     fallback = _fallback_draft_text(session, region, base_input, prompt)
     if settings.MOCK_MODE:
         return fallback
@@ -663,7 +717,7 @@ def _generate_region_text(session: dict[str, Any], region: dict[str, Any], base_
             "MOCK_MODE=false로 백엔드를 다시 시작해 주세요."
         )
 
-    system_prompt, user_prompt = _build_region_draft_prompts(session, region, base_input, prompt)
+    system_prompt, user_prompt = _build_region_draft_prompts(session, region, base_input, prompt, draft_context=draft_context)
     try:
         data = call_json(
             "draft",
@@ -677,9 +731,7 @@ def _generate_region_text(session: dict[str, Any], region: dict[str, Any], base_
         raise AnalysisError("AI 응답이 JSON 형식이 아닙니다. 다시 시도해 주세요.") from exc
 
     content = _clean_ai_draft_content(str(data.get("content") or ""), region)
-    limit = _extract_char_limit(region)
-    if limit and len(content) > limit:
-        content = content[:limit].rstrip()
+    content = _fit_content_to_length(content, _extract_length_intent(region))
     if not content:
         raise AnalysisError("AI가 선택 항목에 넣을 내용을 생성하지 못했습니다. 요청 내용을 조금 더 구체적으로 입력해 주세요.")
     return content
@@ -699,8 +751,15 @@ def _draft_content_schema() -> dict[str, Any]:
     }
 
 
-def _build_region_draft_prompts(session: dict[str, Any], region: dict[str, Any], base_input: str, prompt: str) -> tuple[str, str]:
-    limit = _extract_char_limit(region)
+def _build_region_draft_prompts(
+    session: dict[str, Any],
+    region: dict[str, Any],
+    base_input: str,
+    prompt: str,
+    *,
+    draft_context: dict[str, Any] | None = None,
+) -> tuple[str, str]:
+    length_intent = _extract_length_intent(region)
     analysis = session.get("analysis") or {}
     region_context = {
         "document_title": analysis.get("title") or session.get("source_filename") or "",
@@ -711,8 +770,9 @@ def _build_region_draft_prompts(session: dict[str, Any], region: dict[str, Any],
         "current_value": region.get("value") or "",
         "user_supplied_context": base_input or "",
         "user_request": prompt or "",
-        "char_limit": limit,
+        "length_intent": length_intent,
         "nearby_fields": _nearby_region_context(session, region),
+        "document_context": draft_context or {},
     }
     system_prompt = "\n".join(
         [
@@ -723,6 +783,10 @@ def _build_region_draft_prompts(session: dict[str, Any], region: dict[str, Any],
             "항목명이나 라벨을 다시 쓰지 마세요. 예: 'Problem |', '동아리목표:' 같은 prefix 없이 본문부터 시작하세요.",
             "사용자가 주제와 방향을 준 경우에는 그 방향을 구체화하되, 사실처럼 단정해야 하는 고유정보는 피하세요.",
             "문체는 제출용으로 자연스럽고 구체적이어야 하며, 라벨이 요구하는 항목 밖의 내용을 섞지 마세요.",
+            "length_intent.hard_limit이 있으면 반드시 그 글자 수 안에서 완결된 문장으로 끝내세요. 중간에서 끊긴 문장, 조사로 끝나는 문장, 미완성 문구는 금지입니다.",
+            "length_intent.target_chars만 있으면 그 분량에 가깝게 충분히 작성하되 임의로 잘라내지 말고 모든 요청 조건을 반영하세요.",
+            "hard_limit과 target_chars가 충돌하면 원본 양식의 hard_limit을 우선하고, 가능한 범위 안에서 가장 구체적으로 작성하세요.",
+            "전체 문서 자동완성 중이면 document_context의 전체 요청과 주변 항목을 참고하여 Problem, Solution, AI 활용 역량이 서로 이어지게 작성하세요.",
             "반드시 JSON 객체 {\"content\": \"...\"} 형식으로만 답하세요.",
         ]
     )
@@ -754,14 +818,123 @@ def _nearby_region_context(session: dict[str, Any], region: dict[str, Any]) -> l
 
 
 def _extract_char_limit(region: dict[str, Any]) -> int | None:
-    text = " ".join(
-        str(region.get(key) or "")
-        for key in ("label", "placeholder_hint", "prompt")
+    return _extract_length_intent(region).get("hard_limit")
+
+
+def _extract_length_intent(region: dict[str, Any]) -> dict[str, Any]:
+    hard_limits: list[int] = []
+    targets: list[int] = []
+    sources: list[str] = []
+    hard_keywords = r"(이내|미만|까지|최대|한도|제한|넘지|초과하지)"
+    target_keywords = r"(정도|내외|분량|약|가량|쯤|around|about)"
+
+    for key in ("label", "placeholder_hint", "prompt"):
+        text = str(region.get(key) or "")
+        for match in re.finditer(r"(\d{2,5})\s*자\s*([가-힣A-Za-z\s]{0,12})", text, re.I):
+            count = int(match.group(1))
+            if count <= 0:
+                continue
+            suffix = match.group(2) or ""
+            before = text[max(0, match.start() - 12):match.start()]
+            context = f"{before} {suffix}"
+            if re.search(hard_keywords, context):
+                hard_limits.append(count)
+                sources.append(f"{key}:hard:{count}")
+            elif re.search(target_keywords, context, re.I):
+                targets.append(count)
+                sources.append(f"{key}:target:{count}")
+            elif key in {"label", "placeholder_hint"}:
+                hard_limits.append(count)
+                sources.append(f"{key}:hard:{count}")
+            else:
+                targets.append(count)
+                sources.append(f"{key}:target:{count}")
+
+    hard_limit = min(hard_limits) if hard_limits else None
+    target = max(targets) if targets else None
+    if hard_limit and target and target > hard_limit:
+        mode = "hard_limit_overrides_target"
+    elif hard_limit:
+        mode = "hard_limit"
+    elif target:
+        mode = "target"
+    else:
+        mode = "none"
+    return {
+        "hard_limit": hard_limit,
+        "target_chars": target,
+        "mode": mode,
+        "sources": sources,
+    }
+
+
+def _fit_content_to_length(content: str, length_intent: dict[str, Any]) -> str:
+    cleaned = _repair_incomplete_tail(content.strip())
+    hard_limit = length_intent.get("hard_limit")
+    if not hard_limit or len(cleaned) <= int(hard_limit):
+        return cleaned
+    return _trim_to_sentence_boundary(cleaned, int(hard_limit))
+
+
+def _trim_to_sentence_boundary(content: str, limit: int) -> str:
+    candidate = content[:limit].rstrip()
+    if not candidate:
+        return ""
+
+    last_sentence = max(candidate.rfind("."), candidate.rfind("?"), candidate.rfind("!"), candidate.rfind("。"), candidate.rfind("？"), candidate.rfind("！"))
+    if last_sentence >= max(30, int(limit * 0.55)):
+        return candidate[: last_sentence + 1].rstrip()
+
+    for pattern in (r"(습니다|합니다|됩니다|입니다|했다|한다|된다|이다|다)(?:\s|$)", r"(함|임|됨|음)(?:\s|$)"):
+        endings = list(re.finditer(pattern, candidate))
+        if endings and endings[-1].end() >= max(30, int(limit * 0.55)):
+            return candidate[: endings[-1].end()].rstrip()
+
+    for separator in ("\n", " ", ",", ";", "·"):
+        index = candidate.rfind(separator)
+        if index >= max(20, int(limit * 0.75)):
+            return candidate[:index].rstrip()
+    return candidate
+
+
+def _repair_incomplete_tail(content: str) -> str:
+    stripped = content.strip()
+    if len(stripped) < 40:
+        return stripped
+    complete_endings = (
+        ".", "?", "!", "。", "？", "！", "습니다", "합니다", "됩니다", "입니다",
+        "했습니다", "하겠습니다", "된다", "한다", "이다", "다", "요", "함", "임", "됨", "음",
     )
-    matches = [int(match) for match in re.findall(r"(\d{2,5})\s*자\s*(?:이내|내외|미만|까지)?", text)]
-    if not matches:
-        return None
-    return min(match for match in matches if match > 0)
+    if stripped.endswith(complete_endings):
+        return stripped
+    incomplete_endings = (
+        "정확성과", "효율성과", "안정성과", "가능성과", "필요성과", "및", "그리고", "또는",
+        "으로", "로", "하며", "하고", "통해", "기반으로", "중심으로",
+    )
+    if not stripped.endswith(incomplete_endings):
+        return stripped
+    last_sentence = max(stripped.rfind("."), stripped.rfind("?"), stripped.rfind("!"), stripped.rfind("。"), stripped.rfind("？"), stripped.rfind("！"))
+    if last_sentence >= max(30, int(len(stripped) * 0.45)):
+        return stripped[: last_sentence + 1].rstrip()
+    return stripped
+
+
+def _remove_export_guide_lines(value: str) -> str:
+    lines: list[str] = []
+    for line in value.splitlines():
+        stripped = line.strip()
+        compact = compact_for_compare(stripped)
+        if not stripped:
+            lines.append(line)
+            continue
+        if "작성안내" in compact or "삭제후제출" in compact:
+            continue
+        if stripped.startswith(("※", "*")) and re.search(r"\d{2,5}\s*자\s*(이내|내외|미만|까지)?\s*작성", stripped):
+            continue
+        if stripped.startswith(("※", "*")) and ("제출" in stripped and "작성" in stripped and len(stripped) < 120):
+            continue
+        lines.append(line)
+    return "\n".join(lines).strip()
 
 
 def _clean_ai_draft_content(content: str, region: dict[str, Any] | None = None) -> str:
