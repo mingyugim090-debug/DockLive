@@ -65,6 +65,7 @@ def analyze_hwpx_template_bytes(content: bytes, source_filename: str) -> dict:
     with zipfile.ZipFile(PathLikeBytes(content), "r") as zf:
         names = zf.namelist()
         preview_image = _extract_preview_image(zf, names)
+        style_maps = _parse_header_styles(zf, names)
         section_names = sorted(
             name
             for name in names
@@ -81,7 +82,7 @@ def analyze_hwpx_template_bytes(content: bytes, source_filename: str) -> dict:
             except ElementTree.ParseError as exc:
                 warnings.append(f"{name} XML을 해석하지 못했습니다: {exc}")
                 continue
-            blocks.extend(_parse_section(root, section_index, name))
+            blocks.extend(_parse_section(root, section_index, name, style_maps))
 
     _assign_roles(blocks)
     fields = _extract_fields(blocks)
@@ -142,7 +143,65 @@ class PathLikeBytes:
         return True
 
 
-def _parse_section(root: ElementTree.Element, section_index: int, section_path: str) -> list[dict]:
+def _parse_header_styles(zf: zipfile.ZipFile, names: list[str]) -> dict:
+    if "Contents/header.xml" not in names:
+        return {"border_fills": {}, "char_pr": {}, "para_pr": {}}
+    try:
+        root = ElementTree.fromstring(zf.read("Contents/header.xml"))
+    except ElementTree.ParseError:
+        return {"border_fills": {}, "char_pr": {}, "para_pr": {}}
+
+    border_fills: dict[str, dict] = {}
+    char_pr: dict[str, dict] = {}
+    para_pr: dict[str, dict] = {}
+
+    for node in root.iter():
+        local = _local(node.tag)
+        if local == "borderFill":
+            fill_id = node.get("id")
+            if not fill_id:
+                continue
+            face_color = ""
+            for child in node.iter():
+                if _local(child.tag) == "winBrush":
+                    face_color = _normalize_color(child.get("faceColor") or "")
+                    break
+            border_fills[fill_id] = {"background": face_color}
+        elif local == "charPr":
+            char_id = node.get("id")
+            if not char_id:
+                continue
+            height = _positive_int(node.get("height"), 0)
+            style: dict = {}
+            if height:
+                style["fontSize"] = max(7, min(28, round(height / 100)))
+            color = _normalize_color(node.get("textColor") or "")
+            if color:
+                style["color"] = color
+            if any(_local(child.tag).lower() in {"bold", "strong"} for child in node.iter()):
+                style["bold"] = True
+            char_pr[char_id] = style
+        elif local == "paraPr":
+            para_id = node.get("id")
+            if not para_id:
+                continue
+            style: dict = {}
+            align = next((child for child in node.iter() if _local(child.tag) == "align"), None)
+            if align is not None:
+                mapped = _map_align(align.get("horizontal") or "")
+                if mapped:
+                    style["align"] = mapped
+            line_spacing = next((child for child in node.iter() if _local(child.tag) == "lineSpacing"), None)
+            if line_spacing is not None:
+                value = _positive_int(line_spacing.get("value"), 0)
+                if value:
+                    style["lineHeight"] = max(1.0, min(2.2, round(value / 100, 2)))
+            para_pr[para_id] = style
+
+    return {"border_fills": border_fills, "char_pr": char_pr, "para_pr": para_pr}
+
+
+def _parse_section(root: ElementTree.Element, section_index: int, section_path: str, style_maps: dict) -> list[dict]:
     blocks: list[dict] = []
     metadata_started = False
     table_index = 0
@@ -158,7 +217,7 @@ def _parse_section(root: ElementTree.Element, section_index: int, section_path: 
                 current_table_index = table_index
                 table_index += 1
                 table_width = _table_width(table)
-                rows = _parse_table(table, table_width)
+                rows = _parse_table(table, table_width, style_maps)
                 table_text = _table_to_text(rows)
                 if _is_forbidden_text(table_text):
                     metadata_started = True
@@ -200,7 +259,7 @@ def _parse_section(root: ElementTree.Element, section_index: int, section_path: 
                     "section_index": section_index,
                     "text": text,
                     "rows": [],
-                    "style": _paragraph_style(child),
+                    "style": _paragraph_style(child, style_maps),
                     "options": _checkbox_options(text) if block_type == "checkboxGroup" else [],
                     "source_ref": {
                         "type": "paragraph",
@@ -212,8 +271,9 @@ def _parse_section(root: ElementTree.Element, section_index: int, section_path: 
     return blocks
 
 
-def _parse_table(table: ElementTree.Element, table_width: int = 0) -> list[list[dict]]:
+def _parse_table(table: ElementTree.Element, table_width: int = 0, style_maps: dict | None = None) -> list[list[dict]]:
     rows: list[list[dict]] = []
+    style_maps = style_maps or {}
     for tr in [node for node in list(table) if _local(node.tag) == "tr"]:
         cells: list[dict] = []
         direct_cells = [child for child in list(tr) if _local(child.tag) == "tc"]
@@ -221,6 +281,8 @@ def _parse_table(table: ElementTree.Element, table_width: int = 0) -> list[list[
             cell_addr = _cell_addr(tc)
             cell_span = _cell_span(tc)
             text = _text_excluding_nested_tables(tc)
+            cell_style = _table_cell_style(tc, style_maps)
+            background = _table_cell_background(tc, style_maps)
             cells.append(
                 {
                     "id": f"cell-{cell_addr['row']}-{cell_addr['col']}",
@@ -228,8 +290,10 @@ def _parse_table(table: ElementTree.Element, table_width: int = 0) -> list[list[
                     "row_span": cell_span["row"],
                     "col_span": cell_span["col"],
                     "width": _cell_width_percent(tc, table_width),
-                    "align": _table_cell_align(tc),
+                    "align": _table_cell_align(tc, style_maps),
                     "vertical_align": _table_cell_vertical_align(tc),
+                    "background": background,
+                    "style": cell_style,
                     "editable": _looks_editable_cell(text, len(cells)),
                 }
             )
@@ -447,9 +511,51 @@ def _cell_width_percent(cell: ElementTree.Element, table_width: int) -> int | No
     return max(1, min(100, round((width / table_width) * 100)))
 
 
+def _table_cell_style(cell: ElementTree.Element, style_maps: dict) -> dict:
+    style: dict = {}
+    first_paragraph = _first_descendant(cell, "p")
+    if first_paragraph is not None:
+        style.update(_style_from_para_ref(first_paragraph, style_maps))
+        style.update(_style_from_first_run(first_paragraph, style_maps))
+
+    size = _first_child(cell, "cellSz")
+    height = _int_attr(size, "height", 0) if size is not None else 0
+    if height:
+        style["minHeight"] = max(24, min(260, round(height / 80)))
+
+    margin = _first_child(cell, "cellMargin")
+    if margin is not None:
+        padding = {
+            key: max(1, min(28, round(_int_attr(margin, key, 0) / 80)))
+            for key in ("left", "right", "top", "bottom")
+        }
+        if any(padding.values()):
+            style["padding"] = padding
+
+    border_fill_id = cell.get("borderFillIDRef")
+    if border_fill_id:
+        style["borderFillId"] = border_fill_id
+    return style
+
+
+def _table_cell_background(cell: ElementTree.Element, style_maps: dict) -> str | None:
+    border_fill_id = cell.get("borderFillIDRef")
+    if not border_fill_id:
+        return None
+    color = (style_maps.get("border_fills") or {}).get(border_fill_id, {}).get("background")
+    return color or None
+
+
 def _first_child(node: ElementTree.Element, local_name: str) -> ElementTree.Element | None:
     for child in list(node):
         if _local(child.tag) == local_name:
+            return child
+    return None
+
+
+def _first_descendant(node: ElementTree.Element, local_name: str) -> ElementTree.Element | None:
+    for child in node.iter():
+        if child is not node and _local(child.tag) == local_name:
             return child
     return None
 
@@ -485,6 +591,35 @@ def _zero_based_int_attr(node: ElementTree.Element, local_name: str, default: in
             except ValueError:
                 return default
     return default
+
+
+def _positive_int(value: str | None, default: int) -> int:
+    try:
+        return max(0, int(value or default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _normalize_color(value: str) -> str:
+    color = value.strip()
+    if not color or color.lower() in {"none", "transparent"}:
+        return ""
+    if re.fullmatch(r"#[0-9A-Fa-f]{8}", color):
+        return f"#{color[-6:]}"
+    if re.fullmatch(r"#[0-9A-Fa-f]{6}", color):
+        return color.upper()
+    return ""
+
+
+def _map_align(value: str) -> str:
+    horizontal = value.strip().upper()
+    if horizontal == "CENTER":
+        return "center"
+    if horizontal == "RIGHT":
+        return "right"
+    if horizontal in {"LEFT", "JUSTIFY", "DISTRIBUTE", "DISTRIBUTE_SPACE"}:
+        return "left"
+    return ""
 
 
 def _local(tag: str) -> str:
@@ -524,9 +659,12 @@ def _checkbox_options(value: str) -> list[dict]:
     ]
 
 
-def _paragraph_style(paragraph: ElementTree.Element) -> dict:
+def _paragraph_style(paragraph: ElementTree.Element, style_maps: dict | None = None) -> dict:
     text = _paragraph_text(paragraph)
     style: dict = {"align": "left", "fontSize": 12, "bold": False}
+    if style_maps:
+        style.update(_style_from_para_ref(paragraph, style_maps))
+        style.update(_style_from_first_run(paragraph, style_maps))
     if len(text) <= 80 and _looks_like_title(text):
         style.update({"align": "center", "fontSize": 22, "bold": True})
     elif _looks_like_section_heading(text) or SECTION_RE.match(text):
@@ -534,7 +672,30 @@ def _paragraph_style(paragraph: ElementTree.Element) -> dict:
     return style
 
 
-def _table_cell_align(cell: ElementTree.Element) -> str:
+def _style_from_para_ref(paragraph: ElementTree.Element, style_maps: dict) -> dict:
+    para_id = paragraph.get("paraPrIDRef")
+    if not para_id:
+        return {}
+    return dict((style_maps.get("para_pr") or {}).get(para_id, {}))
+
+
+def _style_from_first_run(node: ElementTree.Element, style_maps: dict) -> dict:
+    run = _first_descendant(node, "run")
+    if run is None:
+        return {}
+    char_id = run.get("charPrIDRef")
+    if not char_id:
+        return {}
+    return dict((style_maps.get("char_pr") or {}).get(char_id, {}))
+
+
+def _table_cell_align(cell: ElementTree.Element, style_maps: dict | None = None) -> str:
+    if style_maps:
+        first_paragraph = _first_descendant(cell, "p")
+        if first_paragraph is not None:
+            align = _style_from_para_ref(first_paragraph, style_maps).get("align")
+            if align in {"left", "center", "right"}:
+                return align
     text = _text_excluding_nested_tables(cell)
     return "center" if len(text.strip()) <= 20 else "left"
 

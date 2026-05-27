@@ -256,6 +256,20 @@ export interface HwpxTemplateCell {
   background?: string;
   editable?: boolean;
   source_ref?: Record<string, unknown>;
+  style?: {
+    fontSize?: number;
+    bold?: boolean;
+    color?: string;
+    lineHeight?: number;
+    minHeight?: number;
+    padding?: {
+      left?: number;
+      right?: number;
+      top?: number;
+      bottom?: number;
+    };
+    borderFillId?: string;
+  };
 }
 
 export interface HwpxTemplateBlock {
@@ -419,6 +433,7 @@ export interface HwpxTextStyle {
   align?: 'left' | 'center' | 'right';
   fontSize?: number;
   bold?: boolean;
+  color?: string;
   lineHeight?: number;
   marginTop?: number;
   marginBottom?: number;

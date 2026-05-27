@@ -313,6 +313,8 @@ class HwpxTemplateCell(BaseModel):
     width: Optional[int] = None
     background: Optional[str] = None
     editable: bool = True
+    style: dict[str, Any] = Field(default_factory=dict)
+    source_ref: dict[str, Any] = Field(default_factory=dict)
 
 
 class HwpxTemplateBlock(BaseModel):
@@ -324,6 +326,7 @@ class HwpxTemplateBlock(BaseModel):
     rows: list[list[HwpxTemplateCell]] = Field(default_factory=list)
     style: dict[str, Any] = Field(default_factory=dict)
     options: list[dict[str, Any]] = Field(default_factory=list)
+    source_ref: dict[str, Any] = Field(default_factory=dict)
 
 
 class HwpxTemplateField(BaseModel):

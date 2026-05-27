@@ -697,6 +697,12 @@ function HtmlTextBlock({
   const displayText = paragraphRegion?.value || text;
   const active = selected?.id === paragraphRegion?.id;
   const alignClass = block.style?.align === 'center' ? 'text-center' : block.style?.align === 'right' ? 'text-right' : 'text-left';
+  const textStyle = {
+    fontSize: block.style?.fontSize ? `${block.style.fontSize}px` : undefined,
+    lineHeight: block.style?.lineHeight ? String(block.style.lineHeight) : undefined,
+    color: typeof block.style?.color === 'string' ? block.style.color : undefined,
+    fontWeight: block.style?.bold ? 700 : undefined,
+  };
   const content = (
     <span className="whitespace-pre-wrap">
       {paragraphRegion ? (
@@ -717,11 +723,11 @@ function HtmlTextBlock({
       active ? 'bg-[#E7F1ED] ring-2 ring-[#245D50]' : '',
     ].join(' ');
     return paragraphRegion ? (
-      <button type="button" onClick={() => onSelect(paragraphRegion)} className={className}>
+      <button type="button" onClick={() => onSelect(paragraphRegion)} className={className} style={textStyle}>
         {content}
       </button>
     ) : (
-      <h3 className={className}>{content}</h3>
+      <h3 className={className} style={textStyle}>{content}</h3>
     );
   }
 
@@ -732,11 +738,11 @@ function HtmlTextBlock({
     active ? 'bg-[#E7F1ED] ring-2 ring-[#245D50]' : '',
   ].join(' ');
   return paragraphRegion ? (
-    <button type="button" onClick={() => onSelect(paragraphRegion)} className={className}>
+    <button type="button" onClick={() => onSelect(paragraphRegion)} className={className} style={textStyle}>
       {content}
     </button>
   ) : (
-    <p className={className}>{content}</p>
+    <p className={className} style={textStyle}>{content}</p>
   );
 }
 
@@ -764,6 +770,7 @@ function HtmlTableBlock({
               const active = selected?.id === region?.id;
               const filled = Boolean(region?.value.trim());
               const width = cell.width ? `${Math.max(5, Math.min(100, cell.width))}%` : undefined;
+              const contentStyle = cellContentStyle(cell);
               return (
                 <td
                   key={cell.id ?? `${rowIndex}-${cellIndex}`}
@@ -773,17 +780,18 @@ function HtmlTableBlock({
                     'border border-[#1F2933] p-0 align-middle',
                     cell.background ? '' : rowIndex === 0 || cellIndex === 0 ? 'bg-[#F1F4F2]' : 'bg-white',
                   ].join(' ')}
-                  style={{ width, backgroundColor: cell.background }}
+                  style={{ width, backgroundColor: cell.background, verticalAlign: verticalAlignCss(cell.vertical_align) }}
                 >
                   {region ? (
                     <button
                       type="button"
                       onClick={() => onSelect(region)}
                       className={[
-                        'group relative flex min-h-[32px] w-full items-start gap-1 px-2 py-1.5 text-left transition',
+                        'group relative flex w-full items-start gap-1 text-left transition',
                         active ? 'bg-[#E7F1ED] ring-2 ring-inset ring-[#245D50]' : 'hover:bg-[#F5FAF7]',
                         cell.align === 'center' ? 'justify-center text-center' : cell.align === 'right' ? 'justify-end text-right' : '',
                       ].join(' ')}
+                      style={contentStyle}
                     >
                       <span className="mt-0.5 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-white px-1 text-[10px] font-bold text-[#245D50] shadow-sm">
                         {regionNumber(region, regions.findIndex((item) => item.id === region.id))}
@@ -795,9 +803,10 @@ function HtmlTableBlock({
                   ) : (
                     <div
                       className={[
-                        'min-h-[32px] whitespace-pre-wrap break-words px-2 py-1',
+                        'whitespace-pre-wrap break-words',
                         cell.align === 'center' ? 'text-center' : cell.align === 'right' ? 'text-right' : 'text-left',
                       ].join(' ')}
+                      style={contentStyle}
                     >
                       {cell.text}
                     </div>
@@ -810,6 +819,27 @@ function HtmlTableBlock({
       </tbody>
     </table>
   );
+}
+
+function cellContentStyle(cell: HwpxTemplateCell) {
+  const padding = cell.style?.padding ?? {};
+  return {
+    minHeight: cell.style?.minHeight ? `${cell.style.minHeight}px` : '32px',
+    paddingLeft: `${padding.left ?? 8}px`,
+    paddingRight: `${padding.right ?? 8}px`,
+    paddingTop: `${padding.top ?? 6}px`,
+    paddingBottom: `${padding.bottom ?? 6}px`,
+    fontSize: cell.style?.fontSize ? `${cell.style.fontSize}px` : undefined,
+    lineHeight: cell.style?.lineHeight ? String(cell.style.lineHeight) : undefined,
+    color: cell.style?.color,
+    fontWeight: cell.style?.bold ? 700 : undefined,
+  };
+}
+
+function verticalAlignCss(value: HwpxTemplateCell['vertical_align']) {
+  if (value === 'top') return 'top';
+  if (value === 'bottom') return 'bottom';
+  return 'middle';
 }
 
 function RegionEditor({

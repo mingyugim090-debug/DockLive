@@ -36,6 +36,14 @@ class HwpxFormSessionTests(unittest.TestCase):
         self.assertGreaterEqual(len(session["regions"]), 10)
         self.assertTrue(any(region["source_ref"].get("type") == "table_cell" for region in session["regions"]))
         self.assertTrue(any(region["value"].strip() for region in session["regions"]))
+        cells = [
+            cell
+            for block in session["analysis"].get("blocks", [])
+            for row in block.get("rows", [])
+            for cell in row
+        ]
+        self.assertTrue(any(cell.get("background") for cell in cells))
+        self.assertTrue(any((cell.get("style") or {}).get("minHeight") for cell in cells))
 
         first_region = session["regions"][0]
         update_region(session["id"], first_region["id"], "테스트 입력값", "")
