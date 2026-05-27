@@ -6,6 +6,10 @@ import { syncCurrentUser } from '@/lib/auth';
 import { insforge } from '@/lib/insforge';
 
 export function AuthGate({ children }: { children: ReactNode }) {
+  if (process.env.NEXT_PUBLIC_E2E_AUTH_BYPASS === 'true') {
+    return <>{children}</>;
+  }
+
   const router = useRouter();
   const pathname = usePathname();
   const [ready, setReady] = useState(false);

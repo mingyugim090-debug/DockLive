@@ -430,6 +430,7 @@ function UploadStep({
         ref={inputRef}
         type="file"
         accept=".hwp,.hwpx"
+        data-testid="hwpx-file-input"
         className="hidden"
         onChange={(event) => onFile(event.target.files?.[0])}
       />
@@ -546,7 +547,7 @@ function EditStep(props: {
         <Button variant="secondary" onClick={props.onBack}>새 파일 업로드</Button>
         <div className="flex items-center gap-3">
           <span className="text-sm text-[#65736E]">진행: {filled}/{total} 항목 완료</span>
-          <Button onClick={props.onExport} disabled={Boolean(props.busy)}>
+          <Button data-testid="hwpx-export-button" onClick={props.onExport} disabled={Boolean(props.busy)}>
             {props.busy === 'export' ? 'HWPX 생성 중...' : props.exported ? '수정본 HWPX 다시 생성' : '최종 HWPX 생성'}
           </Button>
         </div>
@@ -591,7 +592,7 @@ function BatchDraftPanel({
       </label>
       <div className="mt-4 flex items-center justify-between gap-3">
         <span className="text-xs font-semibold text-[#65736E]">AI 작성 대상 {aiTargets}개</span>
-        <Button onClick={onGenerateAll} disabled={Boolean(busy) || aiTargets === 0}>
+        <Button data-testid="hwpx-draft-all-button" onClick={onGenerateAll} disabled={Boolean(busy) || aiTargets === 0}>
           {busy === 'draft-all' ? '전체 작성 중...' : '전체 자동완성'}
         </Button>
       </div>
@@ -641,6 +642,7 @@ function ReviewSummary({
             <button
               key={option.id}
               type="button"
+              data-testid={`review-filter-${option.id}`}
               onClick={() => onFilter(option.id)}
               className={[
                 'rounded-xl border px-3 py-2 text-left transition',
