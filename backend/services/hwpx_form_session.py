@@ -104,6 +104,7 @@ def add_component(session_id: str, kind: str = "textarea", label: str = "", valu
         "id": f"component-{uuid.uuid4().hex[:16]}",
         "kind": component_kind,
         "label": label,
+        "section_heading": "추가 입력 항목",
         "display_order": len(session.get("regions", [])) + 1,
         "page_index": max(0, len(session.get("pages") or []) - 1),
         "bbox": {"x": 1.0, "y": 92.0, "width": 98.0, "height": 5.0},
@@ -314,29 +315,149 @@ def _extract_editable_regions(content: bytes, page_count: int) -> list[dict[str,
 def _table_regions(section_path: str, table: Any, table_index: int, start_order: int, page_count: int) -> list[dict[str, Any]]:
     rows = _children(table, "tr")
     regions: list[dict[str, Any]] = []
+    section_heading = ""
+    pending_label = ""
     for row_index, row in enumerate(rows):
         cells = _children(row, "tc")
-        texts = [_node_text(cell) for cell in cells]
-        for cell_index, cell in enumerate(cells):
-            text = texts[cell_index].strip()
-            prev = texts[cell_index - 1].strip() if cell_index > 0 else ""
-            next_text = texts[cell_index + 1].strip() if cell_index + 1 < len(texts) else ""
-            if not _looks_editable_cell(text, prev, cell_index, next_text):
+        infos = [_cell_info(cell, row_index, cell_index) for cell_index, cell in enumerate(cells)]
+        visible_texts = [info["text"] for info in infos if info["text"]]
+        if not visible_texts:
+            continue
+
+        if _is_section_heading_row(infos):
+            section_heading = _clean_section_heading(visible_texts[0])
+            pending_label = ""
+            continue
+
+        if len(infos) == 1:
+            info = infos[0]
+            text = info["text"]
+            if _looks_like_prompt_label(text) and not _is_hint_text(text):
+                pending_label = _label_from_prompt_text(text)
                 continue
-            hint = text if text.startswith("*") or _is_hint_text(text) else ""
-            label = _label_for_cell(prev, text, row_index, cell_index)
-            kind = "textarea" if (len(hint) > 40 or _is_long_text_label(label)) else "text"
+            if _is_hint_text(text) or _is_placeholder(text):
+                label = pending_label or _label_from_hint_text(text) or section_heading or f"{row_index + 1}행 {info['col'] + 1}열"
+                hint = text if _is_hint_text(text) or _is_placeholder(text) else ""
+                regions.append(
+                    _table_cell_region(
+                        section_path,
+                        table_index,
+                        info,
+                        len(regions),
+                        start_order,
+                        page_count,
+                        label,
+                        "",
+                        hint,
+                        section_heading,
+                    )
+                )
+                pending_label = ""
+            continue
+
+        consumed: set[int] = set()
+        for index, info in enumerate(infos):
+            if index in consumed:
+                continue
+            text = info["text"]
+            next_info = infos[index + 1] if index + 1 < len(infos) else None
+            if next_info and (_is_inline_label(text) or (_looks_like_prompt_label(text) and not _is_inline_label(next_info["text"]))):
+                label = _label_from_prompt_text(text)
+                next_text = next_info["text"]
+                hint = _combined_hint(text, next_text)
+                value = "" if hint or _is_placeholder(next_text) else _clean_region_value(next_text)
+                regions.append(
+                    _table_cell_region(
+                        section_path,
+                        table_index,
+                        next_info,
+                        len(regions),
+                        start_order,
+                        page_count,
+                        label,
+                        value,
+                        hint,
+                        section_heading,
+                        label_source={"row": info["row"], "col": info["col"], "text": text},
+                    )
+                )
+                consumed.update({index, index + 1})
+                continue
+
+            prev_text = infos[index - 1]["text"] if index > 0 else ""
+            next_text = next_info["text"] if next_info else ""
+            if next_info and _is_inline_label(next_text):
+                continue
+            if not _looks_editable_cell(text, prev_text, index, next_text):
+                continue
+            hint = text if _is_hint_text(text) else ""
+            label = _label_for_cell(prev_text, text, row_index, info["col"])
             value = "" if hint or _is_placeholder(text) else _clean_region_value(text)
-            order = start_order + len(regions)
-            source_ref = {
-                "type": "table_cell",
-                "section_path": section_path,
-                "table_index": table_index,
-                "row": _int_attr(_first_child(cell, "cellAddr"), "rowAddr", row_index),
-                "col": _int_attr(_first_child(cell, "cellAddr"), "colAddr", cell_index),
-            }
-            regions.append(_region(section_path, kind, order, page_count, label, value, source_ref, placeholder_hint=hint))
+            regions.append(
+                _table_cell_region(
+                    section_path,
+                    table_index,
+                    info,
+                    len(regions),
+                    start_order,
+                    page_count,
+                    label,
+                    value,
+                    hint,
+                    section_heading,
+                )
+            )
     return regions
+
+
+def _cell_info(cell: Any, row_index: int, cell_index: int) -> dict[str, Any]:
+    addr = _first_child(cell, "cellAddr")
+    span = _first_child(cell, "cellSpan")
+    return {
+        "cell": cell,
+        "text": _node_text(cell).strip(),
+        "row": _int_attr(addr, "rowAddr", row_index),
+        "col": _int_attr(addr, "colAddr", cell_index),
+        "row_span": _int_attr(span, "rowSpan", 1) if span is not None else 1,
+        "col_span": _int_attr(span, "colSpan", 1) if span is not None else 1,
+    }
+
+
+def _table_cell_region(
+    section_path: str,
+    table_index: int,
+    info: dict[str, Any],
+    local_order: int,
+    start_order: int,
+    page_count: int,
+    label: str,
+    value: str,
+    hint: str,
+    section_heading: str,
+    *,
+    label_source: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    kind = "textarea" if (len(hint) > 40 or len(value) > 80 or _is_long_text_label(label)) else "text"
+    source_ref = {
+        "type": "table_cell",
+        "section_path": section_path,
+        "table_index": table_index,
+        "row": info["row"],
+        "col": info["col"],
+    }
+    if label_source:
+        source_ref["label_source"] = label_source
+    return _region(
+        section_path,
+        kind,
+        start_order + local_order,
+        page_count,
+        label,
+        value,
+        source_ref,
+        placeholder_hint=hint,
+        section_heading=section_heading,
+    )
 
 
 def _filter_regions_to_visible_blocks(regions: list[dict[str, Any]], analysis: dict[str, Any]) -> list[dict[str, Any]]:
@@ -372,13 +493,25 @@ def _filter_regions_to_visible_blocks(regions: list[dict[str, Any]], analysis: d
     return filtered
 
 
-def _region(section_path: str, kind: str, order: int, page_count: int, label: str, value: str, source_ref: dict[str, Any], *, placeholder_hint: str = "") -> dict[str, Any]:
+def _region(
+    section_path: str,
+    kind: str,
+    order: int,
+    page_count: int,
+    label: str,
+    value: str,
+    source_ref: dict[str, Any],
+    *,
+    placeholder_hint: str = "",
+    section_heading: str = "",
+) -> dict[str, Any]:
     page_index = min(page_count - 1, order // 14)
     slot = order % 14
     return {
         "id": f"region-{uuid.uuid5(uuid.NAMESPACE_URL, section_path + json.dumps(source_ref, sort_keys=True)).hex[:16]}",
         "kind": kind,
         "label": _clean_label(label) or f"입력 영역 {order + 1}",
+        "section_heading": _clean_label(section_heading),
         "display_order": order + 1,
         "page_index": page_index,
         "bbox": {"x": 7.0, "y": 7.0 + slot * 6.2, "width": 86.0, "height": 5.4 if kind == "text" else 9.5},
@@ -767,6 +900,73 @@ def _looks_editable_cell(text: str, prev: str, cell_index: int, next_text: str =
     return _is_long_text_label(prev)
 
 
+def _is_section_heading_row(infos: list[dict[str, Any]]) -> bool:
+    visible = [info for info in infos if info["text"]]
+    if len(visible) != 1:
+        return False
+    info = visible[0]
+    text = info["text"]
+    if not _looks_like_section_heading_cell(text):
+        return False
+    if _looks_like_prompt_label(text) and not any(token in text for token in ("요약 소개", "상세 소개", "작성 안내")):
+        return False
+    return info.get("col_span", 1) > 1 or len(text) <= 80
+
+
+def _looks_like_section_heading_cell(text: str) -> bool:
+    value = _clean_label(text)
+    if not value:
+        return False
+    if any(token in value for token in ("작성 안내", "요약 소개", "상세 소개", "동아리 정보", "인적사항", "기본 정보", "활동계획")):
+        return True
+    return False
+
+
+def _looks_like_prompt_label(text: str) -> bool:
+    value = _clean_label(text)
+    if not value:
+        return False
+    if value.startswith("*"):
+        return False
+    if _looks_like_title_label(value):
+        return False
+    compact = re.sub(r"\s+", "", value)
+    if any(token in compact for token in ("Problem", "Solution", "AI활용", "풀고자하는문제", "나의솔루션", "활용역량")):
+        return True
+    if re.match(r"^\d+[\.)]\s*", value) and any(token in value for token in ("문제", "솔루션", "역량", "계획", "내용", "소개", "목표", "방법")):
+        return True
+    return _looks_like_cell_label(value) and len(value) <= 40
+
+
+def _label_from_prompt_text(text: str) -> str:
+    value = re.sub(r"\s+", " ", text.strip())
+    value = value.rstrip(":：")
+    value = re.sub(r"\s*\*\s*\d+\s*자\s*이내\s*작성.*$", "", value).strip()
+    value = re.sub(r"\s*\d+\s*자\s*이내\s*작성.*$", "", value).strip()
+    return _clean_label(value)
+
+
+def _is_inline_label(text: str) -> bool:
+    value = text.strip()
+    label = value.rstrip(":：").strip()
+    return bool(value.endswith((":", "：")) and 1 <= len(label) <= 30)
+
+
+def _combined_hint(label_text: str, target_text: str) -> str:
+    parts: list[str] = []
+    if _is_hint_text(label_text):
+        parts.append(label_text)
+    elif re.search(r"\d+\s*자\s*이내\s*작성", label_text):
+        parts.append(label_text)
+    if _is_hint_text(target_text) or _is_placeholder(target_text):
+        parts.append(target_text)
+    return " ".join(_clean_label(part) for part in parts if part.strip()).strip()
+
+
+def _clean_section_heading(text: str) -> str:
+    return _clean_label(re.sub(r"\s+", " ", text).strip())
+
+
 def _is_placeholder(text: str) -> bool:
     value = text.strip()
     return (
@@ -789,7 +989,7 @@ def _looks_like_cell_label(text: str) -> bool:
 
 def _looks_like_title_label(text: str) -> bool:
     value = text.strip()
-    return any(token in value for token in ("서식", "신청서", "계획서", "동의서", "공고", "안내"))
+    return any(token in value for token in ("서식", "별첨", "신청서", "계획서", "동의서", "공고", "안내", "작성 안내"))
 
 
 def _label_for_cell(prev: str, text: str, row: int, col: int) -> str:
@@ -805,7 +1005,7 @@ def _label_for_cell(prev: str, text: str, row: int, col: int) -> str:
 
 
 def _is_long_text_label(label: str) -> bool:
-    return any(token in label for token in ("소개", "동기", "계획", "내용", "목표", "방법", "사유", "자기", "활동"))
+    return any(token in label for token in ("소개", "동기", "계획", "내용", "목표", "방법", "사유", "자기", "활동", "문제", "솔루션", "역량", "제품", "서비스"))
 
 
 def _looks_like_writing_paragraph(text: str) -> bool:
@@ -874,6 +1074,7 @@ def _fallback_region() -> dict[str, Any]:
         "id": "region-document-summary",
         "kind": "textarea",
         "label": "문서 입력 내용",
+        "section_heading": "기본 입력 항목",
         "display_order": 1,
         "page_index": 0,
         "bbox": {"x": 8.0, "y": 10.0, "width": 84.0, "height": 12.0},

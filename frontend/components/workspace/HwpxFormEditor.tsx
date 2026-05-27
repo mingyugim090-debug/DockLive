@@ -867,6 +867,9 @@ function RegionEditor({
       {selected ? (
         <div className="mt-3 space-y-4">
           <div>
+            {selected.section_heading ? (
+              <p className="mb-1 text-xs font-bold text-[#8A9A94]">{selected.section_heading}</p>
+            ) : null}
             <p className="text-sm font-bold text-[#24312D]">{selected.label}</p>
             {selected.placeholder_hint ? (
               <p className="mt-1 text-xs leading-5 text-[#65736E]">{selected.placeholder_hint}</p>
@@ -928,32 +931,55 @@ function RegionProgress({
   selected: HwpxEditableRegion | null;
   onSelect: (region: HwpxEditableRegion) => void;
 }) {
+  const groups = groupRegionsBySection(regions);
   return (
     <section className="rounded-2xl border border-[#DDE7E2] bg-white p-5 shadow-sm">
       <p className="text-xs font-bold text-[#3A7A68]">입력 진행 상황</p>
-      <div className="mt-3 max-h-[420px] space-y-2 overflow-auto pr-1">
-        {regions.map((region, index) => (
-          <button
-            key={region.id}
-            type="button"
-            onClick={() => onSelect(region)}
-            className={[
-              'grid w-full grid-cols-[28px_1fr_auto] gap-2 rounded-xl border px-3 py-2 text-left text-sm transition hover:bg-[#F8FBFA]',
-              selected?.id === region.id ? 'border-[#245D50] bg-[#F0F7F3] text-[#24312D]' : 'border-[#E4EBE7] text-[#65736E]',
-            ].join(' ')}
-          >
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-bold text-[#245D50]">
-              {regionNumber(region, index)}
-            </span>
-            <span className="min-w-0">
-              <span className="block font-bold">{region.label}</span>
-              <span className="mt-1 block truncate text-xs">{region.value || '빈 값'}</span>
-            </span>
-            <span className={['mt-0.5 h-2 w-2 rounded-full', region.value.trim() ? 'bg-[#3A7A68]' : 'bg-[#D7E2DD]'].join(' ')} />
-          </button>
+      <div className="mt-3 max-h-[420px] space-y-4 overflow-auto pr-1">
+        {groups.map((group) => (
+          <div key={group.heading} className="space-y-2">
+            <p className="truncate px-1 text-[11px] font-extrabold text-[#8A9A94]">{group.heading}</p>
+            {group.regions.map((region) => {
+              const index = regions.findIndex((item) => item.id === region.id);
+              return (
+                <button
+                  key={region.id}
+                  type="button"
+                  onClick={() => onSelect(region)}
+                  className={[
+                    'grid w-full grid-cols-[28px_1fr_auto] gap-2 rounded-xl border px-3 py-2 text-left text-sm transition hover:bg-[#F8FBFA]',
+                    selected?.id === region.id ? 'border-[#245D50] bg-[#F0F7F3] text-[#24312D]' : 'border-[#E4EBE7] text-[#65736E]',
+                  ].join(' ')}
+                >
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-bold text-[#245D50]">
+                    {regionNumber(region, index)}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block font-bold">{region.label}</span>
+                    <span className="mt-1 block truncate text-xs">{region.value || region.placeholder_hint || '빈 값'}</span>
+                  </span>
+                  <span className={['mt-0.5 h-2 w-2 rounded-full', region.value.trim() ? 'bg-[#3A7A68]' : 'bg-[#D7E2DD]'].join(' ')} />
+                </button>
+              );
+            })}
+          </div>
         ))}
       </div>
     </section>
   );
+}
+
+function groupRegionsBySection(regions: HwpxEditableRegion[]) {
+  const groups: Array<{ heading: string; regions: HwpxEditableRegion[] }> = [];
+  for (const region of regions) {
+    const heading = compactText(region.section_heading) || '기본 입력 항목';
+    const current = groups[groups.length - 1];
+    if (current?.heading === heading) {
+      current.regions.push(region);
+    } else {
+      groups.push({ heading, regions: [region] });
+    }
+  }
+  return groups;
 }
 

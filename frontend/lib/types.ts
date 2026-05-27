@@ -324,6 +324,7 @@ export interface HwpxEditableRegion {
   id: string;
   kind: 'text' | 'textarea' | 'checkbox' | 'signature' | 'table';
   label: string;
+  section_heading: string;
   display_order: number;
   page_index: number;
   bbox: { x: number; y: number; width: number; height: number };

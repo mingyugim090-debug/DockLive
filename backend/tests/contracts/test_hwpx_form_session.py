@@ -101,6 +101,40 @@ class HwpxFormSessionTests(unittest.TestCase):
         self.assertTrue(any("요약 소개" in text for text in texts))
         self.assertTrue(any("상세 소개" in text for text in texts))
 
+    def test_kaist_style_sections_map_labels_to_writing_cells(self):
+        if create_form_session is None:
+            self.skipTest("backend document dependencies are not installed")
+
+        hwpx = BytesIO()
+        section_xml = """<?xml version="1.0" encoding="utf-8"?>
+<section>
+  <p><tbl>
+    <tr><tc><cellAddr rowAddr="0" colAddr="0"/><cellSpan colSpan="2" rowSpan="1"/><p><run><t>요약 소개 (전체 1p 이내 작성)</t></run></p></tc></tr>
+    <tr><tc><cellAddr rowAddr="1" colAddr="0"/><p><run><t>1. Problem(풀고자 하는 문제)*250자 이내 작성</t></run></p></tc><tc><cellAddr rowAddr="1" colAddr="1"/><p><run><t>*시장 현황 및 문제점</t></run></p></tc></tr>
+    <tr><tc><cellAddr rowAddr="2" colAddr="0"/><p><run><t>2. Solution(정의한 문제에 대한 나의 솔루션)*250자 이내 작성</t></run></p></tc><tc><cellAddr rowAddr="2" colAddr="1"/><p><run><t>*제품 차별성 중심 작성</t></run></p></tc></tr>
+  </tbl></p>
+  <p><tbl>
+    <tr><tc><cellAddr rowAddr="0" colAddr="0"/><p><run><t>상세 소개 (항목 별 2p 이내 작성)</t></run></p></tc></tr>
+    <tr><tc><cellAddr rowAddr="1" colAddr="0"/><p><run><t>1. Problem (풀고자 하는 문제)</t></run></p></tc></tr>
+    <tr><tc><cellAddr rowAddr="2" colAddr="0"/><p><run><t>*창업 아이템의 필요성</t></run></p></tc></tr>
+  </tbl></p>
+</section>"""
+        with zipfile.ZipFile(hwpx, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("Contents/section0.xml", section_xml)
+
+        session = create_form_session(hwpx.getvalue(), "kaist-form.hwpx")
+        regions = session["regions"]
+        labels = [region["label"] for region in regions]
+
+        self.assertEqual(len(regions), 3)
+        self.assertNotIn("요약 소개", labels)
+        self.assertEqual(regions[0]["label"], "1. Problem(풀고자 하는 문제)")
+        self.assertEqual(regions[0]["section_heading"], "요약 소개 (전체 1p 이내 작성)")
+        self.assertEqual(regions[0]["source_ref"]["col"], 1)
+        self.assertEqual(regions[2]["label"], "1. Problem (풀고자 하는 문제)")
+        self.assertEqual(regions[2]["section_heading"], "상세 소개 (항목 별 2p 이내 작성)")
+        self.assertEqual(regions[2]["source_ref"]["row"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

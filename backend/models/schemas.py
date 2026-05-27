@@ -369,6 +369,7 @@ class HwpxEditableRegion(BaseModel):
     id: str
     kind: Literal["text", "textarea", "checkbox", "signature", "table"] = "text"
     label: str
+    section_heading: str = ""
     display_order: int = 0
     page_index: int = 0
     bbox: dict[str, float] = Field(default_factory=dict)
