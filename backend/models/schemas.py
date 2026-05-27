@@ -401,10 +401,18 @@ class HwpxFormSessionResponse(BaseModel):
 class HwpxRegionUpdateRequest(BaseModel):
     value: str = ""
     prompt: str = ""
+    draft_status: Optional[Literal["empty", "drafted", "revised"]] = None
 
 
 class HwpxRegionDraftRequest(BaseModel):
     base_input: str = ""
+    prompt: str = ""
+
+
+class HwpxRegionDraftPreviewResponse(BaseModel):
+    success: bool = True
+    region_id: str
+    content: str
     prompt: str = ""
 
 

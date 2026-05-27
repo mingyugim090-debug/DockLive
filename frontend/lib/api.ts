@@ -8,6 +8,7 @@ import type {
   HwpxComposeResponse,
   HwpxConvertResponse,
   HwpxFormSessionResponse,
+  HwpxRegionDraftPreviewResponse,
   NoticeDocument,
   NoticeGenerateResponse,
   HwpxPlaceholderMapResponse,
@@ -328,14 +329,28 @@ export async function getHwpxFormSession(id: string): Promise<HwpxFormSessionRes
 export async function updateHwpxRegion(
   sessionId: string,
   regionId: string,
-  payload: { value: string; prompt?: string },
+  payload: { value: string; prompt?: string; draftStatus?: 'empty' | 'drafted' | 'revised' },
 ): Promise<HwpxFormSessionResponse> {
   const res = await fetch(`${API_URL}/api/hwpx/sessions/${sessionId}/regions/${regionId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ value: payload.value, prompt: payload.prompt ?? '' }),
+    body: JSON.stringify({ value: payload.value, prompt: payload.prompt ?? '', draft_status: payload.draftStatus }),
   });
   if (!res.ok) throw await readError(res, `HWPX 입력 영역 저장 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function previewHwpxRegionDraft(
+  sessionId: string,
+  regionId: string,
+  payload: { baseInput: string; prompt: string },
+): Promise<HwpxRegionDraftPreviewResponse> {
+  const res = await fetchWithTimeout(`${API_URL}/api/hwpx/sessions/${sessionId}/regions/${regionId}/draft-preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ base_input: payload.baseInput, prompt: payload.prompt }),
+  }, 90000);
+  if (!res.ok) throw await readError(res, `AI 제안 생성 실패: ${res.status}`);
   return res.json();
 }
 

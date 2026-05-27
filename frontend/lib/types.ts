@@ -363,6 +363,13 @@ export interface HwpxFormSessionResponse {
   data: HwpxFormSession;
 }
 
+export interface HwpxRegionDraftPreviewResponse {
+  success: boolean;
+  region_id: string;
+  content: string;
+  prompt: string;
+}
+
 export interface HwpxConvertResponse extends ExportResponse {
   source_filename: string;
   conversion_method: string;

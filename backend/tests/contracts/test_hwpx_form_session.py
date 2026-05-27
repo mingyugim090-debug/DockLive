@@ -15,7 +15,7 @@ os.environ.setdefault("MOCK_MODE", "true")
 try:
     from core.config import settings  # noqa: E402
     from core.errors import AnalysisError  # noqa: E402
-    from services.hwpx_form_session import _clean_ai_draft_content, create_form_session, draft_all_regions, draft_region, export_form_session, update_region  # noqa: E402
+    from services.hwpx_form_session import _clean_ai_draft_content, create_form_session, draft_all_regions, draft_region, draft_region_preview, export_form_session, get_form_session, update_region  # noqa: E402
 except ModuleNotFoundError as exc:  # pragma: no cover
     if exc.name not in {"pydantic", "fitz", "lxml"}:
         raise
@@ -23,7 +23,9 @@ except ModuleNotFoundError as exc:  # pragma: no cover
     update_region = None
     draft_all_regions = None
     draft_region = None
+    draft_region_preview = None
     export_form_session = None
+    get_form_session = None
     _clean_ai_draft_content = None
 
 
@@ -117,6 +119,23 @@ class HwpxFormSessionTests(unittest.TestCase):
             {"label": "동아리목표"},
         )
         self.assertEqual(cleaned, "본 동아리는 HWPX 문서 자동완성 역량을 중심으로 운영합니다.")
+
+    def test_hwpx_region_draft_preview_does_not_mutate_session(self):
+        if create_form_session is None:
+            self.skipTest("backend document dependencies are not installed")
+
+        sample = ROOT / "docs" / "examples" / "withus-hwpx" / "withus-sample-filled.hwpx"
+        session = create_form_session(sample.read_bytes(), sample.name)
+        target = next(region for region in session["regions"] if region["kind"] == "textarea")
+        before_value = target["value"]
+
+        preview = draft_region_preview(session["id"], target["id"], base_input=before_value, prompt="짧게 다듬어줘")
+        after = get_form_session(session["id"])
+        after_target = next(region for region in after["regions"] if region["id"] == target["id"])
+
+        self.assertEqual(preview["region_id"], target["id"])
+        self.assertTrue(preview["content"].strip())
+        self.assertEqual(after_target["value"], before_value)
 
     def test_template_analysis_keeps_summary_form_tables(self):
         from services.hwpx_template_analysis import analyze_hwpx_template_bytes  # noqa: E402

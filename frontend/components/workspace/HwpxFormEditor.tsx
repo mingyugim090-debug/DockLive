@@ -4,9 +4,9 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import {
   createHwpxFormSession,
   draftAllHwpxRegions,
-  draftHwpxRegion,
   exportHwpxFormSession,
   getHwpxFormSession,
+  previewHwpxRegionDraft,
   updateHwpxRegion,
 } from '@/lib/api';
 import type { ExportResponse, HwpxEditableRegion, HwpxFormSession, HwpxTemplateBlock, HwpxTemplateCell } from '@/lib/types';
@@ -14,6 +14,30 @@ import { Button } from '@/components/ui/Button';
 
 type WorkflowStep = 'upload' | 'edit' | 'export';
 type ReviewFilter = 'all' | 'drafted' | 'revised' | 'empty';
+type InlineAiAction = 'write' | 'shorten' | 'expand' | 'formal' | 'rewrite';
+type AgentStageStatus = 'idle' | 'running' | 'done';
+
+type DraftProposal = {
+  regionId: string;
+  content: string;
+  prompt: string;
+  action: InlineAiAction;
+  actionLabel: string;
+};
+
+type AgentStage = {
+  id: string;
+  label: string;
+  status: AgentStageStatus;
+};
+
+type QualityFinding = {
+  id: string;
+  regionId: string;
+  label: string;
+  message: string;
+  actionPrompt: string;
+};
 
 const workflowSteps: Array<{ id: WorkflowStep; label: string; description: string }> = [
   { id: 'upload', label: '1. 양식 업로드', description: '자동화할 HWP/HWPX 원본 선택' },
@@ -22,6 +46,15 @@ const workflowSteps: Array<{ id: WorkflowStep; label: string; description: strin
 ];
 
 const HWPX_SESSION_STORAGE_KEY = 'livedock_hwpx_form_session_id';
+const agentStageLabels = ['문서 구조 분석', '전체 스토리라인 생성', '섹션 작성', '분량/톤 검수', '완료'];
+
+const inlineActionLabels: Record<InlineAiAction, string> = {
+  write: 'AI 작성',
+  shorten: '짧게',
+  expand: '구체화',
+  formal: '제출용 문체',
+  rewrite: '다시쓰기',
+};
 
 function downloadExport(exported: ExportResponse) {
   const bytes = Uint8Array.from(atob(exported.content), (char) => char.charCodeAt(0));
@@ -138,6 +171,90 @@ function isDirectlyFilled(region: HwpxEditableRegion | undefined | null): boolea
   return Boolean(region?.value.trim() && region.draft_status !== 'drafted');
 }
 
+function newAgentStages(status: AgentStageStatus = 'idle'): AgentStage[] {
+  return agentStageLabels.map((label, index) => ({
+    id: `stage-${index}`,
+    label,
+    status,
+  }));
+}
+
+function runningAgentStages(index: number): AgentStage[] {
+  return agentStageLabels.map((label, itemIndex) => ({
+    id: `stage-${itemIndex}`,
+    label,
+    status: itemIndex < index ? 'done' : itemIndex === index ? 'running' : 'idle',
+  }));
+}
+
+function completedAgentStages(): AgentStage[] {
+  return newAgentStages('done');
+}
+
+function promptForInlineAction(action: InlineAiAction, region: HwpxEditableRegion, detailPrompt = ''): string {
+  const base = detailPrompt.trim();
+  if (action === 'write') return base || `${region.label} 항목을 제출용 문장으로 작성해줘.`;
+  if (action === 'shorten') return `${region.label} 내용을 핵심만 남겨 더 짧고 명확하게 줄여줘.`;
+  if (action === 'expand') return `${region.label} 내용을 근거와 맥락이 드러나도록 더 구체화해줘.`;
+  if (action === 'formal') return `${region.label} 내용을 공모전 제출용 문체로 자연스럽고 전문적으로 다듬어줘.`;
+  return `${region.label} 내용을 중복 없이 다시 작성해줘.`;
+}
+
+function scanQualityFindings(regions: HwpxEditableRegion[]): QualityFinding[] {
+  const findings: QualityFinding[] = [];
+  const seen = new Map<string, HwpxEditableRegion>();
+
+  for (const region of regions) {
+    const value = compactText(region.value);
+    const hint = compactText(region.placeholder_hint);
+    if (!value) {
+      findings.push({
+        id: `${region.id}-empty`,
+        regionId: region.id,
+        label: region.label,
+        message: '아직 작성되지 않은 항목입니다.',
+        actionPrompt: `${region.label} 항목을 원본 작성 지침에 맞춰 작성해줘.`,
+      });
+      continue;
+    }
+    if (hint && value === hint) {
+      findings.push({
+        id: `${region.id}-placeholder`,
+        regionId: region.id,
+        label: region.label,
+        message: '원본 작성 안내 문구가 그대로 남아 있습니다.',
+        actionPrompt: `${region.label} 항목의 안내 문구를 제거하고 제출용 본문으로 작성해줘.`,
+      });
+    }
+    if (region.kind === 'textarea' && value.length < 45) {
+      findings.push({
+        id: `${region.id}-short`,
+        regionId: region.id,
+        label: region.label,
+        message: '서술형 항목치고 분량이 짧습니다.',
+        actionPrompt: `${region.label} 내용을 제출용으로 조금 더 구체화해줘.`,
+      });
+    }
+    if (value.length > 40) {
+      const key = value.replace(/\s+/g, '').slice(0, 80);
+      const previous = seen.get(key);
+      if (previous) {
+        findings.push({
+          id: `${region.id}-duplicate`,
+          regionId: region.id,
+          label: region.label,
+          message: `${previous.label} 항목과 내용이 비슷합니다.`,
+          actionPrompt: `${region.label} 내용을 이전 항목과 겹치지 않도록 다시 작성해줘.`,
+        });
+      } else {
+        seen.set(key, region);
+      }
+    }
+  }
+
+  return findings.slice(0, 8);
+}
+
 
 export function HwpxFormEditor() {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -147,6 +264,8 @@ export function HwpxFormEditor() {
   const [prompt, setPrompt] = useState('');
   const [globalPrompt, setGlobalPrompt] = useState('');
   const [reviewFilter, setReviewFilter] = useState<ReviewFilter>('all');
+  const [proposal, setProposal] = useState<DraftProposal | null>(null);
+  const [agentStages, setAgentStages] = useState<AgentStage[]>(() => newAgentStages());
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -155,6 +274,8 @@ export function HwpxFormEditor() {
     () => orderedRegions.find((region) => region.id === selectedId) ?? orderedRegions[0] ?? null,
     [orderedRegions, selectedId],
   );
+  const selectedProposal = proposal && selected?.id === proposal.regionId ? proposal : null;
+  const qualityFindings = useMemo(() => scanQualityFindings(orderedRegions), [orderedRegions]);
   const stepIndex = workflowSteps.findIndex((item) => item.id === step);
 
   useEffect(() => {
@@ -196,6 +317,8 @@ export function HwpxFormEditor() {
       setPrompt(firstRegion?.prompt ?? '');
       setGlobalPrompt('');
       setReviewFilter('all');
+      setProposal(null);
+      setAgentStages(newAgentStages());
       setStep('edit');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'HWPX 문서를 불러오지 못했습니다.');
@@ -210,6 +333,8 @@ export function HwpxFormEditor() {
     setPrompt('');
     setGlobalPrompt('');
     setReviewFilter('all');
+    setProposal(null);
+    setAgentStages(newAgentStages());
     setError(null);
     setStep('upload');
     localStorage.removeItem(HWPX_SESSION_STORAGE_KEY);
@@ -222,6 +347,7 @@ export function HwpxFormEditor() {
 
   function setRegionLocal(region: HwpxEditableRegion, value: string) {
     if (!session) return;
+    if (proposal?.regionId === region.id) setProposal(null);
     setSession({
       ...session,
       status: 'editing',
@@ -233,9 +359,9 @@ export function HwpxFormEditor() {
     });
   }
 
-  async function persistRegion(region: HwpxEditableRegion, value = region.value, nextPrompt = region.prompt) {
+  async function persistRegion(region: HwpxEditableRegion, value = region.value, nextPrompt = region.prompt, draftStatus?: 'empty' | 'drafted' | 'revised') {
     if (!session) return;
-    const response = await updateHwpxRegion(session.id, region.id, { value, prompt: nextPrompt });
+    const response = await updateHwpxRegion(session.id, region.id, { value, prompt: nextPrompt, draftStatus });
     setSession(response.data);
   }
 
@@ -254,39 +380,79 @@ export function HwpxFormEditor() {
   }
 
   async function generateSelectedDraft() {
+    await previewSelectedDraft('write');
+  }
+
+  async function previewSelectedDraft(action: InlineAiAction, overridePrompt?: string) {
     if (!session || !selected) return;
-    setBusy('draft');
+    await previewRegionDraft(selected, action, overridePrompt);
+  }
+
+  async function previewRegionDraft(region: HwpxEditableRegion, action: InlineAiAction, overridePrompt?: string) {
+    if (!session) return;
+    setBusy(`draft-${action}`);
     setError(null);
     try {
-      const nextPrompt = prompt || `${selected.label} 항목을 제출용 문장으로 작성해줘.`;
-      await persistRegion(selected, selected.value, nextPrompt);
-      const response = await draftHwpxRegion(session.id, selected.id, {
-        baseInput: selected.value,
+      const nextPrompt = overridePrompt || promptForInlineAction(action, region, action === 'write' && region.id === selected?.id ? prompt : '');
+      const response = await previewHwpxRegionDraft(session.id, region.id, {
+        baseInput: region.value,
         prompt: nextPrompt,
       });
-      const updated = response.data.regions.find((region) => region.id === selected.id);
-      setSession(response.data);
-      setSelectedId(selected.id);
-      setPrompt(updated?.prompt ?? nextPrompt);
-      setReviewFilter('drafted');
+      setProposal({
+        regionId: region.id,
+        content: response.content,
+        prompt: response.prompt || nextPrompt,
+        action,
+        actionLabel: inlineActionLabels[action],
+      });
+      setSelectedId(region.id);
+      setPrompt(response.prompt || nextPrompt);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'AI 초안 생성에 실패했습니다.');
+      setError(err instanceof Error ? err.message : 'AI 제안 생성에 실패했습니다.');
     } finally {
       setBusy(null);
     }
+  }
+
+  async function applyProposal() {
+    if (!session || !proposal) return;
+    const target = session.regions.find((region) => region.id === proposal.regionId);
+    if (!target) return;
+    setBusy('apply-proposal');
+    setError(null);
+    try {
+      await persistRegion(target, proposal.content, proposal.prompt, 'drafted');
+      setSelectedId(target.id);
+      setPrompt(proposal.prompt);
+      setProposal(null);
+      setReviewFilter('drafted');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'AI 제안 적용에 실패했습니다.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function cancelProposal() {
+    setProposal(null);
   }
 
   async function generateAllDrafts() {
     if (!session) return;
     setBusy('draft-all');
     setError(null);
+    setProposal(null);
     try {
+      setAgentStages(runningAgentStages(0));
       await persistAllRegions();
+      setAgentStages(runningAgentStages(1));
+      window.setTimeout(() => setAgentStages(runningAgentStages(2)), 80);
       const response = await draftAllHwpxRegions(session.id, {
         baseInput: globalPrompt,
         globalPrompt,
         overwriteExisting: false,
       });
+      setAgentStages(runningAgentStages(3));
       const nextRegions = sortRegions(response.data.regions);
       const nextSelected = selectedId
         ? nextRegions.find((region) => region.id === selectedId) ?? nextRegions[0] ?? null
@@ -295,8 +461,10 @@ export function HwpxFormEditor() {
       setSelectedId(nextSelected?.id ?? null);
       setPrompt(nextSelected?.prompt ?? '');
       setReviewFilter('drafted');
+      setAgentStages(completedAgentStages());
     } catch (err) {
       setError(err instanceof Error ? err.message : '전체 문서 자동완성에 실패했습니다.');
+      setAgentStages(newAgentStages());
     } finally {
       setBusy(null);
     }
@@ -337,16 +505,25 @@ export function HwpxFormEditor() {
           prompt={prompt}
           globalPrompt={globalPrompt}
           reviewFilter={reviewFilter}
+          proposal={selectedProposal}
+          agentStages={agentStages}
+          qualityFindings={qualityFindings}
           onSelect={selectRegion}
           onPrompt={setPrompt}
           onGlobalPrompt={setGlobalPrompt}
           onReviewFilter={setReviewFilter}
           onLocalChange={setRegionLocal}
+          onInlineAction={previewSelectedDraft}
+          onFixQuality={(region, fixPrompt) => previewRegionDraft(region, 'rewrite', fixPrompt)}
+          onApplyProposal={applyProposal}
+          onCancelProposal={cancelProposal}
+          onRegenerateProposal={() => proposal && previewSelectedDraft(proposal.action, proposal.prompt)}
           onSaveSelected={async () => {
             if (!selected) return;
             setBusy('save');
             try {
               await persistRegion(selected, selected.value, prompt);
+              if (proposal?.regionId === selected.id) setProposal(null);
             } catch (err) {
               setError(err instanceof Error ? err.message : '입력값 저장에 실패했습니다.');
             } finally {
@@ -466,11 +643,19 @@ function EditStep(props: {
   prompt: string;
   globalPrompt: string;
   reviewFilter: ReviewFilter;
+  proposal: DraftProposal | null;
+  agentStages: AgentStage[];
+  qualityFindings: QualityFinding[];
   onSelect: (region: HwpxEditableRegion) => void;
   onPrompt: (value: string) => void;
   onGlobalPrompt: (value: string) => void;
   onReviewFilter: (filter: ReviewFilter) => void;
   onLocalChange: (region: HwpxEditableRegion, value: string) => void;
+  onInlineAction: (action: InlineAiAction, overridePrompt?: string) => void;
+  onFixQuality: (region: HwpxEditableRegion, fixPrompt: string) => void;
+  onApplyProposal: () => void;
+  onCancelProposal: () => void;
+  onRegenerateProposal: () => void;
   onSaveSelected: () => void;
   onGenerateSelected: () => void;
   onGenerateAll: () => void;
@@ -509,16 +694,30 @@ function EditStep(props: {
         ) : null}
       </section>
 
-      <DocumentPreview session={props.session} regions={props.regions} selected={props.selected} onSelect={props.onSelect} />
+      <DocumentPreview
+        session={props.session}
+        regions={props.regions}
+        selected={props.selected}
+        busy={props.busy}
+        proposal={props.proposal}
+        qualityFindings={props.qualityFindings}
+        onSelect={props.onSelect}
+        onInlineAction={props.onInlineAction}
+        onApplyProposal={props.onApplyProposal}
+        onCancelProposal={props.onCancelProposal}
+        onRegenerateProposal={props.onRegenerateProposal}
+      />
 
-      <aside className="space-y-4">
+      <aside className="space-y-4 xl:sticky xl:top-[92px] xl:max-h-[calc(100vh-112px)] xl:self-start xl:overflow-y-auto xl:overscroll-contain xl:pr-2 [scrollbar-gutter:stable]">
         <BatchDraftPanel
           regions={props.regions}
           busy={props.busy}
           globalPrompt={props.globalPrompt}
+          agentStages={props.agentStages}
           onGlobalPrompt={props.onGlobalPrompt}
           onGenerateAll={props.onGenerateAll}
         />
+        <QualityPanel findings={props.qualityFindings} regions={props.regions} onSelect={props.onSelect} onFix={props.onFixQuality} />
         <ReviewSummary
           regions={props.regions}
           filter={props.reviewFilter}
@@ -529,8 +728,12 @@ function EditStep(props: {
           selected={props.selected}
           busy={props.busy}
           prompt={props.prompt}
+          proposal={props.proposal}
           onPrompt={props.onPrompt}
           onLocalChange={props.onLocalChange}
+          onApplyProposal={props.onApplyProposal}
+          onCancelProposal={props.onCancelProposal}
+          onRegenerateProposal={props.onRegenerateProposal}
           onSaveSelected={props.onSaveSelected}
           onGenerateSelected={props.onGenerateSelected}
         />
@@ -560,12 +763,14 @@ function BatchDraftPanel({
   regions,
   busy,
   globalPrompt,
+  agentStages,
   onGlobalPrompt,
   onGenerateAll,
 }: {
   regions: HwpxEditableRegion[];
   busy: string | null;
   globalPrompt: string;
+  agentStages: AgentStage[];
   onGlobalPrompt: (value: string) => void;
   onGenerateAll: () => void;
 }) {
@@ -595,6 +800,81 @@ function BatchDraftPanel({
         <Button data-testid="hwpx-draft-all-button" onClick={onGenerateAll} disabled={Boolean(busy) || aiTargets === 0}>
           {busy === 'draft-all' ? '전체 작성 중...' : '전체 자동완성'}
         </Button>
+      </div>
+      {agentStages.some((stage) => stage.status !== 'idle') ? (
+        <div className="mt-4 space-y-2 rounded-xl border border-[#DDE7E2] bg-white/80 p-3">
+          {agentStages.map((stage) => (
+            <div key={stage.id} className="flex items-center gap-2 text-xs">
+              <span
+                className={[
+                  'h-2.5 w-2.5 rounded-full',
+                  stage.status === 'done' ? 'bg-[#3A7A68]' : stage.status === 'running' ? 'bg-[#7A5CF0]' : 'bg-[#D7E2DD]',
+                ].join(' ')}
+              />
+              <span className={stage.status === 'running' ? 'font-extrabold text-[#24312D]' : 'font-semibold text-[#65736E]'}>
+                {stage.label}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function QualityPanel({
+  findings,
+  regions,
+  onSelect,
+  onFix,
+}: {
+  findings: QualityFinding[];
+  regions: HwpxEditableRegion[];
+  onSelect: (region: HwpxEditableRegion) => void;
+  onFix: (region: HwpxEditableRegion, fixPrompt: string) => void;
+}) {
+  if (!findings.length) {
+    return (
+      <section className="rounded-2xl border border-[#DDE7E2] bg-white p-5 shadow-sm">
+        <p className="text-xs font-bold text-[#3A7A68]">최종 품질 검수</p>
+        <p className="mt-2 text-sm leading-6 text-[#65736E]">다운로드 전 즉시 보정이 필요한 항목이 없습니다.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-2xl border border-[#F0D9A6] bg-[#FFFBF0] p-5 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-bold text-[#8A5A00]">최종 품질 검수</p>
+        <span className="rounded-full bg-white px-2.5 py-1 text-xs font-extrabold text-[#8A5A00]">{findings.length}</span>
+      </div>
+      <div className="mt-3 space-y-2">
+        {findings.slice(0, 4).map((finding) => {
+          const region = regions.find((item) => item.id === finding.regionId);
+          return (
+            <div key={finding.id} className="rounded-xl border border-[#F0D9A6] bg-white px-3 py-2">
+              <button
+                type="button"
+                className="block w-full text-left"
+                onClick={() => region && onSelect(region)}
+              >
+                <span className="block truncate text-xs font-extrabold text-[#24312D]">{finding.label}</span>
+                <span className="mt-1 block text-xs leading-5 text-[#7A6240]">{finding.message}</span>
+              </button>
+              <button
+                type="button"
+                className="mt-2 rounded-full border border-[#E4C47D] px-3 py-1 text-xs font-bold text-[#8A5A00] transition hover:bg-[#FFF4D7]"
+                onClick={() => {
+                  if (!region) return;
+                  onSelect(region);
+                  onFix(region, finding.actionPrompt);
+                }}
+              >
+                AI로 보정
+              </button>
+            </div>
+          );
+        })}
       </div>
     </section>
   );
@@ -684,19 +964,44 @@ function DocumentPreview({
   session,
   regions,
   selected,
+  busy,
+  proposal,
+  qualityFindings,
   onSelect,
+  onInlineAction,
+  onApplyProposal,
+  onCancelProposal,
+  onRegenerateProposal,
   compact = false,
 }: {
   session: HwpxFormSession;
   regions: HwpxEditableRegion[];
   selected: HwpxEditableRegion | null;
+  busy: string | null;
+  proposal: DraftProposal | null;
+  qualityFindings: QualityFinding[];
   onSelect: (region: HwpxEditableRegion) => void;
+  onInlineAction: (action: InlineAiAction, overridePrompt?: string) => void;
+  onApplyProposal: () => void;
+  onCancelProposal: () => void;
+  onRegenerateProposal: () => void;
   compact?: boolean;
 }) {
   const blocks = getAnalysisBlocks(session);
+  const selectedFindings = selected ? qualityFindings.filter((finding) => finding.regionId === selected.id) : [];
   if (blocks.length) {
     return (
       <section className={[compact ? 'max-h-[720px]' : 'h-[calc(100vh-260px)] min-h-[720px]', 'overflow-auto rounded-2xl border border-[#DDE7E2] bg-[#DDE5E1] p-6'].join(' ')}>
+        <InlineAiDock
+          selected={selected}
+          proposal={proposal}
+          busy={busy}
+          findings={selectedFindings}
+          onAction={onInlineAction}
+          onApply={onApplyProposal}
+          onCancel={onCancelProposal}
+          onRegenerate={onRegenerateProposal}
+        />
         <HtmlHwpxDocument
           session={session}
           blocks={blocks}
@@ -710,6 +1015,16 @@ function DocumentPreview({
 
   return (
     <section className={[compact ? 'max-h-[720px]' : 'h-[calc(100vh-260px)] min-h-[720px]', 'overflow-auto rounded-2xl border border-[#DDE7E2] bg-[#E2E8E5] p-5'].join(' ')}>
+      <InlineAiDock
+        selected={selected}
+        proposal={proposal}
+        busy={busy}
+        findings={selectedFindings}
+        onAction={onInlineAction}
+        onApply={onApplyProposal}
+        onCancel={onCancelProposal}
+        onRegenerate={onRegenerateProposal}
+      />
       <div className="mx-auto flex max-w-[920px] flex-col gap-8">
         {session.pages.map((page) => {
           const pageRegions = regions.filter((region) => region.page_index === page.page_index);
@@ -771,6 +1086,83 @@ function DocumentPreview({
         })}
       </div>
     </section>
+  );
+}
+
+function InlineAiDock({
+  selected,
+  proposal,
+  busy,
+  findings,
+  onAction,
+  onApply,
+  onCancel,
+  onRegenerate,
+}: {
+  selected: HwpxEditableRegion | null;
+  proposal: DraftProposal | null;
+  busy: string | null;
+  findings: QualityFinding[];
+  onAction: (action: InlineAiAction, overridePrompt?: string) => void;
+  onApply: () => void;
+  onCancel: () => void;
+  onRegenerate: () => void;
+}) {
+  if (!selected) return null;
+  const actions: InlineAiAction[] = ['write', 'shorten', 'expand', 'formal', 'rewrite'];
+  return (
+    <div className="sticky top-0 z-20 mx-auto mb-4 max-w-[760px] rounded-2xl border border-[#DDE7E2] bg-white/95 p-3 shadow-[0_16px_42px_rgba(36,49,45,0.14)] backdrop-blur">
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="min-w-0 flex-1 truncate text-xs font-extrabold text-[#245D50]">
+            {selected.label}
+          </span>
+          {findings.length ? (
+            <span className="rounded-full bg-[#FFF4D7] px-2.5 py-1 text-[11px] font-extrabold text-[#8A5A00]">
+              검수 {findings.length}
+            </span>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap gap-2" data-testid="inline-ai-toolbar">
+          {actions.map((action) => (
+            <button
+              key={action}
+              type="button"
+              data-testid={`inline-ai-${action}`}
+              disabled={Boolean(busy)}
+              onClick={() => onAction(action)}
+              className={[
+                'rounded-full border px-3 py-1.5 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50',
+                action === 'write'
+                  ? 'border-[#7A5CF0] bg-[#7A5CF0] text-white hover:bg-[#684CE0]'
+                  : 'border-[#DDE7E2] bg-white text-[#3F4F49] hover:bg-[#F6FAF8]',
+              ].join(' ')}
+            >
+              {busy === `draft-${action}` ? '작성 중...' : inlineActionLabels[action]}
+            </button>
+          ))}
+        </div>
+        {proposal ? (
+          <div className="rounded-xl border border-[#CDBEFF] bg-[#F7F3FF] p-3" data-testid="inline-ai-proposal">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-extrabold text-[#6D4BEF]">AI 제안 · {proposal.actionLabel}</p>
+              <div className="flex shrink-0 gap-1.5">
+                <button type="button" className="rounded-full bg-white px-3 py-1 text-xs font-bold text-[#6D4BEF]" onClick={onApply} disabled={Boolean(busy)}>
+                  적용
+                </button>
+                <button type="button" className="rounded-full bg-white px-3 py-1 text-xs font-bold text-[#65736E]" onClick={onRegenerate} disabled={Boolean(busy)}>
+                  다시 생성
+                </button>
+                <button type="button" className="rounded-full bg-white px-3 py-1 text-xs font-bold text-[#65736E]" onClick={onCancel} disabled={Boolean(busy)}>
+                  취소
+                </button>
+              </div>
+            </div>
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[#24312D]">{proposal.content}</p>
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -1012,16 +1404,24 @@ function RegionEditor({
   selected,
   busy,
   prompt,
+  proposal,
   onPrompt,
   onLocalChange,
+  onApplyProposal,
+  onCancelProposal,
+  onRegenerateProposal,
   onSaveSelected,
   onGenerateSelected,
 }: {
   selected: HwpxEditableRegion | null;
   busy: string | null;
   prompt: string;
+  proposal: DraftProposal | null;
   onPrompt: (value: string) => void;
   onLocalChange: (region: HwpxEditableRegion, value: string) => void;
+  onApplyProposal: () => void;
+  onCancelProposal: () => void;
+  onRegenerateProposal: () => void;
   onSaveSelected: () => void;
   onGenerateSelected: () => void;
 }) {
@@ -1077,9 +1477,20 @@ function RegionEditor({
               }
             />
           </label>
-          <Button onClick={onGenerateSelected} disabled={busy === 'draft'} className="w-full">
-            {busy === 'draft' ? 'AI 작성 중...' : 'AI로 선택 항목 채우기'}
+          <Button onClick={onGenerateSelected} disabled={Boolean(busy)} className="w-full">
+            {busy?.startsWith('draft') ? 'AI 제안 생성 중...' : 'AI 제안 만들기'}
           </Button>
+          {proposal ? (
+            <div className="rounded-xl border border-[#CDBEFF] bg-[#F7F3FF] p-3">
+              <p className="text-xs font-extrabold text-[#6D4BEF]">AI 제안</p>
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[#24312D]">{proposal.content}</p>
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                <Button className="px-3 py-2 text-xs" onClick={onApplyProposal} disabled={Boolean(busy)}>적용</Button>
+                <Button variant="secondary" className="px-3 py-2 text-xs" onClick={onRegenerateProposal} disabled={Boolean(busy)}>다시 생성</Button>
+                <Button variant="secondary" className="px-3 py-2 text-xs" onClick={onCancelProposal} disabled={Boolean(busy)}>취소</Button>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : (
         <p className="mt-3 text-sm leading-6 text-[#65736E]">왼쪽 문서에서 수정할 항목을 클릭하세요.</p>

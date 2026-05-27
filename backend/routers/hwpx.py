@@ -16,6 +16,7 @@ from models.schemas import (
     HwpxComponentCreateRequest,
     HwpxConvertResponse,
     HwpxFormSessionResponse,
+    HwpxRegionDraftPreviewResponse,
     HwpxRegionDraftRequest,
     HwpxRegionUpdateRequest,
     HwpxStatusResponse,
@@ -30,6 +31,7 @@ from services.hwpx_form_session import (
     create_form_session,
     draft_all_regions,
     draft_region,
+    draft_region_preview,
     export_form_session,
     get_form_session,
     update_region,
@@ -97,7 +99,7 @@ async def read_hwpx_form_session(session_id: str):
 
 @router.patch("/hwpx/sessions/{session_id}/regions/{region_id}", response_model=HwpxFormSessionResponse)
 async def update_hwpx_form_region(session_id: str, region_id: str, payload: HwpxRegionUpdateRequest):
-    session = update_region(session_id, region_id, payload.value, payload.prompt)
+    session = update_region(session_id, region_id, payload.value, payload.prompt, payload.draft_status)
     return HwpxFormSessionResponse(data=session)
 
 
@@ -105,6 +107,12 @@ async def update_hwpx_form_region(session_id: str, region_id: str, payload: Hwpx
 async def draft_hwpx_form_region(session_id: str, region_id: str, payload: HwpxRegionDraftRequest):
     session = draft_region(session_id, region_id, payload.base_input, payload.prompt)
     return HwpxFormSessionResponse(data=session)
+
+
+@router.post("/hwpx/sessions/{session_id}/regions/{region_id}/draft-preview", response_model=HwpxRegionDraftPreviewResponse)
+async def preview_hwpx_form_region_draft(session_id: str, region_id: str, payload: HwpxRegionDraftRequest):
+    preview = draft_region_preview(session_id, region_id, payload.base_input, payload.prompt)
+    return HwpxRegionDraftPreviewResponse(**preview)
 
 
 @router.post("/hwpx/sessions/{session_id}/draft-all", response_model=HwpxFormSessionResponse)

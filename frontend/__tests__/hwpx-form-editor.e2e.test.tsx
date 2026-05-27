@@ -10,6 +10,7 @@ const apiMocks = vi.hoisted(() => ({
   draftHwpxRegion: vi.fn(),
   exportHwpxFormSession: vi.fn(),
   getHwpxFormSession: vi.fn(),
+  previewHwpxRegionDraft: vi.fn(),
   updateHwpxRegion: vi.fn(),
 }));
 
@@ -231,5 +232,59 @@ describe('HWPX KAIST form workflow', () => {
 
     await waitFor(() => expect(apiMocks.exportHwpxFormSession).toHaveBeenCalledWith('hwpx-kaist-e2e'));
     expect(await screen.findByText('최종 HWPX가 생성되었습니다. 내용을 더 고치면 다시 생성할 수 있습니다.')).toBeInTheDocument();
+  });
+
+  it('shows an inline AI proposal and applies it only after approval', async () => {
+    const user = userEvent.setup();
+    const initialRegions = [
+      region('problem', '1. Problem(풀고자 하는 문제)', 1, 1, '요약 소개 (전체 1p 이내 작성)', '*시장 현황 및 문제점'),
+      region('solution', '2. Solution(정의한 문제에 대한 나의 솔루션)', 2, 1, '요약 소개 (전체 1p 이내 작성)', '*제품 차별성 중심 작성'),
+    ];
+    let currentSession = kaistSession(initialRegions);
+    const proposalText = 'HWPX 기반 문서 작성 과정은 원본 표 구조를 유지하면서도 반복 입력을 줄여야 한다.';
+
+    apiMocks.createHwpxFormSession.mockResolvedValue({ success: true, data: currentSession });
+    apiMocks.getHwpxFormSession.mockRejectedValue(new Error('no saved session'));
+    apiMocks.previewHwpxRegionDraft.mockResolvedValue({
+      success: true,
+      region_id: 'problem',
+      content: proposalText,
+      prompt: '1. Problem(풀고자 하는 문제) 항목을 제출용 문장으로 작성해줘.',
+    });
+    apiMocks.updateHwpxRegion.mockImplementation(async (_sessionId, regionId, payload) => {
+      currentSession = {
+        ...currentSession,
+        regions: currentSession.regions.map((item) =>
+          item.id === regionId
+            ? { ...item, value: payload.value, prompt: payload.prompt ?? item.prompt, draft_status: payload.draftStatus ?? 'revised' }
+            : item,
+        ),
+      };
+      return { success: true, data: currentSession };
+    });
+
+    render(<HwpxFormEditor />);
+
+    await user.upload(
+      screen.getByTestId('hwpx-file-input'),
+      new File(['fake hwpx bytes'], 'KAIST_OverEdge_창업_아이디어_기술서.hwpx', {
+        type: 'application/vnd.hancom.hwpx',
+      }),
+    );
+
+    await user.click(screen.getByTestId('inline-ai-write'));
+
+    expect(await screen.findByTestId('inline-ai-proposal')).toBeInTheDocument();
+    expect(screen.getAllByText(proposalText).length).toBeGreaterThanOrEqual(1);
+    expect(apiMocks.updateHwpxRegion).not.toHaveBeenCalled();
+
+    await user.click(screen.getAllByText('적용')[0]);
+
+    await waitFor(() => expect(apiMocks.updateHwpxRegion).toHaveBeenCalledTimes(1));
+    expect(apiMocks.updateHwpxRegion.mock.calls[0][2]).toMatchObject({
+      value: proposalText,
+      draftStatus: 'drafted',
+    });
+    expect(screen.getAllByText('AI 1').length).toBeGreaterThanOrEqual(1);
   });
 });

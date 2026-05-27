@@ -85,12 +85,15 @@ def get_form_session(session_id: str) -> dict[str, Any]:
     return _public_session(_load_session(session_id))
 
 
-def update_region(session_id: str, region_id: str, value: str = "", prompt: str = "") -> dict[str, Any]:
+def update_region(session_id: str, region_id: str, value: str = "", prompt: str = "", draft_status: str | None = None) -> dict[str, Any]:
     session = _load_session(session_id)
     region = _find_region(session, region_id)
     region["value"] = value
     region["prompt"] = prompt
-    region["draft_status"] = "revised" if value.strip() else "empty"
+    if draft_status in {"drafted", "revised", "empty"}:
+        region["draft_status"] = draft_status if value.strip() else "empty"
+    else:
+        region["draft_status"] = "revised" if value.strip() else "empty"
     session["status"] = "editing"
     session["updated_at"] = utc_now_iso()
     _save_session(session)
@@ -139,6 +142,18 @@ def draft_region(session_id: str, region_id: str, base_input: str = "", prompt: 
     return _public_session(session)
 
 
+def draft_region_preview(session_id: str, region_id: str, base_input: str = "", prompt: str = "") -> dict[str, Any]:
+    session = _load_session(session_id)
+    region = _find_region(session, region_id)
+    next_prompt = prompt or f"{region.get('label') or '선택 항목'} 항목을 제출용 문장으로 작성해줘."
+    generated = _generate_region_text(session, region, base_input, next_prompt)
+    return {
+        "region_id": region_id,
+        "content": generated,
+        "prompt": next_prompt,
+    }
+
+
 def draft_all_regions(session_id: str, base_input: str = "", global_prompt: str = "", overwrite_existing: bool = False) -> dict[str, Any]:
     session = _load_session(session_id)
     drafted = 0
@@ -182,7 +197,8 @@ def export_form_session(session_id: str) -> tuple[str, bytes, dict[str, Any]]:
         output_path = tmpdir / "result.hwpx"
         verify_path = tmpdir / "verify.json"
         source_path.write_bytes(source)
-        _clone_with_region_replacements(source_path, output_path, session["regions"])
+        export_regions = [_region_for_export(region) for region in session["regions"]]
+        _clone_with_region_replacements(source_path, output_path, export_regions)
 
         python_bin = sys.executable or "python"
         _run_hwpx_command([python_bin, str(scripts["fix_namespaces.py"]), str(output_path)])
@@ -216,7 +232,7 @@ def export_form_session(session_id: str) -> tuple[str, bytes, dict[str, Any]]:
         def _norm(s: str) -> str:
             return " ".join(s.split())
 
-        inserted = [r.get("value", "").strip() for r in session["regions"] if r.get("value", "").strip()]
+        inserted = [r.get("value", "").strip() for r in export_regions if r.get("value", "").strip()]
         norm_extracted = _norm(extracted)
         missing = [text[:40] for text in inserted if _norm(text)[:20] not in norm_extracted]
         if missing:
@@ -240,6 +256,25 @@ def export_form_session(session_id: str) -> tuple[str, bytes, dict[str, Any]]:
         return filename, content, summary
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def _region_for_export(region: dict[str, Any]) -> dict[str, Any]:
+    prepared = dict(region)
+    value = str(prepared.get("value") or "")
+    prepared["value"] = _clean_export_value(value, prepared)
+    return prepared
+
+
+def _clean_export_value(value: str, region: dict[str, Any]) -> str:
+    cleaned = _clean_ai_draft_content(value, region)
+    placeholder = str(region.get("placeholder_hint") or "").strip()
+    if placeholder and compact_for_compare(cleaned) == compact_for_compare(placeholder):
+        return ""
+    return cleaned
+
+
+def compact_for_compare(value: str) -> str:
+    return re.sub(r"\s+", "", value or "").strip()
 
 
 def _render_hwpx_pages(content: bytes, filename: str, preview_image: str | None) -> tuple[list[dict[str, Any]], list[str]]:
