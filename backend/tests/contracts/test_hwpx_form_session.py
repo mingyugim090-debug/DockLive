@@ -13,14 +13,18 @@ if str(BACKEND) not in sys.path:
 os.environ.setdefault("MOCK_MODE", "true")
 
 try:
-    from services.hwpx_form_session import create_form_session, draft_all_regions, export_form_session, update_region  # noqa: E402
+    from core.config import settings  # noqa: E402
+    from core.errors import AnalysisError  # noqa: E402
+    from services.hwpx_form_session import _clean_ai_draft_content, create_form_session, draft_all_regions, draft_region, export_form_session, update_region  # noqa: E402
 except ModuleNotFoundError as exc:  # pragma: no cover
     if exc.name not in {"pydantic", "fitz", "lxml"}:
         raise
     create_form_session = None
     update_region = None
     draft_all_regions = None
+    draft_region = None
     export_form_session = None
+    _clean_ai_draft_content = None
 
 
 class HwpxFormSessionTests(unittest.TestCase):
@@ -76,6 +80,43 @@ class HwpxFormSessionTests(unittest.TestCase):
         self.assertTrue(by_label["동아리목표"]["value"].strip())
         self.assertTrue(by_label["운영방법"]["value"].strip())
         self.assertEqual(by_label["지원금 사용계획"]["value"], before_value)
+
+    def test_hwpx_region_draft_requires_real_ai_key_outside_mock_mode(self):
+        if create_form_session is None:
+            self.skipTest("backend document dependencies are not installed")
+
+        old_mock = settings.MOCK_MODE
+        old_provider = settings.AI_PROVIDER
+        old_openai_key = settings.OPENAI_API_KEY
+        old_gemini_key = settings.GEMINI_API_KEY
+        try:
+            settings.MOCK_MODE = False
+            settings.AI_PROVIDER = "openai"
+            settings.OPENAI_API_KEY = ""
+            settings.GEMINI_API_KEY = ""
+
+            sample = ROOT / "docs" / "examples" / "withus-hwpx" / "withus-sample-filled.hwpx"
+            session = create_form_session(sample.read_bytes(), sample.name)
+            target = next(region for region in session["regions"] if region["kind"] == "textarea")
+
+            with self.assertRaises(AnalysisError) as context:
+                draft_region(session["id"], target["id"], "", "DockLive 서비스 방향에 맞게 작성")
+            self.assertIn("외부 AI API 키", str(context.exception))
+        finally:
+            settings.MOCK_MODE = old_mock
+            settings.AI_PROVIDER = old_provider
+            settings.OPENAI_API_KEY = old_openai_key
+            settings.GEMINI_API_KEY = old_gemini_key
+
+    def test_ai_draft_cleaner_removes_repeated_field_label(self):
+        if _clean_ai_draft_content is None:
+            self.skipTest("backend document dependencies are not installed")
+
+        cleaned = _clean_ai_draft_content(
+            "동아리목표 | 본 동아리는 HWPX 문서 자동완성 역량을 중심으로 운영합니다.",
+            {"label": "동아리목표"},
+        )
+        self.assertEqual(cleaned, "본 동아리는 HWPX 문서 자동완성 역량을 중심으로 운영합니다.")
 
     def test_template_analysis_keeps_summary_form_tables(self):
         from services.hwpx_template_analysis import analyze_hwpx_template_bytes  # noqa: E402

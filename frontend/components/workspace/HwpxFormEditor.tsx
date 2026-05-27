@@ -13,6 +13,7 @@ import type { ExportResponse, HwpxEditableRegion, HwpxFormSession, HwpxTemplateB
 import { Button } from '@/components/ui/Button';
 
 type WorkflowStep = 'upload' | 'edit' | 'export';
+type ReviewFilter = 'all' | 'drafted' | 'revised' | 'empty';
 
 const workflowSteps: Array<{ id: WorkflowStep; label: string; description: string }> = [
   { id: 'upload', label: '1. 양식 업로드', description: '자동화할 HWP/HWPX 원본 선택' },
@@ -102,6 +103,41 @@ function cellAddress(cell: HwpxTemplateCell, rowIndex: number, cellIndex: number
   };
 }
 
+function reviewStatus(region: HwpxEditableRegion): Exclude<ReviewFilter, 'all'> {
+  if (!region.value.trim()) return 'empty';
+  return region.draft_status === 'drafted' ? 'drafted' : 'revised';
+}
+
+function reviewStatusLabel(region: HwpxEditableRegion): string {
+  const status = reviewStatus(region);
+  if (status === 'drafted') return 'AI 작성';
+  if (status === 'revised') return '직접 수정';
+  return '빈칸';
+}
+
+function filterRegionsByReview(regions: HwpxEditableRegion[], filter: ReviewFilter): HwpxEditableRegion[] {
+  if (filter === 'all') return regions;
+  return regions.filter((region) => reviewStatus(region) === filter);
+}
+
+function reviewStats(regions: HwpxEditableRegion[]) {
+  return regions.reduce(
+    (acc, region) => {
+      acc[reviewStatus(region)] += 1;
+      return acc;
+    },
+    { drafted: 0, revised: 0, empty: 0 } as Record<Exclude<ReviewFilter, 'all'>, number>,
+  );
+}
+
+function isAiDrafted(region: HwpxEditableRegion | undefined | null): boolean {
+  return Boolean(region?.value.trim() && region.draft_status === 'drafted');
+}
+
+function isDirectlyFilled(region: HwpxEditableRegion | undefined | null): boolean {
+  return Boolean(region?.value.trim() && region.draft_status !== 'drafted');
+}
+
 
 export function HwpxFormEditor() {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -110,6 +146,7 @@ export function HwpxFormEditor() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
   const [globalPrompt, setGlobalPrompt] = useState('');
+  const [reviewFilter, setReviewFilter] = useState<ReviewFilter>('all');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -158,6 +195,7 @@ export function HwpxFormEditor() {
       setSelectedId(firstRegion?.id ?? null);
       setPrompt(firstRegion?.prompt ?? '');
       setGlobalPrompt('');
+      setReviewFilter('all');
       setStep('edit');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'HWPX 문서를 불러오지 못했습니다.');
@@ -171,6 +209,7 @@ export function HwpxFormEditor() {
     setSelectedId(null);
     setPrompt('');
     setGlobalPrompt('');
+    setReviewFilter('all');
     setError(null);
     setStep('upload');
     localStorage.removeItem(HWPX_SESSION_STORAGE_KEY);
@@ -229,6 +268,7 @@ export function HwpxFormEditor() {
       setSession(response.data);
       setSelectedId(selected.id);
       setPrompt(updated?.prompt ?? nextPrompt);
+      setReviewFilter('drafted');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'AI 초안 생성에 실패했습니다.');
     } finally {
@@ -254,6 +294,7 @@ export function HwpxFormEditor() {
       setSession(response.data);
       setSelectedId(nextSelected?.id ?? null);
       setPrompt(nextSelected?.prompt ?? '');
+      setReviewFilter('drafted');
     } catch (err) {
       setError(err instanceof Error ? err.message : '전체 문서 자동완성에 실패했습니다.');
     } finally {
@@ -295,9 +336,11 @@ export function HwpxFormEditor() {
           busy={busy}
           prompt={prompt}
           globalPrompt={globalPrompt}
+          reviewFilter={reviewFilter}
           onSelect={selectRegion}
           onPrompt={setPrompt}
           onGlobalPrompt={setGlobalPrompt}
+          onReviewFilter={setReviewFilter}
           onLocalChange={setRegionLocal}
           onSaveSelected={async () => {
             if (!selected) return;
@@ -421,9 +464,11 @@ function EditStep(props: {
   busy: string | null;
   prompt: string;
   globalPrompt: string;
+  reviewFilter: ReviewFilter;
   onSelect: (region: HwpxEditableRegion) => void;
   onPrompt: (value: string) => void;
   onGlobalPrompt: (value: string) => void;
+  onReviewFilter: (filter: ReviewFilter) => void;
   onLocalChange: (region: HwpxEditableRegion, value: string) => void;
   onSaveSelected: () => void;
   onGenerateSelected: () => void;
@@ -473,6 +518,12 @@ function EditStep(props: {
           onGlobalPrompt={props.onGlobalPrompt}
           onGenerateAll={props.onGenerateAll}
         />
+        <ReviewSummary
+          regions={props.regions}
+          filter={props.reviewFilter}
+          onFilter={props.onReviewFilter}
+          onSelect={props.onSelect}
+        />
         <RegionEditor
           selected={props.selected}
           busy={props.busy}
@@ -482,7 +533,13 @@ function EditStep(props: {
           onSaveSelected={props.onSaveSelected}
           onGenerateSelected={props.onGenerateSelected}
         />
-        <RegionProgress regions={props.regions} selected={props.selected} onSelect={props.onSelect} />
+        <RegionProgress
+          regions={props.regions}
+          selected={props.selected}
+          filter={props.reviewFilter}
+          onFilter={props.onReviewFilter}
+          onSelect={props.onSelect}
+        />
       </aside>
 
       <div className="flex items-center justify-between xl:col-span-2">
@@ -542,6 +599,85 @@ function BatchDraftPanel({
   );
 }
 
+function ReviewSummary({
+  regions,
+  filter,
+  onFilter,
+  onSelect,
+}: {
+  regions: HwpxEditableRegion[];
+  filter: ReviewFilter;
+  onFilter: (filter: ReviewFilter) => void;
+  onSelect: (region: HwpxEditableRegion) => void;
+}) {
+  const stats = reviewStats(regions);
+  const firstDrafted = regions.find((region) => reviewStatus(region) === 'drafted');
+  const firstEmpty = regions.find((region) => reviewStatus(region) === 'empty');
+  const options: Array<{ id: ReviewFilter; label: string; count: number }> = [
+    { id: 'all', label: '전체', count: regions.length },
+    { id: 'drafted', label: 'AI 작성', count: stats.drafted },
+    { id: 'revised', label: '직접 수정', count: stats.revised },
+    { id: 'empty', label: '빈칸', count: stats.empty },
+  ];
+
+  return (
+    <section className="rounded-2xl border border-[#DDE7E2] bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold text-[#3A7A68]">자동완성 결과 검토</p>
+          <p className="mt-2 text-sm leading-6 text-[#65736E]">
+            AI가 채운 칸은 보라색으로 표시됩니다. 필요한 항목만 골라 빠르게 다시 열어볼 수 있습니다.
+          </p>
+        </div>
+        <span className="rounded-full bg-[#F2EDFF] px-3 py-1 text-xs font-extrabold text-[#6D4BEF]">
+          AI {stats.drafted}
+        </span>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        {options.map((option) => {
+          const active = filter === option.id;
+          return (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => onFilter(option.id)}
+              className={[
+                'rounded-xl border px-3 py-2 text-left transition',
+                active ? 'border-[#245D50] bg-[#EDF7F2]' : 'border-[#E4EBE7] bg-[#FBFCFB] hover:bg-[#F6FAF8]',
+              ].join(' ')}
+            >
+              <span className="block text-xs font-bold text-[#65736E]">{option.label}</span>
+              <span className={['mt-1 block text-lg font-extrabold', active ? 'text-[#245D50]' : 'text-[#24312D]'].join(' ')}>
+                {option.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 flex gap-2">
+        <Button
+          variant="secondary"
+          className="flex-1"
+          disabled={!firstDrafted}
+          onClick={() => firstDrafted && onSelect(firstDrafted)}
+        >
+          AI 작성 첫 항목
+        </Button>
+        <Button
+          variant="secondary"
+          className="flex-1"
+          disabled={!firstEmpty}
+          onClick={() => firstEmpty && onSelect(firstEmpty)}
+        >
+          빈칸 찾기
+        </Button>
+      </div>
+    </section>
+  );
+}
+
 function DocumentPreview({
   session,
   regions,
@@ -581,6 +717,8 @@ function DocumentPreview({
               {pageRegions.map((region, index) => {
                 const active = selected?.id === region.id;
                 const filled = Boolean(region.value.trim());
+                const drafted = isAiDrafted(region);
+                const revised = isDirectlyFilled(region);
                 const number = regionNumber(region, regions.findIndex((item) => item.id === region.id));
                 const height = Math.max(region.bbox.height ?? 3.4, active ? 5.2 : 3.4);
                 return (
@@ -593,7 +731,9 @@ function DocumentPreview({
                       'absolute rounded-md text-left transition',
                       active
                         ? 'bg-[#0F5B4D]/10 ring-2 ring-[#0F5B4D]'
-                        : filled
+                        : drafted
+                          ? 'bg-[#F2EDFF]/70 ring-2 ring-[#7A5CF0]/80 hover:bg-[#F2EDFF]'
+                          : revised
                           ? 'bg-[#F5F0E6]/55 ring-1 ring-[#B58D4D]/70 hover:bg-[#F5F0E6]/75'
                           : 'bg-transparent hover:bg-[#0F5B4D]/5 hover:ring-1 hover:ring-[#0F5B4D]/50',
                     ].join(' ')}
@@ -607,7 +747,11 @@ function DocumentPreview({
                     <span
                       className={[
                         'absolute left-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border text-[11px] font-extrabold shadow-sm',
-                        active ? 'border-[#0F5B4D] bg-[#0F5B4D] text-white' : 'border-[#245D50] bg-white/95 text-[#245D50]',
+                        active
+                          ? 'border-[#0F5B4D] bg-[#0F5B4D] text-white'
+                          : drafted
+                            ? 'border-[#7A5CF0] bg-white/95 text-[#6D4BEF]'
+                            : 'border-[#245D50] bg-white/95 text-[#245D50]',
                       ].join(' ')}
                     >
                       {number}
@@ -696,6 +840,8 @@ function HtmlTextBlock({
   });
   const displayText = paragraphRegion?.value || text;
   const active = selected?.id === paragraphRegion?.id;
+  const drafted = isAiDrafted(paragraphRegion);
+  const revised = isDirectlyFilled(paragraphRegion);
   const alignClass = block.style?.align === 'center' ? 'text-center' : block.style?.align === 'right' ? 'text-right' : 'text-left';
   const textStyle = {
     fontSize: block.style?.fontSize ? `${block.style.fontSize}px` : undefined,
@@ -706,7 +852,12 @@ function HtmlTextBlock({
   const content = (
     <span className="whitespace-pre-wrap">
       {paragraphRegion ? (
-        <span className="mr-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#E7F1ED] px-1 text-[10px] font-bold text-[#245D50]">
+        <span
+          className={[
+            'mr-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold',
+            drafted ? 'bg-[#F2EDFF] text-[#6D4BEF]' : 'bg-[#E7F1ED] text-[#245D50]',
+          ].join(' ')}
+        >
           {regionNumber(paragraphRegion, regions.findIndex((item) => item.id === paragraphRegion.id))}
         </span>
       ) : null}
@@ -721,6 +872,8 @@ function HtmlTextBlock({
       alignClass,
       paragraphRegion ? 'cursor-pointer hover:bg-[#F2F7F4]' : '',
       active ? 'bg-[#E7F1ED] ring-2 ring-[#245D50]' : '',
+      !active && drafted ? 'bg-[#F2EDFF] ring-1 ring-[#8B6CF6]' : '',
+      !active && revised ? 'bg-[#F0F8F4] ring-1 ring-[#9BCAB6]' : '',
     ].join(' ');
     return paragraphRegion ? (
       <button type="button" onClick={() => onSelect(paragraphRegion)} className={className} style={textStyle}>
@@ -736,6 +889,8 @@ function HtmlTextBlock({
     alignClass,
     paragraphRegion ? 'cursor-pointer hover:bg-[#F2F7F4]' : '',
     active ? 'bg-[#E7F1ED] ring-2 ring-[#245D50]' : '',
+    !active && drafted ? 'bg-[#F2EDFF] ring-1 ring-[#8B6CF6]' : '',
+    !active && revised ? 'bg-[#F0F8F4] ring-1 ring-[#9BCAB6]' : '',
   ].join(' ');
   return paragraphRegion ? (
     <button type="button" onClick={() => onSelect(paragraphRegion)} className={className} style={textStyle}>
@@ -769,6 +924,8 @@ function HtmlTableBlock({
               const region = regions.find((item) => isTableRegion(item, tableIndex, address.row, address.col));
               const active = selected?.id === region?.id;
               const filled = Boolean(region?.value.trim());
+              const drafted = isAiDrafted(region);
+              const revised = isDirectlyFilled(region);
               const width = cell.width ? `${Math.max(5, Math.min(100, cell.width))}%` : undefined;
               const contentStyle = cellContentStyle(cell);
               return (
@@ -789,11 +946,18 @@ function HtmlTableBlock({
                       className={[
                         'group relative flex w-full items-start gap-1 text-left transition',
                         active ? 'bg-[#E7F1ED] ring-2 ring-inset ring-[#245D50]' : 'hover:bg-[#F5FAF7]',
+                        !active && drafted ? 'bg-[#F2EDFF] ring-2 ring-inset ring-[#8B6CF6]/80 hover:bg-[#F2EDFF]' : '',
+                        !active && revised ? 'bg-[#F0F8F4] ring-1 ring-inset ring-[#9BCAB6] hover:bg-[#F0F8F4]' : '',
                         cell.align === 'center' ? 'justify-center text-center' : cell.align === 'right' ? 'justify-end text-right' : '',
                       ].join(' ')}
                       style={contentStyle}
                     >
-                      <span className="mt-0.5 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-white px-1 text-[10px] font-bold text-[#245D50] shadow-sm">
+                      <span
+                        className={[
+                          'mt-0.5 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-white px-1 text-[10px] font-bold shadow-sm',
+                          drafted ? 'text-[#6D4BEF]' : 'text-[#245D50]',
+                        ].join(' ')}
+                      >
                         {regionNumber(region, regions.findIndex((item) => item.id === region.id))}
                       </span>
                       <span className={['min-w-0 whitespace-pre-wrap break-words text-[12px]', filled ? 'text-[#111827]' : 'text-[#93A19B] italic'].join(' ')}>
@@ -925,22 +1089,53 @@ function RegionEditor({
 function RegionProgress({
   regions,
   selected,
+  filter,
+  onFilter,
   onSelect,
 }: {
   regions: HwpxEditableRegion[];
   selected: HwpxEditableRegion | null;
+  filter: ReviewFilter;
+  onFilter: (filter: ReviewFilter) => void;
   onSelect: (region: HwpxEditableRegion) => void;
 }) {
-  const groups = groupRegionsBySection(regions);
+  const stats = reviewStats(regions);
+  const filteredRegions = filterRegionsByReview(regions, filter);
+  const groups = groupRegionsBySection(filteredRegions);
+  const options: Array<{ id: ReviewFilter; label: string; count: number }> = [
+    { id: 'all', label: '전체', count: regions.length },
+    { id: 'drafted', label: 'AI', count: stats.drafted },
+    { id: 'revised', label: '직접', count: stats.revised },
+    { id: 'empty', label: '빈칸', count: stats.empty },
+  ];
+
   return (
     <section className="rounded-2xl border border-[#DDE7E2] bg-white p-5 shadow-sm">
       <p className="text-xs font-bold text-[#3A7A68]">입력 진행 상황</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {options.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            onClick={() => onFilter(option.id)}
+            className={[
+              'rounded-full border px-3 py-1 text-xs font-bold transition',
+              filter === option.id
+                ? 'border-[#245D50] bg-[#245D50] text-white'
+                : 'border-[#DDE7E2] bg-white text-[#65736E] hover:bg-[#F6FAF8]',
+            ].join(' ')}
+          >
+            {option.label} {option.count}
+          </button>
+        ))}
+      </div>
       <div className="mt-3 max-h-[420px] space-y-4 overflow-auto pr-1">
-        {groups.map((group) => (
+        {groups.length ? groups.map((group) => (
           <div key={group.heading} className="space-y-2">
             <p className="truncate px-1 text-[11px] font-extrabold text-[#8A9A94]">{group.heading}</p>
             {group.regions.map((region) => {
               const index = regions.findIndex((item) => item.id === region.id);
+              const status = reviewStatus(region);
               return (
                 <button
                   key={region.id}
@@ -958,12 +1153,25 @@ function RegionProgress({
                     <span className="block font-bold">{region.label}</span>
                     <span className="mt-1 block truncate text-xs">{region.value || region.placeholder_hint || '빈 값'}</span>
                   </span>
-                  <span className={['mt-0.5 h-2 w-2 rounded-full', region.value.trim() ? 'bg-[#3A7A68]' : 'bg-[#D7E2DD]'].join(' ')} />
+                  <span
+                    className={[
+                      'mt-0.5 rounded-full px-2 py-0.5 text-[10px] font-extrabold',
+                      status === 'drafted'
+                        ? 'bg-[#F2EDFF] text-[#6D4BEF]'
+                        : status === 'revised'
+                          ? 'bg-[#E7F1ED] text-[#245D50]'
+                          : 'bg-[#F2F5F3] text-[#8A9A94]',
+                    ].join(' ')}
+                  >
+                    {reviewStatusLabel(region)}
+                  </span>
                 </button>
               );
             })}
           </div>
-        ))}
+        )) : (
+          <p className="rounded-xl bg-[#F8FBFA] px-3 py-4 text-sm text-[#65736E]">선택한 검토 조건에 해당하는 항목이 없습니다.</p>
+        )}
       </div>
     </section>
   );

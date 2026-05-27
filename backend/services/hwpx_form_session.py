@@ -12,6 +12,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from core.config import settings
 from core.errors import AnalysisError
 from models.schemas import utc_now_iso
 from services import storage
@@ -619,25 +620,145 @@ def _batch_prompt_for_region(region: dict[str, Any], global_prompt: str = "") ->
 
 def _generate_region_text(session: dict[str, Any], region: dict[str, Any], base_input: str, prompt: str) -> str:
     fallback = _fallback_draft_text(session, region, base_input, prompt)
+    if settings.MOCK_MODE:
+        return fallback
     if should_use_mock_ai():
-        return fallback
-    system_prompt = "You write concise Korean application-form content. Return JSON only."
-    user_prompt = json.dumps(
-        {
-            "document": session.get("analysis", {}),
-            "field_label": region.get("label"),
-            "current_value": region.get("value", ""),
-            "base_input": base_input,
-            "user_prompt": prompt,
-            "rules": ["Do not invent personal data, dates, amounts, or signatures.", "Write only content for this field."],
-        },
-        ensure_ascii=False,
-    )
+        raise AnalysisError(
+            "외부 AI API 키가 설정되지 않았습니다. backend/.env에 OPENAI_API_KEY 또는 GEMINI_API_KEY를 설정하고 "
+            "MOCK_MODE=false로 백엔드를 다시 시작해 주세요."
+        )
+
+    system_prompt, user_prompt = _build_region_draft_prompts(session, region, base_input, prompt)
     try:
-        data = call_json("draft", system_prompt, user_prompt, max_tokens=1400)
-        return str(data.get("content") or data.get("text") or fallback).strip()
-    except Exception:
-        return fallback
+        data = call_json(
+            "draft",
+            system_prompt,
+            user_prompt,
+            max_tokens=1600,
+            json_schema=_draft_content_schema(),
+            schema_name="hwpx_region_draft",
+        )
+    except json.JSONDecodeError as exc:
+        raise AnalysisError("AI 응답이 JSON 형식이 아닙니다. 다시 시도해 주세요.") from exc
+
+    content = _clean_ai_draft_content(str(data.get("content") or ""), region)
+    limit = _extract_char_limit(region)
+    if limit and len(content) > limit:
+        content = content[:limit].rstrip()
+    if not content:
+        raise AnalysisError("AI가 선택 항목에 넣을 내용을 생성하지 못했습니다. 요청 내용을 조금 더 구체적으로 입력해 주세요.")
+    return content
+
+
+def _draft_content_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "content": {
+                "type": "string",
+                "description": "선택된 HWPX 입력 칸에 그대로 들어갈 한국어 본문만 작성합니다.",
+            }
+        },
+        "required": ["content"],
+    }
+
+
+def _build_region_draft_prompts(session: dict[str, Any], region: dict[str, Any], base_input: str, prompt: str) -> tuple[str, str]:
+    limit = _extract_char_limit(region)
+    analysis = session.get("analysis") or {}
+    region_context = {
+        "document_title": analysis.get("title") or session.get("source_filename") or "",
+        "document_summary": analysis.get("summary") or "",
+        "section_heading": region.get("section_heading") or "",
+        "field_label": region.get("label") or "",
+        "placeholder_hint": region.get("placeholder_hint") or "",
+        "current_value": region.get("value") or "",
+        "user_supplied_context": base_input or "",
+        "user_request": prompt or "",
+        "char_limit": limit,
+        "nearby_fields": _nearby_region_context(session, region),
+    }
+    system_prompt = "\n".join(
+        [
+            "당신은 HWPX 제출 양식의 선택된 한 칸만 작성하는 한국어 문서 작성 AI입니다.",
+            "반드시 사용자의 요청, 현재 칸의 라벨, 원본 작성 지침, 사용자가 입력한 정보만 근거로 작성하세요.",
+            "개인정보, 기관명, 일정, 금액, 실적, 수치, 서명, 접수 방법처럼 사용자가 주지 않은 사실은 절대 만들지 마세요.",
+            "선택된 칸에 들어갈 본문만 반환하세요. 설명, 머리말, '초안입니다', '요청사항을 반영하여', 확인 요청, 체크리스트를 쓰지 마세요.",
+            "항목명이나 라벨을 다시 쓰지 마세요. 예: 'Problem |', '동아리목표:' 같은 prefix 없이 본문부터 시작하세요.",
+            "사용자가 주제와 방향을 준 경우에는 그 방향을 구체화하되, 사실처럼 단정해야 하는 고유정보는 피하세요.",
+            "문체는 제출용으로 자연스럽고 구체적이어야 하며, 라벨이 요구하는 항목 밖의 내용을 섞지 마세요.",
+            "반드시 JSON 객체 {\"content\": \"...\"} 형식으로만 답하세요.",
+        ]
+    )
+    user_prompt = json.dumps(region_context, ensure_ascii=False)
+    return system_prompt, user_prompt
+
+
+def _nearby_region_context(session: dict[str, Any], region: dict[str, Any]) -> list[dict[str, Any]]:
+    regions = sorted(session.get("regions") or [], key=lambda item: int(item.get("display_order") or 0))
+    try:
+        index = next(i for i, item in enumerate(regions) if item.get("id") == region.get("id"))
+    except StopIteration:
+        return []
+    start = max(0, index - 2)
+    end = min(len(regions), index + 3)
+    nearby: list[dict[str, Any]] = []
+    for item in regions[start:end]:
+        if item.get("id") == region.get("id"):
+            continue
+        nearby.append(
+            {
+                "label": item.get("label") or "",
+                "section_heading": item.get("section_heading") or "",
+                "placeholder_hint": item.get("placeholder_hint") or "",
+                "has_value": bool(str(item.get("value") or "").strip()),
+            }
+        )
+    return nearby
+
+
+def _extract_char_limit(region: dict[str, Any]) -> int | None:
+    text = " ".join(
+        str(region.get(key) or "")
+        for key in ("label", "placeholder_hint", "prompt")
+    )
+    matches = [int(match) for match in re.findall(r"(\d{2,5})\s*자\s*(?:이내|내외|미만|까지)?", text)]
+    if not matches:
+        return None
+    return min(match for match in matches if match > 0)
+
+
+def _clean_ai_draft_content(content: str, region: dict[str, Any] | None = None) -> str:
+    cleaned = (content or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+    cleaned = re.sub(r"```(?:json|text)?|```", "", cleaned).strip()
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    if region:
+        cleaned = _strip_repeated_field_label(cleaned, str(region.get("label") or ""))
+    return cleaned
+
+
+def _strip_repeated_field_label(content: str, label: str) -> str:
+    label = label.strip()
+    if not label or not content:
+        return content
+    patterns = [
+        rf"^\s*{re.escape(label)}\s*[:：|]\s*",
+        rf"^\s*\[?{re.escape(label)}\]?\s*[-–—]\s*",
+    ]
+    shortened = re.sub(r"\*?\s*\d{2,5}\s*자\s*(?:이내|내외|미만|까지)?", "", label).strip()
+    if shortened and shortened != label:
+        patterns.extend(
+            [
+                rf"^\s*{re.escape(shortened)}\s*[:：|]\s*",
+                rf"^\s*\[?{re.escape(shortened)}\]?\s*[-–—]\s*",
+            ]
+        )
+    for pattern in patterns:
+        next_content = re.sub(pattern, "", content, count=1).strip()
+        if next_content != content:
+            return next_content
+    return content
 
 
 def _clone_with_region_replacements(source_path: Path, output_path: Path, regions: list[dict[str, Any]]) -> None:
