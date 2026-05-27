@@ -404,6 +404,12 @@ class HwpxRegionDraftRequest(BaseModel):
     prompt: str = ""
 
 
+class HwpxBatchDraftRequest(BaseModel):
+    base_input: str = ""
+    global_prompt: str = ""
+    overwrite_existing: bool = False
+
+
 class HwpxComponentCreateRequest(BaseModel):
     kind: Literal["text", "textarea", "signature", "table"] = "textarea"
     label: str = ""

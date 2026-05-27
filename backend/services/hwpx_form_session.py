@@ -137,6 +137,35 @@ def draft_region(session_id: str, region_id: str, base_input: str = "", prompt: 
     return _public_session(session)
 
 
+def draft_all_regions(session_id: str, base_input: str = "", global_prompt: str = "", overwrite_existing: bool = False) -> dict[str, Any]:
+    session = _load_session(session_id)
+    drafted = 0
+    skipped = 0
+    for region in session.get("regions", []):
+        if not _should_batch_draft_region(region, overwrite_existing):
+            skipped += 1
+            continue
+        prompt = _batch_prompt_for_region(region, global_prompt)
+        generated = _generate_region_text(session, region, base_input, prompt)
+        if not generated.strip():
+            skipped += 1
+            continue
+        region["value"] = generated
+        region["prompt"] = prompt
+        region["draft_status"] = "drafted"
+        drafted += 1
+
+    session["status"] = "editing"
+    session["updated_at"] = utc_now_iso()
+    session["batch_draft_summary"] = {
+        "drafted": drafted,
+        "skipped": skipped,
+        "overwrite_existing": overwrite_existing,
+    }
+    _save_session(session)
+    return _public_session(session)
+
+
 def export_form_session(session_id: str) -> tuple[str, bytes, dict[str, Any]]:
     session = _load_session(session_id)
     source = base64.b64decode(session.get("source_hwpx_base64") or "")
@@ -423,6 +452,36 @@ def _fallback_draft_text(session: dict[str, Any], region: dict[str, Any], base_i
         lines.append(f"요청사항을 반영하여 {request} 방향으로 문장을 다듬었습니다.")
     lines.append("제출 전 실제 경험, 일정, 금액, 성명처럼 사실 확인이 필요한 내용은 한 번 더 확인해 주세요.")
     return "\n".join(lines)
+
+
+def _should_batch_draft_region(region: dict[str, Any], overwrite_existing: bool) -> bool:
+    kind = str(region.get("kind") or "text")
+    if kind not in {"text", "textarea", "signature", "table"}:
+        return False
+    if str(region.get("prompt") or "").strip():
+        return True
+    value = str(region.get("value") or "").strip()
+    if value and not overwrite_existing:
+        return False
+    if kind == "textarea":
+        return True
+    hint = str(region.get("placeholder_hint") or "").strip()
+    return bool(hint and _is_hint_text(hint))
+
+
+def _batch_prompt_for_region(region: dict[str, Any], global_prompt: str = "") -> str:
+    region_prompt = str(region.get("prompt") or "").strip()
+    if region_prompt:
+        return region_prompt
+    label = str(region.get("label") or "선택 항목").strip()
+    hint = str(region.get("placeholder_hint") or "").strip()
+    prompt_parts = []
+    if global_prompt.strip():
+        prompt_parts.append(global_prompt.strip())
+    if hint:
+        prompt_parts.append(f"원본 작성 지침: {hint}")
+    prompt_parts.append(f"{label} 항목에 들어갈 제출용 문장을 작성해줘.")
+    return "\n".join(prompt_parts)
 
 
 def _generate_region_text(session: dict[str, Any], region: dict[str, Any], base_input: str, prompt: str) -> str:

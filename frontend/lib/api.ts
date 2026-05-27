@@ -353,6 +353,23 @@ export async function draftHwpxRegion(
   return res.json();
 }
 
+export async function draftAllHwpxRegions(
+  sessionId: string,
+  payload: { baseInput: string; globalPrompt: string; overwriteExisting?: boolean },
+): Promise<HwpxFormSessionResponse> {
+  const res = await fetchWithTimeout(`${API_URL}/api/hwpx/sessions/${sessionId}/draft-all`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      base_input: payload.baseInput,
+      global_prompt: payload.globalPrompt,
+      overwrite_existing: payload.overwriteExisting ?? false,
+    }),
+  }, 120000);
+  if (!res.ok) throw await readError(res, `전체 HWPX 자동완성 실패: ${res.status}`);
+  return res.json();
+}
+
 export async function addHwpxComponent(
   sessionId: string,
   payload: { kind: 'text' | 'textarea' | 'signature' | 'table'; label: string; value?: string },

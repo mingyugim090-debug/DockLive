@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import {
   createHwpxFormSession,
+  draftAllHwpxRegions,
   draftHwpxRegion,
   exportHwpxFormSession,
   getHwpxFormSession,
@@ -108,6 +109,7 @@ export function HwpxFormEditor() {
   const [session, setSession] = useState<HwpxFormSession | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
+  const [globalPrompt, setGlobalPrompt] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -155,6 +157,7 @@ export function HwpxFormEditor() {
       setSession(response.data);
       setSelectedId(firstRegion?.id ?? null);
       setPrompt(firstRegion?.prompt ?? '');
+      setGlobalPrompt('');
       setStep('edit');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'HWPX 문서를 불러오지 못했습니다.');
@@ -167,6 +170,7 @@ export function HwpxFormEditor() {
     setSession(null);
     setSelectedId(null);
     setPrompt('');
+    setGlobalPrompt('');
     setError(null);
     setStep('upload');
     localStorage.removeItem(HWPX_SESSION_STORAGE_KEY);
@@ -232,6 +236,31 @@ export function HwpxFormEditor() {
     }
   }
 
+  async function generateAllDrafts() {
+    if (!session) return;
+    setBusy('draft-all');
+    setError(null);
+    try {
+      await persistAllRegions();
+      const response = await draftAllHwpxRegions(session.id, {
+        baseInput: globalPrompt,
+        globalPrompt,
+        overwriteExisting: false,
+      });
+      const nextRegions = sortRegions(response.data.regions);
+      const nextSelected = selectedId
+        ? nextRegions.find((region) => region.id === selectedId) ?? nextRegions[0] ?? null
+        : nextRegions[0] ?? null;
+      setSession(response.data);
+      setSelectedId(nextSelected?.id ?? null);
+      setPrompt(nextSelected?.prompt ?? '');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '전체 문서 자동완성에 실패했습니다.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function exportFile() {
     if (!session) return;
     setBusy('export');
@@ -265,8 +294,10 @@ export function HwpxFormEditor() {
           exported={step === 'export' || session.status === 'exported'}
           busy={busy}
           prompt={prompt}
+          globalPrompt={globalPrompt}
           onSelect={selectRegion}
           onPrompt={setPrompt}
+          onGlobalPrompt={setGlobalPrompt}
           onLocalChange={setRegionLocal}
           onSaveSelected={async () => {
             if (!selected) return;
@@ -280,6 +311,7 @@ export function HwpxFormEditor() {
             }
           }}
           onGenerateSelected={generateSelectedDraft}
+          onGenerateAll={generateAllDrafts}
           onBack={reset}
           onExport={exportFile}
         />
@@ -388,11 +420,14 @@ function EditStep(props: {
   exported: boolean;
   busy: string | null;
   prompt: string;
+  globalPrompt: string;
   onSelect: (region: HwpxEditableRegion) => void;
   onPrompt: (value: string) => void;
+  onGlobalPrompt: (value: string) => void;
   onLocalChange: (region: HwpxEditableRegion, value: string) => void;
   onSaveSelected: () => void;
   onGenerateSelected: () => void;
+  onGenerateAll: () => void;
   onBack: () => void;
   onExport: () => void;
 }) {
@@ -431,6 +466,13 @@ function EditStep(props: {
       <DocumentPreview session={props.session} regions={props.regions} selected={props.selected} onSelect={props.onSelect} />
 
       <aside className="space-y-4">
+        <BatchDraftPanel
+          regions={props.regions}
+          busy={props.busy}
+          globalPrompt={props.globalPrompt}
+          onGlobalPrompt={props.onGlobalPrompt}
+          onGenerateAll={props.onGenerateAll}
+        />
         <RegionEditor
           selected={props.selected}
           busy={props.busy}
@@ -453,6 +495,50 @@ function EditStep(props: {
         </div>
       </div>
     </div>
+  );
+}
+
+function BatchDraftPanel({
+  regions,
+  busy,
+  globalPrompt,
+  onGlobalPrompt,
+  onGenerateAll,
+}: {
+  regions: HwpxEditableRegion[];
+  busy: string | null;
+  globalPrompt: string;
+  onGlobalPrompt: (value: string) => void;
+  onGenerateAll: () => void;
+}) {
+  const aiTargets = regions.filter((region) => {
+    if (region.prompt.trim()) return true;
+    if (region.value.trim()) return false;
+    return region.kind === 'textarea' || Boolean(region.placeholder_hint.trim());
+  }).length;
+
+  return (
+    <section className="rounded-2xl border border-[#BFD8CC] bg-[#F4FAF7] p-5 shadow-sm">
+      <p className="text-xs font-bold text-[#3A7A68]">전체 문서 AI 자동완성</p>
+      <p className="mt-2 text-sm leading-6 text-[#24312D]">
+        아래 요구사항을 기준으로 비어 있는 작성 영역을 한 번에 채웁니다. 직접 입력한 값은 유지됩니다.
+      </p>
+      <label className="mt-4 block">
+        <span className="text-xs font-bold text-[#65736E]">전체 요구사항</span>
+        <textarea
+          value={globalPrompt}
+          onChange={(event) => onGlobalPrompt(event.target.value)}
+          className="mt-1 min-h-[110px] w-full resize-y rounded-xl border border-[#CFE0D8] bg-white px-3 py-2 text-sm leading-6 text-[#24312D] outline-none focus:border-[#6A9C89]"
+          placeholder="예: DockLive 서비스의 HWPX 자동완성 워크플로우를 KAIST OverEdge 창업 아이디어 기술서 문체에 맞춰 작성해줘."
+        />
+      </label>
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <span className="text-xs font-semibold text-[#65736E]">AI 작성 대상 {aiTargets}개</span>
+        <Button onClick={onGenerateAll} disabled={Boolean(busy) || aiTargets === 0}>
+          {busy === 'draft-all' ? '전체 작성 중...' : '전체 자동완성'}
+        </Button>
+      </div>
+    </section>
   );
 }
 
