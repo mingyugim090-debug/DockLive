@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 
 type TossWidgets = {
   setAmount: (args: { currency: string; value: number }) => Promise<void>;
-  renderPaymentMethods: (args: { selector: string; variantKey: string }) => Promise<void>;
-  renderAgreement: (args: { selector: string; variantKey: string }) => Promise<void>;
+  renderPaymentMethods: (args: { selector: string; variantKey?: string }) => Promise<void>;
+  renderAgreement: (args: { selector: string; variantKey?: string }) => Promise<void>;
   requestPayment: (args: {
     orderId: string;
     orderName: string;
@@ -29,6 +29,49 @@ const PACKAGES: Package[] = [
   { id: 'value', credits: 25, amount: 9900, perCredit: 396, popular: true },
 ];
 
+const PAYMENT_METHOD_SELECTOR = '#toss-payment-method';
+const AGREEMENT_SELECTOR = '#toss-agreement';
+
+function clearTossWidgetDom() {
+  document.querySelector(PAYMENT_METHOD_SELECTOR)?.replaceChildren();
+  document.querySelector(AGREEMENT_SELECTOR)?.replaceChildren();
+}
+
+function tossWidgetVariant(value: string | undefined, fallback: string) {
+  return (value ?? fallback).trim();
+}
+
+function normalizeCustomerKey(userId: string, anonymousKey: string) {
+  const normalized = userId.trim().replace(/[^0-9a-zA-Z._=-]/g, '_').slice(0, 50);
+  return normalized || anonymousKey;
+}
+
+async function renderWithVariantFallback(
+  render: (args: { selector: string; variantKey?: string }) => Promise<unknown>,
+  selector: string,
+  variantKey: string,
+) {
+  try {
+    await render({ selector, variantKey });
+  } catch (err) {
+    if (!variantKey) throw err;
+    console.warn(`[TossWidgets] ${selector} variant "${variantKey}" failed. Retrying with default variant.`, err);
+    document.querySelector(selector)?.replaceChildren();
+    await render({ selector });
+  }
+}
+
+function paymentLoadErrorMessage(err: unknown) {
+  const error = err as { code?: string; message?: string };
+  if (error?.message === 'missing_toss_client_key') {
+    return 'TossPayments 클라이언트 키가 설정되지 않았습니다. frontend/.env.local을 확인해 주세요.';
+  }
+  if (error?.code === 'INVALID_CLIENT_KEY' || /clientKey/i.test(error?.message ?? '')) {
+    return 'TossPayments 클라이언트 키가 올바르지 않습니다. 테스트/라이브 키 종류를 확인해 주세요.';
+  }
+  return '결제 수단을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+}
+
 export function CreditPurchaseModal({
   onClose,
   userId,
@@ -48,6 +91,14 @@ export function CreditPurchaseModal({
   const widgetsRef = useRef<TossWidgets | null>(null);
 
   const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY ?? '';
+  const paymentMethodVariantKey = tossWidgetVariant(
+    process.env.NEXT_PUBLIC_TOSS_PAYMENT_WIDGET_VARIANT_KEY,
+    'DEFAULT',
+  );
+  const agreementVariantKey = tossWidgetVariant(
+    process.env.NEXT_PUBLIC_TOSS_AGREEMENT_WIDGET_VARIANT_KEY,
+    'AGREEMENT',
+  );
 
   const selectPackage = (pkg: Package) => {
     setSelectedPkg(pkg);
@@ -60,38 +111,47 @@ export function CreditPurchaseModal({
     widgetsRef.current = null;
     setWidgetsReady(false);
     setError(null);
-    // Clear Toss widget DOM
-    const el1 = document.getElementById('toss-payment-method');
-    const el2 = document.getElementById('toss-agreement');
-    if (el1) el1.innerHTML = '';
-    if (el2) el2.innerHTML = '';
+    clearTossWidgetDom();
     setStep('select');
   };
 
   useEffect(() => {
     if (step !== 'pay' || !selectedPkg) return;
     let cancelled = false;
+    widgetsRef.current = null;
+    setWidgetsReady(false);
+    setError(null);
+    clearTossWidgetDom();
 
     (async () => {
       try {
-        if (!clientKey) {
+        if (!clientKey.trim()) {
           throw new Error('missing_toss_client_key');
         }
-        const { loadTossPayments } = await import('@tosspayments/tosspayments-sdk');
+        const { ANONYMOUS, loadTossPayments } = await import('@tosspayments/tosspayments-sdk');
         if (cancelled) return;
 
-        const tossPayments = await loadTossPayments(clientKey);
-        const widgets = tossPayments.widgets({ customerKey: userId || `guest_${Date.now()}` });
+        const tossPayments = await loadTossPayments(clientKey.trim());
+        const widgets = tossPayments.widgets({
+          customerKey: normalizeCustomerKey(userId, ANONYMOUS),
+        });
 
         await widgets.setAmount({ currency: 'KRW', value: selectedPkg.amount });
-        await widgets.renderPaymentMethods({
-          selector: '#toss-payment-method',
-          variantKey: 'DEFAULT',
-        });
-        await widgets.renderAgreement({
-          selector: '#toss-agreement',
-          variantKey: 'AGREEMENT',
-        });
+        await renderWithVariantFallback(
+          widgets.renderPaymentMethods.bind(widgets),
+          PAYMENT_METHOD_SELECTOR,
+          paymentMethodVariantKey,
+        );
+
+        try {
+          await renderWithVariantFallback(
+            widgets.renderAgreement.bind(widgets),
+            AGREEMENT_SELECTOR,
+            agreementVariantKey,
+          );
+        } catch (agreementError) {
+          console.warn('[TossWidgets] agreement widget skipped:', agreementError);
+        }
 
         if (!cancelled) {
           widgetsRef.current = widgets as unknown as TossWidgets;
@@ -99,14 +159,15 @@ export function CreditPurchaseModal({
         }
       } catch (err) {
         console.error('[TossWidgets] load error:', err);
-        if (!cancelled) setError('결제 수단을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
+        if (!cancelled) setError(paymentLoadErrorMessage(err));
       }
     })();
 
     return () => {
       cancelled = true;
+      widgetsRef.current = null;
     };
-  }, [step, selectedPkg, clientKey, userId]);
+  }, [step, selectedPkg, clientKey, paymentMethodVariantKey, agreementVariantKey, userId]);
 
   const handlePay = async () => {
     if (!widgetsRef.current || !selectedPkg || paying) return;
@@ -212,12 +273,12 @@ export function CreditPurchaseModal({
               {/* Toss widget mount points — must NOT be display:none when Toss renders into them */}
               <div className="relative">
                 {!widgetsReady && !error && (
-                  <div className="absolute inset-0 flex min-h-[160px] items-center justify-center text-sm text-[#9CA3AF]">
+                  <div className="absolute inset-0 z-10 flex min-h-[160px] items-center justify-center rounded-[16px] bg-white/80 text-sm text-[#9CA3AF]">
                     결제 수단 불러오는 중...
                   </div>
                 )}
-                <div id="toss-payment-method" className={widgetsReady ? '' : 'invisible min-h-[160px]'} />
-                <div id="toss-agreement" className={widgetsReady ? 'mt-3' : 'invisible'} />
+                <div id="toss-payment-method" className="min-h-[160px]" />
+                <div id="toss-agreement" className="mt-3 min-h-0" />
               </div>
 
               {error && (
