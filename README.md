@@ -5,8 +5,8 @@
 공모전, 지원사업, 장학금, 연구과제 공고문을 PDF, URL, 텍스트, HWP/HWPX 양식으로 입력하면 LiveDock이 요구사항을 분석하고, 부족한 정보만 질문한 뒤, 섹션별 초안을 생성해 **HWPX, PDF, HTML**로 내보냅니다.
 
 **Production:** [dock-live.vercel.app](https://dock-live.vercel.app)
-**ex:**https://kaist-overedge.com/
 
+**ex:** .https://kaist-overedge.com/
 ---
 
 ## 서비스 핵심 개요
