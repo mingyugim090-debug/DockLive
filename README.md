@@ -2,7 +2,7 @@
 
 > 한국 공고문과 HWPX 양식을 제출용 문서로 바꾸는 Agent MVP
 
-공모전, 지원사업, 장학금, 연구과제 공고문을 PDF, URL, 텍스트, HWP/HWPX 양식으로 입력하면 LiveDock이 요구사항을 분석하고, 부족한 정보만 질문한 뒤, 섹션별 초안을 생성해 **HWPX, PDF, HTML**로 내보냅니다.
+공모전, 지원사업, 장학금, 연구과제등등 여러 공고문을 PDF, URL, 텍스트, HWP/HWPX 양식으로 입력하면 LiveDock이 요구사항을 분석하고, 부족한 정보만 질문한 뒤, 섹션별 초안을 생성해 **HWPX, PDF, HTML**로 내보냅니다.
 
 **Production:** [dock-live.vercel.app](https://dock-live.vercel.app)
 
@@ -10,9 +10,11 @@
 
 ## 서비스 핵심 개요
 
-LiveDock은 Korean ver. 공고문/행정 양식 작성에 특화된 문서 자동화 Agent입니다. 사용자가 공고문을 하나하나 해석하고 HWPX 양식을 직접 채우는 부담을 줄이는 것이 목표입니다.
+LiveDock은 Korean ver. 공고문/행정 양식 작성에 특화된 문서 자동화 Agent입니다. 
+사용자가 공고문을 하나하나 해석하고 HWPX 양식을 직접 채우는 부담을 줄이는 것이 목표입니다.
 
-핵심 원칙은 **근거 기반 작성**입니다. Agent는 공고 원문에 없는 마감일, 기관명, 지원금, 자격요건, 제출 방법을 임의로 만들지 않습니다. 불확실한 값은 `uncertain_fields` 또는 `confirmation_required`로 남기고 사용자 확인을 요청합니다.
+핵심 원칙은 **근거 기반 작성**입니다. Agent는 공고 원문에 없는 마감일, 기관명, 지원금, 자격요건, 제출 방법을 임의로 만들지 않습니다. 
+불확실한 값은 `uncertain_fields` 또는 `confirmation_required`로 남기고 사용자 확인을 요청합니다.
 
 ---
 
@@ -53,8 +55,8 @@ flowchart LR
 
 ## HWPX 문서 자동화 Skills
 
-LiveDock은 HWPX 문서 자동화를 위해 project-local skills와 외부 HWPX toolchain skill을 함께 사용합니다. Skills는 웹서비스 런타임 자체가 아니라, Agent가 구현과 검증 과정에서 따라야 하는 작업 지침입니다. 
-실제 사용자 workflow, 저장, 검증, export API는 FastAPI backend가 담당합니다.
+AI가 HWPX파일을 직접 생성하는 구조가 아니라 , 미리 만들어둔 skills에 따라 단계별로 문서를 분석하고 작성하고 생성해내는 구조
+
 
 ```mermaid
 flowchart LR
@@ -78,7 +80,8 @@ flowchart LR
 | `livedock-hwp-mcp-local` | 로컬 HWP 보조 도구 | Windows/Hancom HWP가 있는 개발 환경에서만 렌더링 확인이나 수동 점검에 사용 |
 | `hwpx` global skill | HWPX toolchain workflow | Markdown/Text to HWPX, placeholder replacement, form clone, official writing rules, HWP to HWPX conversion |
 
-핵심 경계는 명확합니다. OpenAI/Gemini는 구조화 JSON과 초안을 만들고, backend service는 workflow 상태와 검증을 관리하며, HWPX scripts가 실제 ZIP/XML 패키지를 생성합니다. `hwp-mcp`는 production dependency가 아니라 로컬 Windows 검증 보조 도구입니다.
+HWPX Skills는 “AI가 문서를 직접 만드는 구조”가 아니라, AI는 내용과 치환 JSON만 만들고, 
+backend와 HWPX toolchain이 실제 파일 생성과 검증을 담당하게 분리한 안전한 문서 자동화 설계입니다.
 
 ---
 
@@ -174,7 +177,8 @@ LiveDock/
 
 ## 주요 API
 
-LiveDock API는 화면의 6단계 workflow를 그대로 따라갑니다. 사용자는 하나의 문서 작성 흐름을 경험하지만, backend에서는 분석, 입력 수집, 초안 생성, 확인, export가 분리되어 관리됩니다.
+LiveDock API는 화면의 6단계 workflow를 그대로 따라갑니다. 
+사용자는 하나의 문서 작성 흐름을 경험하지만, backend에서는 분석, 입력 수집, 초안 생성, 확인, export가 분리되어 관리됩니다.
 
 **입력과 분석**
 
