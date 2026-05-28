@@ -53,6 +53,36 @@ flowchart LR
 
 ---
 
+## HWPX 문서 자동화 Skills
+
+LiveDock은 HWPX 문서 자동화를 위해 project-local skills와 외부 HWPX toolchain skill을 함께 사용합니다. Skills는 웹서비스 런타임 자체가 아니라, Agent가 구현과 검증 과정에서 따라야 하는 작업 지침입니다. 실제 사용자 workflow, 저장, 검증, export API는 FastAPI backend가 담당합니다.
+
+```mermaid
+flowchart LR
+  A["livedock-agent-mvp<br/>제품 guardrail"] --> B["livedock-section-draft<br/>섹션 초안"]
+  B --> C["livedock-hwpx-intake<br/>HWP/HWPX 분석"]
+  C --> D["livedock-hwpx-render-edit<br/>페이지/영역 편집"]
+  D --> E["livedock-hwpx-content<br/>치환 JSON 생성"]
+  E --> F["livedock-hwpx-export<br/>HWPX 생성/클론"]
+  F --> G["livedock-hwpx-validate<br/>검증"]
+```
+
+| Skill | 역할 | 핵심 책임 |
+| --- | --- | --- |
+| `livedock-agent-mvp` | 제품 범위 고정 | 공고 분석, 부족 정보 질문, 섹션 초안, 확인 게이트, export 흐름을 Agent MVP 안에 유지 |
+| `livedock-section-draft` | 섹션별 초안 생성 | `AnalysisResult`와 사용자 입력만 사용해 작성 항목별 초안을 만들고 `confirmation_required` 유지 |
+| `livedock-hwpx-intake` | HWP/HWPX 입력 분석 | `.hwp`는 `.hwpx`로 변환하고, 업로드 양식의 표/이미지/빈 칸/placeholder 구조를 분석 |
+| `livedock-hwpx-render-edit` | 양식 미리보기와 영역 편집 | HWPX 페이지 preview, editable region, `source_ref` 기반 XML 치환 대상을 관리 |
+| `livedock-hwpx-content` | 치환 데이터 생성 | AI가 HWPX 파일을 직접 만들지 않고 `replacements`, `keywords`, `section_content` JSON만 생성 |
+| `livedock-hwpx-export` | 실제 HWPX 생성 | 일반 문서는 Markdown-to-HWPX, 공식 양식은 clone/replace 방식으로 표, 이미지, 스타일 보존 |
+| `livedock-hwpx-validate` | export 품질 게이트 | `fix_namespaces.py`, `validate.py`, `verify_hwpx.py`, 텍스트 추출 검증 후 파일 제공 |
+| `livedock-hwp-mcp-local` | 로컬 HWP 보조 도구 | Windows/Hancom HWP가 있는 개발 환경에서만 렌더링 확인이나 수동 점검에 사용 |
+| `hwpx` global skill | HWPX toolchain workflow | Markdown/Text to HWPX, placeholder replacement, form clone, official writing rules, HWP to HWPX conversion |
+
+핵심 경계는 명확합니다. OpenAI/Gemini는 구조화 JSON과 초안을 만들고, backend service는 workflow 상태와 검증을 관리하며, HWPX scripts가 실제 ZIP/XML 패키지를 생성합니다. `hwp-mcp`는 production dependency가 아니라 로컬 Windows 검증 보조 도구입니다.
+
+---
+
 ## 기술 아키텍처
 
 ```mermaid
@@ -145,74 +175,19 @@ LiveDock/
 
 ## 주요 API
 
-```text
-POST /api/analyze                          PDF/HWP/HWPX 업로드 분석
-POST /api/analyze/text                     텍스트 직접 분석
-POST /api/analyze/url                      URL 공고 분석
-GET  /api/demo                             데모 fixture
+LiveDock API는 화면의 6단계 workflow를 그대로 따라갑니다. 사용자는 하나의 문서 작성 흐름을 경험하지만, backend에서는 분석, 입력 수집, 초안 생성, 확인, export가 분리되어 관리됩니다.
 
-GET  /api/workflow/{id}                    workflow session 조회
-POST /api/workflow/{id}/inputs             사용자 입력 저장
-GET  /api/workflow/{id}/draft/stream       SSE 섹션 초안 생성
-POST /api/workflow/{id}/draft/{sid}/revise 섹션 AI 재작성
-POST /api/workflow/{id}/confirm            확인 항목 처리
-POST /api/workflow/{id}/finalize           최종 문서 생성
-
-GET  /api/workflow/{id}/export/hwpx        HWPX export
-GET  /api/workflow/{id}/export/pdf         PDF export
-GET  /api/workflow/{id}/export/html        HTML fallback export
-GET  /api/hwpx/status                      HWPX toolchain readiness
-```
-
----
-
-## 실행
-
-### Backend
-
-```powershell
-cd backend
-python -m venv venv
-.\venv\Scripts\activate
-pip install -r requirements.txt
-copy .env.example .env
-python -m uvicorn main:app --reload
-```
-
-기본 주소는 `http://localhost:8000`입니다.
-
-### Frontend
-
-```powershell
-cd frontend
-npm install
-copy .env.example .env.local
-npm run dev
-```
-
-기본 주소는 `http://localhost:3000`입니다.
-
----
-
-## 검증
-
-Repository root에서 하네스 profile을 실행합니다.
-
-```powershell
-.\scripts\harness.ps1 -Profile quick
-.\scripts\harness.ps1 -Profile agent
-.\scripts\harness.ps1 -Profile frontend
-.\scripts\harness.ps1 -Profile hwpx
-```
-
-| Profile | 목적 |
+| 사용자 흐름 | 대표 API | 설명 |
 | --- | --- |
-| `quick` | Python compile, harness self-test, backend contract |
-| `backend` | backend syntax and contract gate |
-| `agent` | deterministic fixture E2E eval |
-| `frontend` | frontend tests and production build |
-| `full` | backend, agent, frontend 통합 gate |
-| `hwpx` | deterministic E2E + HWPX validation |
+| 공고/양식 입력 | `POST /api/analyze`, `POST /api/analyze/text`, `POST /api/analyze/url` | PDF, HWP/HWPX, 텍스트, URL에서 원문을 추출하고 공고 요구사항을 분석합니다. |
+| 데모 시작 | `GET /api/demo` | 업로드 없이 샘플 공고로 전체 Agent 흐름을 빠르게 확인합니다. |
+| 작업 상태 조회 | `GET /api/workflow/{id}` | 분석 결과, 사용자 입력, 초안, export 상태를 하나의 workflow session으로 불러옵니다. |
+| 부족 정보 입력 | `POST /api/workflow/{id}/inputs` | Agent가 질문한 사용자별 정보만 저장합니다. |
+| 섹션 초안 생성 | `GET /api/workflow/{id}/draft/stream` | 작성 항목별 초안을 SSE 스트리밍으로 생성합니다. |
+| 섹션 재작성 | `POST /api/workflow/{id}/draft/{section_id}/revise` | 사용자의 피드백을 반영해 특정 섹션만 다시 작성합니다. |
+| 확인 및 최종화 | `POST /api/workflow/{id}/confirm`, `POST /api/workflow/{id}/finalize` | 불확실한 주장과 확인 필요 항목을 처리한 뒤 최종 문서 본문을 확정합니다. |
+| 문서 내보내기 | `GET /api/workflow/{id}/export/hwpx`, `GET /api/workflow/{id}/export/pdf`, `GET /api/workflow/{id}/export/html` | HWPX를 우선 제공하고, PDF/HTML fallback으로 사용자 작업을 보존합니다. |
+| HWPX 준비 상태 | `GET /api/hwpx/status` | 서버에 HWPX toolchain, namespace fix, validation 경로가 준비되어 있는지 확인합니다. |
 
 ---
 
