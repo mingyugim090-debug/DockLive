@@ -172,44 +172,6 @@ LiveDock/
   tools/                          harness runner, handoff, HWP MCP helper
   .claude/skills/                 LiveDock 단계별 Agent skill 정의
 ```
-
----
-
-## 주요 API
-
-LiveDock API는 화면의 6단계 workflow를 그대로 따라갑니다. 
-사용자는 하나의 문서 작성 흐름을 경험하지만, backend에서는 분석, 입력 수집, 초안 생성, 확인, export가 분리되어 관리됩니다.
-
-**입력과 분석**
-
-`POST /api/analyze` · `POST /api/analyze/text` · `POST /api/analyze/url`
-
-PDF, HWP/HWPX, 텍스트, URL에서 원문을 추출하고 공고 요구사항을 분석합니다. 업로드 없이 전체 흐름을 확인할 때는 `GET /api/demo`를 사용합니다.
-
-**워크플로우 관리**
-
-`GET /api/workflow/{id}` · `POST /api/workflow/{id}/inputs`
-
-분석 결과, 사용자 입력, 초안, export 상태를 하나의 workflow session으로 관리합니다. Agent가 질문한 사용자별 부족 정보는 inputs API로 저장합니다.
-
-**초안 생성과 재작성**
-
-`GET /api/workflow/{id}/draft/stream` · `POST /api/workflow/{id}/draft/{section_id}/revise`
-
-작성 항목별 초안을 SSE 스트리밍으로 생성하고, 사용자의 피드백이 있는 섹션만 다시 작성합니다.
-
-**확인과 최종화**
-
-`POST /api/workflow/{id}/confirm` · `POST /api/workflow/{id}/finalize`
-
-불확실한 주장과 확인 필요 항목을 처리한 뒤 최종 문서 본문을 확정합니다.
-
-**문서 내보내기**
-
-`GET /api/workflow/{id}/export/hwpx` · `GET /api/workflow/{id}/export/pdf` · `GET /api/workflow/{id}/export/html`
-
-HWPX를 우선 제공하고, PDF와 editable HTML fallback으로 사용자 작업을 보존합니다. 서버의 HWPX toolchain 준비 상태는 `GET /api/hwpx/status`에서 확인합니다.
-
 ---
 
 **ex:** .https://kaist-overedge.com/
