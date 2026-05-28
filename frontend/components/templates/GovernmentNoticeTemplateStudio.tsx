@@ -383,8 +383,8 @@ export function GovernmentNoticeTemplateStudio() {
         <div className="rounded-lg border border-[#DDE4EA] bg-white p-4 shadow-panel">
           <div className="flex flex-col gap-3 border-b border-[#E3E8EF] pb-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-xs font-bold text-[#475569]">Production Request</p>
-              <h2 className="mt-1 text-xl font-extrabold text-[#172033]">공고문 제작 요청</h2>
+              <p className="text-xs font-bold text-[#475569]">HWPX Request</p>
+              <h2 className="mt-1 text-xl font-extrabold text-[#172033]">양식 작성 요청</h2>
             </div>
             <div className="w-full rounded-md bg-[#F8FAFC] p-2 md:w-56">
               <div className="flex items-center justify-between text-[11px] font-bold text-[#64748B]">

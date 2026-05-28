@@ -5,11 +5,11 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const items = [
-  { href: '/app', label: 'Workspace', icon: '문' },
-  { href: '/app/templates', label: 'Templates', icon: '템', child: true },
-  { href: '/app/documents', label: 'Documents', icon: '함' },
-  { href: '/app/billing', label: 'Billing', icon: '원' },
-  { href: '/app/settings', label: 'Settings', icon: '설' },
+  { href: '/app', label: '워크스페이스', icon: '문' },
+  { href: '/app/templates', label: '데모 유형', icon: '템', child: true },
+  { href: '/app/documents', label: '문서함', icon: '함' },
+  { href: '/app/billing', label: '크레딧', icon: '원' },
+  { href: '/app/settings', label: '설정', icon: '설' },
 ];
 
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -32,9 +32,9 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
       >
         <Link href="/" className="flex items-center gap-3 rounded-2xl px-3 py-2" onClick={onClose}>
           <Image src="/docklive-mark.svg" alt="" width={42} height={42} className="h-10 w-10" />
-          <span>
+            <span>
             <span className="block text-base font-bold text-[#24312D]">DockLive</span>
-            <span className="text-xs text-[#65736E]">공고문 자동 제작</span>
+            <span className="text-xs text-[#65736E]">공고 기반 제출 초안</span>
           </span>
         </Link>
 
@@ -64,9 +64,9 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         </nav>
 
         <div className="mt-auto rounded-2xl border border-[#DDE7E2] bg-[#F6FAF8] p-4">
-          <p className="text-sm font-bold text-[#24312D]">1분 안에 시작</p>
+          <p className="text-sm font-bold text-[#24312D]">공고부터 초안까지</p>
           <p className="mt-2 text-xs leading-5 text-[#65736E]">
-            템플릿 선택, 핵심 정보 입력, AI 초안 생성, 미리보기, 다운로드 순서로 공고문을 만듭니다.
+            원문 분석, 확인 질문, 섹션별 초안, HWPX export를 한 흐름으로 진행합니다.
           </p>
         </div>
       </aside>

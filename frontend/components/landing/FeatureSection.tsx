@@ -10,9 +10,9 @@ const FEATURES = [
         <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
       </svg>
     ),
-    title: '공고문 유형별 구조 자동 구성',
-    body: '모집공고, 지원사업 공고, 행사 안내문에 맞춰 필요한 본문 항목을 먼저 잡습니다.',
-    tags: ['모집공고', '지원사업', '행사 안내'],
+    title: '공고 원문 기반 분석',
+    body: '마감일, 자격, 제출 서류, 평가 기준을 원문 근거와 함께 정리합니다.',
+    tags: ['PDF', 'URL', 'HWPX'],
   },
   {
     num: '02',
@@ -21,9 +21,9 @@ const FEATURES = [
         <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
       </svg>
     ),
-    title: '기본 정보 기반 초안 작성',
-    body: '기관명, 모집 대상, 신청 기간, 선정 기준을 받아 행정 공고문 문체로 초안을 생성합니다.',
-    tags: ['사업 개요', '모집 대상', '선정 기준'],
+    title: '부족 정보만 질문',
+    body: '공고에 없는 지원자 정보와 확인이 필요한 항목만 따로 묻습니다.',
+    tags: ['확인 질문', '필수 입력', '불확실 항목'],
   },
   {
     num: '03',
@@ -32,9 +32,9 @@ const FEATURES = [
         <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
       </svg>
     ),
-    title: 'HWPX·DOCX·PDF 즉시 출력',
-    body: '미리보기에서 문안을 확인한 뒤 공고 배포에 필요한 형식으로 내려받습니다.',
-    tags: ['HWPX', 'PDF', 'DOCX'],
+    title: '섹션별 초안과 export',
+    body: '신청 동기, 계획, 기대 효과를 섹션별로 검토하고 HWPX/HTML로 내보냅니다.',
+    tags: ['섹션 초안', '검토', 'HWPX'],
   },
 ] as const;
 
@@ -49,9 +49,9 @@ export function FeatureSection() {
           transition={{ duration: 0.45 }}
           className="mb-10 text-center"
         >
-          <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-[#5263E8]">핵심 기능</p>
+          <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-[#5263E8]">Core Flow</p>
           <h2 className="text-2xl font-bold text-[#1F2937] sm:text-3xl">
-            공고문 제작에 필요한 흐름만 남겼습니다
+            제출 준비에 필요한 기능만 남겼습니다
           </h2>
         </motion.div>
 

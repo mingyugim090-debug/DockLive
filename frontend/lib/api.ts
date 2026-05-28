@@ -450,7 +450,7 @@ export async function generateNoticeDocument(
   files.forEach((file) => formData.append('files', file));
 
   const res = await fetchWithTimeout(`${API_URL}/api/notices/generate`, { method: 'POST', body: formData }, 45000);
-  if (!res.ok) throw await readError(res, `공고문 생성 실패: ${res.status}`);
+  if (!res.ok) throw await readError(res, `초안 생성 실패: ${res.status}`);
   return res.json();
 }
 

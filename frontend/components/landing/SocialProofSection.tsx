@@ -3,9 +3,9 @@
 import { motion } from 'framer-motion';
 
 const STATS = [
-  { value: '8종', label: '공고문 템플릿' },
-  { value: '5단계', label: '제작 흐름' },
-  { value: 'HWPX', label: '한글 배포 형식' },
+  { value: '5종', label: '대표 공고 fixture' },
+  { value: '6단계', label: 'Agent 작성 흐름' },
+  { value: 'HWPX', label: '검증 가능한 export' },
 ];
 
 export function SocialProofSection() {
@@ -22,13 +22,13 @@ export function SocialProofSection() {
           >
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#D8DDFC] bg-[#EDEFFF] px-3 py-1">
               <span className="h-1.5 w-1.5 rounded-full bg-[#5263E8]" />
-              <span className="text-xs font-bold text-[#5263E8]">신뢰성</span>
+              <span className="text-xs font-bold text-[#5263E8]">검증 가능한 흐름</span>
             </div>
             <h2 className="text-2xl font-bold leading-snug text-[#1F2937] sm:text-3xl">
-              사용자는 1분 안에<br />제작 흐름을 이해합니다
+              데모는 짧게,<br />근거는 분명하게
             </h2>
             <p className="mt-3 text-sm leading-6 text-[#6B7280]">
-              템플릿을 고르고, 핵심 정보만 입력한 뒤 미리보기에서 확인하고 다운로드합니다.
+              분석 결과, 확인 질문, 초안, export 상태를 한 화면에서 이어서 확인합니다.
             </p>
             <div className="mt-6 grid grid-cols-3 gap-3">
               {STATS.map(({ value, label }, i) => (
@@ -56,22 +56,22 @@ export function SocialProofSection() {
             className="rounded-[24px] border border-[#ECECF1] bg-white shadow-panel"
           >
             <div className="flex items-center justify-between border-b border-[#ECECF1] px-5 py-3">
-              <span className="text-xs font-semibold text-[#273044]">공고문 미리보기 — 창업캠프 모집</span>
-              <span className="rounded-full bg-[#EDEFFF] px-2.5 py-0.5 text-[10px] font-bold text-[#5263E8]">HWPX 구조</span>
+              <span className="text-xs font-semibold text-[#273044]">분석 미리보기 — 초기 창업 지원사업</span>
+              <span className="rounded-full bg-[#EDEFFF] px-2.5 py-0.5 text-[10px] font-bold text-[#5263E8]">근거 포함</span>
             </div>
             <div className="px-5 py-4">
               <p className="text-sm leading-8 text-[#374151]">
-                <sup className="mr-0.5 font-bold text-[#5263E8]">1</sup>사업 개요,{' '}
-                <sup className="mr-0.5 font-bold text-[#5263E8]">2</sup>모집 대상,{' '}
-                <sup className="mr-0.5 font-bold text-[#5263E8]">3</sup>신청 기간과 운영 일정을 행정문서 순서에 맞춰 정리합니다.
+                <sup className="mr-0.5 font-bold text-[#5263E8]">1</sup>마감일,{' '}
+                <sup className="mr-0.5 font-bold text-[#5263E8]">2</sup>제출 서류,{' '}
+                <sup className="mr-0.5 font-bold text-[#5263E8]">3</sup>평가 기준을 원문에서 확인한 내용과 함께 정리합니다.
               </p>
             </div>
             <div className="space-y-2 border-t border-[#ECECF1] px-5 py-4">
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#9AA1AD]">제작 단계</p>
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#9AA1AD]">데모 단계</p>
               {[
-                ['①', '공고문 유형 선택'],
-                ['②', '핵심 정보 입력 및 AI 초안 생성'],
-                ['③', '미리보기 확인 후 HWPX 다운로드'],
+                ['①', '공고 원문 분석'],
+                ['②', '부족 정보만 입력'],
+                ['③', '초안 검토 후 HWPX 다운로드'],
               ].map(([num, src], i) => (
                 <motion.div
                   key={num}

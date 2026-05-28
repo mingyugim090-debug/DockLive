@@ -15,10 +15,10 @@ export default function HomePage() {
             <Image src="/docklive-logo.svg" alt="DockLive" width={164} height={48} priority className="h-10 w-auto" />
           </a>
           <nav className="hidden items-center gap-6 text-sm font-semibold text-[#6B7280] md:flex">
-            <a href="#features" className="hover:text-[#273044]">기능</a>
+            <a href="#features" className="hover:text-[#273044]">흐름</a>
             <a href="/auth?next=/app" className="hover:text-[#273044]">워크스페이스</a>
           </nav>
-          <ButtonLink href="/auth?next=/app" className="px-4 py-2">Google로 시작하기</ButtonLink>
+          <ButtonLink href="/auth?next=/app" className="px-4 py-2">공고 분석 시작</ButtonLink>
         </div>
       </header>
 

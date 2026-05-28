@@ -35,11 +35,11 @@ export function Header({ title, onMenu }: { title: string; onMenu: () => void })
         <div className="min-w-0">
           <h1 className="truncate text-xl font-bold text-[#24312D]">{title}</h1>
           <p className="hidden text-sm text-[#65736E] sm:block">
-            템플릿 선택부터 HWPX 다운로드까지 한 흐름으로 공고문을 작성합니다.
+            공고 분석부터 HWPX export까지 한 흐름으로 진행합니다.
           </p>
         </div>
         <div className="ml-auto hidden w-full max-w-md md:block">
-          <Input placeholder="템플릿, 공고문, 문서 검색" aria-label="검색" />
+          <Input placeholder="공고, 초안, export 검색" aria-label="검색" />
         </div>
 
         <div className="ml-auto flex items-center gap-2 md:ml-0">

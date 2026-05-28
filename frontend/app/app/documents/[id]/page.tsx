@@ -24,7 +24,7 @@ const actionCopy: Record<ActionKey, { label: string; title: string; body: string
   notice: {
     label: '공고문 다시 생성',
     title: '공고문 초안이 다시 생성되었습니다.',
-    body: '사업 개요부터 붙임 문서 목록까지 행정 공고문 구조로 다시 구성했습니다.',
+    body: '사업 개요부터 제출 전 확인 항목까지 제출문서 구조로 다시 구성했습니다.',
     bullets: ['공고 안내문 작성', '9개 본문 항목 구성', 'HWPX 출력 구조 준비'],
   },
   template: {
@@ -93,7 +93,7 @@ export default function DocumentDetailPage({ params }: { params: { id: string } 
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <h3 className="text-xl font-bold text-[#273044]">문서 작업 결과</h3>
-              <p className="mt-1 text-sm text-[#7B8190]">공고문 생성 결과를 확인하고 필요한 후속 작업을 실행합니다.</p>
+              <p className="mt-1 text-sm text-[#7B8190]">분석 결과와 초안을 확인하고 필요한 후속 작업을 실행합니다.</p>
             </div>
             <Tabs tabs={tabs} active={active} onChange={setActive} />
           </div>

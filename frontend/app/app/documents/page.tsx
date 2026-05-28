@@ -34,13 +34,13 @@ export default function DocumentsPage() {
       <div className="rounded-[30px] border border-[#ECECF1] bg-white p-6 shadow-panel">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-[#273044]">작성한 공고문</h2>
+            <h2 className="text-2xl font-bold text-[#273044]">작업 문서</h2>
             <p className="mt-2 text-sm leading-6 text-[#7B8190]">
-              생성한 모집공고, 지원사업 공고, 행사 안내문을 확인하고 이어서 수정할 수 있습니다.
+              분석한 공고, 작성 중인 초안, 생성한 export를 확인하고 이어서 작업할 수 있습니다.
             </p>
           </div>
           <div className="w-full max-w-md">
-            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="공고문 이름 또는 유형 검색" />
+            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="공고명, 문서 유형 검색" />
           </div>
         </div>
         <div className="mt-5">

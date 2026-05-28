@@ -9,7 +9,7 @@ import { ThemeSettings } from './ThemeSettings';
 
 export function SettingsPanel() {
   const [format, setFormat] = useState<OutputFormat>('HWPX');
-  const [summary, setSummary] = useState<ProcessingMode>('행정 공고문');
+  const [summary, setSummary] = useState<ProcessingMode>('공식 문체');
 
   useEffect(() => {
     const settings = loadWorkflowSettings();
@@ -48,9 +48,9 @@ export function SettingsPanel() {
             </Select>
           </label>
           <label className="text-sm font-semibold text-[var(--theme-muted)]">
-            공고문 작성 옵션
+            초안 작성 옵션
             <Select value={summary} onChange={(event) => setSummary(event.target.value as ProcessingMode)} className="mt-2">
-              {['간결한 공고문', '상세한 공고문', '행정 공고문'].map((item) => (
+              {['간결한 초안', '상세한 초안', '공식 문체'].map((item) => (
                 <option key={item}>{item}</option>
               ))}
             </Select>
@@ -61,7 +61,7 @@ export function SettingsPanel() {
       <Card>
         <h2 className="text-xl font-bold text-[var(--theme-text)]">알림 설정</h2>
         <div className="mt-5 space-y-3">
-          {['공고문 생성 완료 알림', '오류 발생 알림', '주간 작성 현황'].map((item) => (
+          {['초안 생성 완료 알림', '오류 발생 알림', '주간 작업 현황'].map((item) => (
             <label
               key={item}
               className="flex items-center justify-between rounded-[18px] bg-[var(--theme-surface-muted)] p-4 text-sm font-semibold text-[var(--theme-text)]"

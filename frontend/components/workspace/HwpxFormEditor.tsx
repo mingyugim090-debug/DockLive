@@ -40,13 +40,13 @@ type QualityFinding = {
 };
 
 const workflowSteps: Array<{ id: WorkflowStep; label: string; description: string }> = [
-  { id: 'upload', label: '1. 양식 업로드', description: '자동화할 HWP/HWPX 원본 선택' },
-  { id: 'edit', label: '2. 섹션별 지시', description: '가운데 문서에서 칸을 클릭하고 직접 입력 또는 AI 요청' },
-  { id: 'export', label: '3. HWPX 생성', description: '원본 HWPX 구조에 입력값만 주입해 다운로드' },
+  { id: 'upload', label: '1. 양식 업로드', description: '작성할 HWP/HWPX 원본 선택' },
+  { id: 'edit', label: '2. 항목별 작성', description: '문서의 칸을 클릭해 직접 입력하거나 AI 초안 요청' },
+  { id: 'export', label: '3. HWPX export', description: '원본 구조를 유지해 완성본 다운로드' },
 ];
 
 const HWPX_SESSION_STORAGE_KEY = 'livedock_hwpx_form_session_id';
-const agentStageLabels = ['문서 구조 분석', '전체 스토리라인 생성', '섹션 작성', '분량/톤 검수', '완료'];
+const agentStageLabels = ['문서 구조 분석', '작성 항목 정리', '섹션 작성', '분량/톤 검수', '완료'];
 
 const inlineActionLabels: Record<InlineAiAction, string> = {
   write: 'AI 작성',
@@ -196,7 +196,7 @@ function promptForInlineAction(action: InlineAiAction, region: HwpxEditableRegio
   if (action === 'write') return base || `${region.label} 항목을 제출용 문장으로 작성해줘.`;
   if (action === 'shorten') return `${region.label} 내용을 핵심만 남겨 더 짧고 명확하게 줄여줘.`;
   if (action === 'expand') return `${region.label} 내용을 근거와 맥락이 드러나도록 더 구체화해줘.`;
-  if (action === 'formal') return `${region.label} 내용을 공모전 제출용 문체로 자연스럽고 전문적으로 다듬어줘.`;
+  if (action === 'formal') return `${region.label} 내용을 제출용 문체로 자연스럽고 명확하게 다듬어줘.`;
   return `${region.label} 내용을 중복 없이 다시 작성해줘.`;
 }
 
@@ -615,12 +615,12 @@ function WorkflowHeader({
     <section className="rounded-2xl border border-[#DDE7E2] bg-white p-6 shadow-sm">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="text-sm font-bold text-[#3A7A68]">HWPX 양식 자동완성</p>
+          <p className="text-sm font-bold text-[#3A7A68]">HWPX 양식 작성</p>
           <h1 className="mt-2 text-3xl font-bold tracking-normal text-[#24312D]">
-            원본 양식을 HTML처럼 클릭하고, 완성본은 HWPX로 받습니다.
+            원본 양식을 보존하며 필요한 항목만 채웁니다.
           </h1>
           <p className="mt-3 max-w-3xl text-sm leading-7 text-[#65736E]">
-            중앙에는 업로드한 문서 구조를 재구성해 보여주고, 오른쪽 패널에서는 선택한 표 셀이나 문단에 직접 입력하거나 AI에게 작성 지시를 남깁니다.
+            업로드한 문서 구조를 보면서 표 셀과 문단을 선택하고, 직접 입력하거나 AI 초안을 적용할 수 있습니다.
           </p>
         </div>
         {hasSession ? (
@@ -681,11 +681,11 @@ function UploadStep({
         className="flex min-h-[300px] w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#BFD1C9] bg-[#F8FBFA] px-6 text-center transition hover:border-[#6A9C89] hover:bg-[#F2F8F5] disabled:cursor-not-allowed disabled:opacity-60"
       >
         <span className="text-base font-bold text-[#245D50]">
-          {busy === 'restore' ? '이전 HWPX 세션 불러오는 중...' : busy === 'upload' ? 'HWPX파일 업로드 중...' : '자동화할 HWPX 양식 업로드'}
+          {busy === 'restore' ? '이전 HWPX 세션을 불러오는 중...' : busy === 'upload' ? 'HWPX 파일 업로드 중...' : '작성할 HWPX 양식 업로드'}
         </span>
         <span className="mt-3 max-w-xl text-sm leading-6 text-[#65736E]">
-          HWPX를 권장하며, HWP 파일은 서버에서 HWPX로 변환한 뒤 같은 방식으로 편집합니다.
-          업로드 후 문서 가운데 영역에서 각 섹션과 표 셀을 클릭할 수 있습니다.
+          HWPX를 권장합니다. HWP 파일은 서버에서 HWPX로 변환한 뒤 같은 방식으로 편집합니다.
+          업로드 후 가운데 문서에서 작성할 섹션과 표 셀을 선택하세요.
         </span>
       </button>
     </section>
@@ -729,9 +729,9 @@ function EditStep(props: {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xs font-bold text-[#3A7A68]">{props.session.source_filename}</p>
-            <h2 className="mt-1 text-xl font-bold text-[#24312D]">문서의 섹션과 표 셀을 클릭해 채울 내용을 지정하세요.</h2>
+            <h2 className="mt-1 text-xl font-bold text-[#24312D]">작성할 섹션과 표 셀을 선택하세요.</h2>
             <p className="mt-2 text-sm leading-6 text-[#65736E]">
-              개인정보처럼 짧은 칸은 직접 수정하고, 긴 서술형 칸은 AI 요청 내용을 적은 뒤 초안을 생성하면 됩니다.
+              짧은 값은 직접 입력하고, 서술형 항목은 AI 요청을 남겨 초안을 생성할 수 있습니다.
             </p>
           </div>
           <div className="flex items-center gap-6 text-sm">

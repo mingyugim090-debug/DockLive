@@ -24,12 +24,12 @@ import { HwpxFormEditor } from '@/components/workspace/HwpxFormEditor';
 type AgentStep = 'input' | 'analysis' | 'questions' | 'draft' | 'review' | 'download';
 
 const STEPS: Array<{ id: AgentStep; label: string }> = [
-  { id: 'input', label: '공고 입력' },
-  { id: 'analysis', label: 'AI 분석' },
-  { id: 'questions', label: '정보 입력' },
-  { id: 'draft', label: '초안 생성' },
+  { id: 'input', label: '원문 입력' },
+  { id: 'analysis', label: '요구사항' },
+  { id: 'questions', label: '확인 질문' },
+  { id: 'draft', label: '섹션 초안' },
   { id: 'review', label: '검토' },
-  { id: 'download', label: '다운로드' },
+  { id: 'download', label: 'Export' },
 ];
 
 function downloadExport(exported: ExportResponse) {
@@ -48,10 +48,10 @@ function downloadExport(exported: ExportResponse) {
 
 const LOADING_PHASES = [
   '공고문을 읽고 있습니다...',
-  '제출 요구사항을 파악하고 있습니다...',
-  '필수 서류를 확인하고 있습니다...',
-  '마감일과 일정을 추출하고 있습니다...',
-  '질문 항목을 구성하고 있습니다...',
+  '마감일과 제출 서류를 확인하고 있습니다...',
+  '지원 자격과 평가 기준을 정리하고 있습니다...',
+  '원문 근거와 불확실한 항목을 분리하고 있습니다...',
+  '사용자에게 물어볼 항목을 구성하고 있습니다...',
 ];
 
 interface SavedSession {
@@ -351,12 +351,12 @@ export default function AppPage() {
       <section className="rounded-2xl border border-[#DDE7E2] bg-white p-6 shadow-sm">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-sm font-bold text-[#3A7A68]">AI 문서 자동 작성</p>
+            <p className="text-sm font-bold text-[#3A7A68]">공고 기반 제출문서 Agent</p>
             <h1 className="mt-2 text-3xl font-bold tracking-tight text-[#24312D]">
-              공고문을 올리면 AI가 제출 문서 초안을 자동으로 구성합니다.
+              공고를 분석하고 제출 초안을 준비합니다.
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-[#65736E]">
-              PDF, URL, 텍스트를 입력하면 AI가 공고 요구사항을 분석하고, 부족한 정보만 질문한 뒤, 제출 가능한 초안을 생성합니다.
+              PDF, HWPX, URL, 텍스트를 입력하면 요구사항과 근거를 정리하고, 부족한 정보만 질문한 뒤 섹션별 초안을 생성합니다.
             </p>
           </div>
           {workflow ? (
@@ -512,7 +512,7 @@ function InputStep({
                 tab === t ? 'bg-white text-[#245D50] shadow-sm' : 'text-[#65736E] hover:text-[#24312D]',
               ].join(' ')}
             >
-              {t === 'file' ? 'PDF / HWP 업로드' : t === 'url' ? 'URL 입력' : '텍스트 붙여넣기'}
+              {t === 'file' ? '파일 업로드' : t === 'url' ? 'URL 입력' : '텍스트 입력'}
             </button>
           ))}
           <button
@@ -520,7 +520,7 @@ function InputStep({
             onClick={onHwpxMode}
             className="flex-1 rounded-lg px-3 py-2 text-sm font-bold transition text-[#65736E] hover:text-[#24312D]"
           >
-            HWPX 양식 편집
+            HWPX 양식 작성
           </button>
         </div>
 
@@ -557,10 +557,10 @@ function InputStep({
                 <div className="text-center">
                   <p className="text-base font-bold text-[#245D50]">
                     {isAnalyzing
-                      ? (loadingPhase ?? 'AI가 공고문을 분석하고 있습니다...')
-                      : '공고문 파일을 올려주세요'}
+                      ? (loadingPhase ?? '공고를 분석하고 있습니다...')
+                      : '공고 파일을 올려주세요'}
                   </p>
-                  <p className="mt-1 text-sm text-[#65736E]">PDF, HWP, HWPX · 드래그&드롭 또는 클릭</p>
+                  <p className="mt-1 text-sm text-[#65736E]">PDF, HWP, HWPX를 지원합니다.</p>
                 </div>
               </button>
             </div>
@@ -582,7 +582,7 @@ function InputStep({
                 onClick={() => url.trim() && onAnalyzeUrl(url.trim())}
                 disabled={!url.trim() || isAnalyzing}
               >
-                {isAnalyzing ? (loadingPhase ?? 'URL 분석 중...') : '공고 분석 시작'}
+                {isAnalyzing ? (loadingPhase ?? 'URL을 분석하고 있습니다...') : 'URL 공고 분석'}
               </Button>
             </div>
           )}
@@ -590,7 +590,7 @@ function InputStep({
           {tab === 'text' && (
             <div className="space-y-3">
               <label className="block">
-                <span className="text-sm font-bold text-[#24312D]">공고문 제목 (선택)</span>
+                <span className="text-sm font-bold text-[#24312D]">공고 제목 (선택)</span>
                 <input
                   type="text"
                   value={textTitle}
@@ -600,12 +600,12 @@ function InputStep({
                 />
               </label>
               <label className="block">
-                <span className="text-sm font-bold text-[#24312D]">공고문 내용 붙여넣기</span>
+                <span className="text-sm font-bold text-[#24312D]">공고 내용 붙여넣기</span>
                 <textarea
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   rows={10}
-                  placeholder="공고문 전체 내용을 붙여넣으세요. (100자 이상)"
+                  placeholder="공고 전체 내용을 붙여넣으세요. (100자 이상)"
                   className="mt-2 w-full resize-y rounded-xl border border-[#DDE7E2] bg-[#FBFCFB] px-4 py-3 text-sm leading-6 outline-none focus:border-[#6A9C89]"
                 />
               </label>
@@ -613,7 +613,7 @@ function InputStep({
                 onClick={() => text.trim().length >= 100 && onAnalyzeText(text.trim(), textTitle.trim())}
                 disabled={text.trim().length < 100 || isAnalyzing}
               >
-                {isAnalyzing ? (loadingPhase ?? '공고 분석 중...') : '공고 분석 시작'}
+                {isAnalyzing ? (loadingPhase ?? '공고를 분석하고 있습니다...') : '텍스트 공고 분석'}
               </Button>
               {text.length > 0 && text.length < 100 && (
                 <p className="text-xs text-rose-600">{100 - text.length}자 더 입력해 주세요.</p>
@@ -625,9 +625,9 @@ function InputStep({
 
       {/* Demo option — 5 doc-type quick-start buttons */}
       <section className="rounded-2xl border border-[#C8DBD2] bg-[#EDF7F2] p-5">
-        <p className="text-sm font-bold text-[#245D50]">파일 없이 유형별 예시로 바로 체험</p>
+        <p className="text-sm font-bold text-[#245D50]">데모 공고로 바로 체험</p>
         <p className="mt-1 text-xs leading-5 text-[#3A7A68]">
-          문서 유형을 선택하면 AI가 맞춤 질문으로 초안을 자동 생성합니다. (파일 불필요)
+          대표 공고 fixture로 분석, 질문, 초안 생성 흐름을 확인합니다. 파일은 필요 없습니다.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           {(
@@ -646,7 +646,7 @@ function InputStep({
               disabled={isAnalyzing}
               className="rounded-xl border border-[#C8DBD2] bg-white px-4 py-2 text-xs font-bold text-[#245D50] transition hover:border-[#3A7A68] hover:bg-[#F0FAF5] disabled:opacity-50"
             >
-              {isAnalyzing ? '분석 중...' : type.label}
+              {isAnalyzing ? '분석 중...' : `${type.label} 데모`}
             </button>
           ))}
         </div>
@@ -676,7 +676,7 @@ function AnalysisStep({
     <section className="space-y-5">
       {/* Summary card */}
       <div className="rounded-2xl border border-[#DDE7E2] bg-white p-6 shadow-sm">
-        <p className="text-sm font-bold text-[#3A7A68]">AI가 추출한 공고 핵심 정보</p>
+        <p className="text-sm font-bold text-[#3A7A68]">원문에서 확인한 핵심 정보</p>
         <h2 className="mt-2 text-2xl font-bold text-[#24312D]">{a.title || '제목 없음'}</h2>
         {a.organization ? (
           <p className="mt-1 text-sm font-semibold text-[#65736E]">{a.organization}</p>
@@ -694,7 +694,7 @@ function AnalysisStep({
           />
           <InfoCard label="제출 방법" value={a.submission_method || '확인 필요'} />
           <InfoCard label="제출 서류" value={`${a.checklist.length}종`} />
-          <InfoCard label="작성 섹션" value={`${a.document_template.length}개`} />
+          <InfoCard label="초안 섹션" value={`${a.document_template.length}개`} />
         </div>
       </div>
 
@@ -779,7 +779,7 @@ function AnalysisStep({
       {/* What AI will ask */}
       {a.missing_questions.length > 0 && (
         <div className="rounded-2xl border border-[#DDE7E2] bg-[#F8FBFA] p-5">
-          <p className="text-sm font-bold text-[#24312D]">AI가 다음 단계에서 질문할 정보</p>
+          <p className="text-sm font-bold text-[#24312D]">다음 단계에서 물어볼 정보</p>
           <ul className="mt-3 space-y-1">
             {a.missing_questions.map((q) => (
               <li key={q.id} className="text-sm leading-6 text-[#65736E]">
@@ -794,7 +794,7 @@ function AnalysisStep({
         <Button variant="secondary" onClick={onBack}>
           다시 입력
         </Button>
-        <Button onClick={onNext}>정보 입력 시작</Button>
+        <Button onClick={onNext}>확인 질문으로 이동</Button>
       </div>
     </section>
   );
@@ -825,12 +825,12 @@ function QuestionsStep({
 
   return (
     <section className="rounded-2xl border border-[#DDE7E2] bg-white p-6 shadow-sm">
-      <p className="text-sm font-bold text-[#3A7A68]">AI 초안에 반영할 정보 입력</p>
+      <p className="text-sm font-bold text-[#3A7A68]">확인 질문</p>
       <h2 className="mt-2 text-2xl font-bold text-[#24312D]">
-        부족한 정보만 입력하면 AI가 나머지를 작성합니다.
+        공고에 없는 정보만 채워 주세요.
       </h2>
       <p className="mt-2 text-sm leading-6 text-[#65736E]">
-        공고 근거가 있는 항목은 이미 채워졌습니다. 아래 항목만 입력해 주세요.
+        원문에서 확인한 내용은 분석 결과에 남겨두고, 초안 작성에 필요한 사용자 정보만 받습니다.
       </p>
 
       <div className="mt-6 space-y-5">
@@ -853,7 +853,7 @@ function QuestionsStep({
         {optional.length > 0 && (
           <details className="rounded-xl border border-[#E4EBE7]">
             <summary className="cursor-pointer rounded-xl px-4 py-3 text-sm font-bold text-[#24312D]">
-              선택 항목 ({optional.length}개) — 입력하면 더 풍부한 초안이 생성됩니다
+              선택 항목 ({optional.length}개) — 입력하면 초안 맥락이 보강됩니다
             </summary>
             <div className="space-y-4 border-t border-[#E4EBE7] px-4 py-4">
               {optional.map((field) => (
@@ -874,7 +874,7 @@ function QuestionsStep({
           분석 결과 보기
         </Button>
         <Button onClick={onNext} disabled={Boolean(busy) || !requiredFilled}>
-          {busy === 'save' ? '저장 중...' : 'AI 초안 생성'}
+          {busy === 'save' ? '저장 중...' : '섹션별 초안 생성'}
         </Button>
       </div>
       {!requiredFilled && (
@@ -946,12 +946,12 @@ function DraftStep({
 
   return (
     <section className="rounded-2xl border border-[#DDE7E2] bg-white p-6 shadow-sm">
-      <p className="text-sm font-bold text-[#3A7A68]">AI 초안 자동 생성</p>
+      <p className="text-sm font-bold text-[#3A7A68]">섹션별 초안 생성</p>
       <h2 className="mt-2 text-2xl font-bold text-[#24312D]">
-        {generating ? '섹션별 초안을 작성하고 있습니다...' : allDone ? '초안 생성 완료' : '초안을 생성합니다.'}
+        {generating ? '공고 근거와 입력값으로 초안을 작성하고 있습니다...' : allDone ? '초안 생성 완료' : '초안을 생성합니다.'}
       </h2>
       <p className="mt-2 text-sm leading-6 text-[#65736E]">
-        공고 요구사항과 입력 정보를 바탕으로 각 섹션을 작성합니다. 확인이 필요한 항목은 다음 단계에서 표시됩니다.
+        각 섹션은 검토 가능한 단위로 생성됩니다. 확인이 필요한 항목은 초안 안에 남깁니다.
       </p>
 
       {log.length > 0 && (
@@ -1035,12 +1035,12 @@ function ReviewStep({
   return (
     <section className="space-y-5">
       <div className="rounded-2xl border border-[#DDE7E2] bg-white p-6 shadow-sm">
-        <p className="text-sm font-bold text-[#3A7A68]">AI 초안 검토</p>
+        <p className="text-sm font-bold text-[#3A7A68]">초안 검토</p>
         <h2 className="mt-2 text-2xl font-bold text-[#24312D]">
           섹션별 초안을 확인하고 최종 문서를 생성합니다.
         </h2>
         <p className="mt-2 text-sm leading-6 text-[#65736E]">
-          내용을 직접 편집하거나 AI에게 재작성을 요청할 수 있습니다.
+          제출 전 문장, 근거, 확인 필요 항목을 살펴보고 필요한 부분만 수정하세요.
         </p>
       </div>
 
@@ -1262,10 +1262,10 @@ function DownloadStep({
     <section className="space-y-5">
       {/* Success banner */}
       <div className="rounded-2xl border border-[#C8DBD2] bg-[#EDF7F2] p-6 shadow-sm">
-        <p className="text-sm font-bold text-[#3A7A68]">최종 문서가 생성되었습니다</p>
+        <p className="text-sm font-bold text-[#3A7A68]">Export 준비 완료</p>
         <h2 className="mt-2 text-2xl font-bold text-[#24312D]">{final?.title || workflow.analysis.title}</h2>
         <p className="mt-2 text-sm text-[#65736E]">
-          아래에서 원하는 형식으로 다운로드하세요.
+          제출 전 내용을 한 번 더 확인한 뒤 필요한 형식으로 내려받으세요.
         </p>
       </div>
 
@@ -1282,24 +1282,24 @@ function DownloadStep({
 
       {/* Download buttons */}
       <div className="rounded-2xl border border-[#DDE7E2] bg-white p-5 shadow-sm">
-        <p className="text-sm font-bold text-[#24312D]">다운로드 형식 선택</p>
+        <p className="text-sm font-bold text-[#24312D]">Export 형식 선택</p>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <DownloadCard
             label="HWPX"
-            description="한글 호환 공식 제출 형식"
+            description="편집 가능한 한글 문서"
             recommended
             busy={busy === 'hwpx'}
             onClick={onDownloadHwpx}
           />
           <DownloadCard
             label="PDF"
-            description="범용 문서 형식"
+            description="검토와 공유용 문서"
             busy={busy === 'pdf'}
             onClick={onDownloadPdf}
           />
           <DownloadCard
             label="HTML"
-            description="한글에서 열 수 있는 웹 문서"
+            description="HWPX 실패 시 백업"
             busy={busy === 'html'}
             onClick={onDownloadHtml}
           />

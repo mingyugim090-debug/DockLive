@@ -17,8 +17,8 @@ function UploadStep() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
           </svg>
         </div>
-        <p className="text-xs font-semibold text-[#5263E8]">샘플 양식 기반 공고문 시작</p>
-        <p className="text-[10px] text-[#9AA1AD]">업로드 없이 바로 생성 가능</p>
+        <p className="text-xs font-semibold text-[#5263E8]">공고 원문 업로드</p>
+        <p className="text-[10px] text-[#9AA1AD]">PDF, HWPX, URL, 텍스트 지원</p>
       </div>
       {/* Uploaded file */}
       <motion.div
@@ -33,7 +33,7 @@ function UploadStep() {
           </svg>
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[11px] font-semibold text-[#273044]">창업캠프_운영계획.pdf</p>
+          <p className="truncate text-[11px] font-semibold text-[#273044]">초기창업_지원사업_공고.pdf</p>
           <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-[#EDEFFF]">
             <motion.div
               className="h-full rounded-full bg-gradient-to-r from-[#5263E8] to-[#7A69EC]"
@@ -58,16 +58,16 @@ function UploadStep() {
 
 function AnalyzeStep() {
   const items = [
-    { label: '공고 유형', value: '창업캠프 모집', accent: true, delay: 0.1 },
-    { label: '모집 대상', value: '예비창업자 및 대학생', accent: false, delay: 0.25 },
-    { label: '모집 인원', value: '30명 내외', accent: false, delay: 0.4 },
-    { label: '제출 서류', value: '신청서, 동의서 外', accent: false, delay: 0.55 },
+    { label: '공고 유형', value: '창업지원', accent: true, delay: 0.1 },
+    { label: '마감일', value: '2026. 6. 7.', accent: false, delay: 0.25 },
+    { label: '제출 서류', value: '신청서, 사업계획서', accent: false, delay: 0.4 },
+    { label: '확인 필요', value: '팀 정보, 사업 내용', accent: false, delay: 0.55 },
   ];
   return (
     <div className="space-y-2.5">
       <div className="flex items-center gap-2 rounded-xl bg-[#F6F8FB] px-3 py-2">
         <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[#5263E8]" />
-        <p className="text-[11px] font-semibold text-[#5263E8]">AI가 공고문 기본 정보를 구조화하는 중</p>
+        <p className="text-[11px] font-semibold text-[#5263E8]">공고 근거를 기준으로 요구사항을 정리하는 중</p>
       </div>
       {items.map(({ label, value, accent, delay }) => (
         <motion.div
@@ -85,16 +85,45 @@ function AnalyzeStep() {
   );
 }
 
+function QuestionStep() {
+  const questions = [
+    '지원자/팀 기본 정보',
+    '아이템 요약과 추진 계획',
+    '확인 필요한 제출 조건',
+  ];
+  return (
+    <div className="space-y-2.5">
+      <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2">
+        <p className="text-[11px] font-bold text-amber-700">공고에 없는 정보만 질문합니다</p>
+      </div>
+      {questions.map((question, index) => (
+        <motion.div
+          key={question}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 + index * 0.12, duration: 0.3 }}
+          className="flex items-center gap-2 rounded-xl border border-[#ECECF1] bg-white px-3 py-2"
+        >
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#F0F2FF] text-[10px] font-bold text-[#5263E8]">
+            {index + 1}
+          </span>
+          <span className="text-[11px] font-semibold text-[#273044]">{question}</span>
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
 function DraftStep() {
   const sections = [
-    { title: '사업 개요', lines: [80, 95, 60], delay: 0 },
-    { title: '모집 대상', lines: [90, 75, 85, 50], delay: 0.3 },
+    { title: '지원 동기', lines: [80, 95, 60], delay: 0 },
+    { title: '추진 계획', lines: [90, 75, 85, 50], delay: 0.3 },
   ];
   return (
     <div className="space-y-2.5">
       <div className="flex items-center gap-2 rounded-xl bg-[#EDEFFF] px-3 py-2">
         <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[#5263E8]" />
-        <p className="text-[11px] font-semibold text-[#5263E8]">행정 공고문 초안 작성 중 — 4 / 9 완료</p>
+        <p className="text-[11px] font-semibold text-[#5263E8]">섹션별 제출 초안 작성 중 — 2 / 5 완료</p>
       </div>
       {sections.map(({ title, lines, delay }) => (
         <motion.div
@@ -138,13 +167,13 @@ function ExportStep() {
           </svg>
         </div>
         <div className="text-center">
-          <p className="text-sm font-bold text-[#1F2937]">HWPX 초안 완성!</p>
-          <p className="mt-0.5 text-[11px] text-[#6B7280]">창업캠프_모집공고문.hwpx</p>
+          <p className="text-sm font-bold text-[#1F2937]">검토용 초안 완성</p>
+          <p className="mt-0.5 text-[11px] text-[#6B7280]">초기창업_제출초안.hwpx</p>
         </div>
       </motion.div>
       <div className="grid grid-cols-2 gap-2">
         {[
-          { label: '분석 시간', value: '4분 32초' },
+          { label: '확인 질문', value: '3개' },
           { label: '작성 섹션', value: '5 / 5' },
         ].map(({ label, value }) => (
           <motion.div
@@ -166,10 +195,11 @@ function ExportStep() {
 /* ── step metadata ────────────────────────────────────────────────── */
 
 const STEPS = [
-  { id: 0, phase: '01', label: '유형', title: '공고문 유형 선택', Component: UploadStep },
-  { id: 1, phase: '02', label: '정보', title: '기본 정보 입력', Component: AnalyzeStep },
-  { id: 2, phase: '03', label: '초안', title: 'AI 공고문 생성', Component: DraftStep },
-  { id: 3, phase: '04', label: '완성', title: 'HWPX 파일 완성', Component: ExportStep },
+  { id: 0, phase: '01', label: '입력', title: '공고 원문 입력', Component: UploadStep },
+  { id: 1, phase: '02', label: '분석', title: '근거 기반 분석', Component: AnalyzeStep },
+  { id: 2, phase: '03', label: '질문', title: '부족 정보 확인', Component: QuestionStep },
+  { id: 3, phase: '04', label: '초안', title: '섹션별 초안 생성', Component: DraftStep },
+  { id: 4, phase: '05', label: '내보내기', title: 'HWPX export', Component: ExportStep },
 ] as const;
 
 /* ── 3D scene ─────────────────────────────────────────────────────── */
@@ -313,9 +343,9 @@ function WorkflowScene3D() {
 /* ── trust signals ────────────────────────────────────────────────── */
 
 const TRUST = [
-  { value: '1분', label: '흐름 이해' },
-  { value: 'HWPX', label: '행정문서 출력' },
-  { value: '5단계', label: '제작 플로우' },
+  { value: '근거', label: '원문 기반 분석' },
+  { value: '질문', label: '부족 정보만 확인' },
+  { value: 'HWPX', label: '편집 가능한 export' },
 ];
 
 /* ── hero section ─────────────────────────────────────────────────── */
@@ -338,29 +368,29 @@ export function HeroSection() {
         >
           <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[#D8DDFC] bg-white/80 px-3.5 py-1.5 shadow-sm">
             <span className="flex h-1.5 w-1.5 rounded-full bg-[#5263E8]" />
-            <span className="text-xs font-bold text-[#5263E8]">공고문 AI Agent</span>
+            <span className="text-xs font-bold text-[#5263E8]">공고 기반 제출문서 Agent</span>
           </div>
 
           <h1 className="text-[2.6rem] font-bold leading-[1.15] tracking-tight text-[#1F2937] sm:text-5xl lg:text-[3.1rem]">
-            공고문을
+            공고를 읽고
             <br />
-            만드는
+            제출 초안을
             <br />
-            <span className="gradient-text">AI Agent</span>
+            <span className="gradient-text">준비합니다</span>
           </h1>
 
           <p className="mt-5 max-w-[460px] text-base leading-7 text-[#6B7280]">
-            공공기관·대학·지자체 담당자를 위한 공고문 자동 제작 서비스입니다. 유형을 고르고 기본 정보를 입력하면 모집공고, 지원사업 공고, 행사 안내문을 바로 만듭니다.
+            PDF, HWPX, URL, 텍스트 공고에서 요구사항과 근거를 정리하고 부족한 정보만 질문합니다. 답변을 바탕으로 섹션별 제출 초안을 만들고 HWPX로 내보냅니다.
           </p>
 
           <div className="mt-7 flex flex-col gap-3 sm:flex-row">
             <ButtonLink href="/auth?next=/app">
-              공고문 만들기
+              공고 분석 시작
               <svg className="ml-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
               </svg>
             </ButtonLink>
-            <ButtonLink href="#features" variant="secondary">기능 살펴보기</ButtonLink>
+            <ButtonLink href="#features" variant="secondary">흐름 살펴보기</ButtonLink>
           </div>
 
           {/* Trust signals */}
@@ -394,19 +424,19 @@ export function HeroSection() {
         <div className="rounded-[32px] border border-[#ECECF1] bg-white/70 px-8 py-8 shadow-panel backdrop-blur-sm">
           <div className="flex flex-col items-center gap-7">
             <div className="flex flex-wrap items-end justify-center gap-6 sm:gap-10">
-              <Folder color="blue" size="md" label="모집공고" />
+              <Folder color="blue" size="md" label="공모전" />
               <Folder color="yellow" size="md" label="지원사업" />
-              <Folder color="orange" size="md" label="행사 안내" />
-              <Folder color="grey" size="md" label="입찰 공고" />
+              <Folder color="orange" size="md" label="장학금" />
+              <Folder color="grey" size="md" label="연구과제" />
             </div>
             <div className="text-center">
-              <p className="text-sm font-semibold text-[#273044]">템플릿을 고르면 HWPX 공고문까지</p>
+              <p className="text-sm font-semibold text-[#273044]">공고 이해부터 제출 초안까지 한 흐름으로</p>
               <p className="mt-1 text-sm leading-6 text-[#6B7280]">
-                공고문 유형 선택, 핵심 정보 입력, AI 초안 생성, 미리보기, 다운로드 흐름으로 1분 안에 방향을 이해할 수 있습니다.
+                공고 분석, 확인 질문, 섹션별 초안, 검토, HWPX export까지 데모 흐름으로 바로 확인할 수 있습니다.
               </p>
             </div>
             <ButtonLink href="/auth?next=/app" className="px-7 py-2.5 text-sm">
-              지금 무료로 시작하기
+              데모 워크스페이스 열기
             </ButtonLink>
           </div>
         </div>

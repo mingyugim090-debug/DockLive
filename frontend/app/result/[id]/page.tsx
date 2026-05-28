@@ -519,7 +519,7 @@ export default function ResultPage() {
 
           {currentStep === 1 ? (
             <div className="space-y-5">
-              <SectionCard title="공고 분석 요약" eyebrow="Analysis" desc="공고 원문에서 추출한 핵심 요구사항과 불확실한 항목을 먼저 검토합니다." action={<StatusBadge label={activeAnalysis.source_type.toUpperCase()} tone="neutral" />}>
+              <SectionCard title="공고 분석 요약" eyebrow="Analysis" desc="원문에서 확인한 요구사항과 확인이 필요한 항목을 먼저 검토합니다." action={<StatusBadge label={activeAnalysis.source_type.toUpperCase()} tone="neutral" />}>
                 <div className="grid gap-4 lg:grid-cols-[1fr_0.7fr]">
                   <div className="rounded-lg border border-white/10 bg-white/[0.035] p-5">
                     <p className="text-sm leading-7 text-text2">{activeAnalysis.summary || '요약 정보가 없습니다.'}</p>
@@ -545,7 +545,7 @@ export default function ResultPage() {
                 </div>
               </SectionCard>
 
-              <SectionCard title="요구사항 보드" desc="지원 자격, 혜택, 평가 기준, 주의사항을 나누어 검토합니다.">
+              <SectionCard title="요구사항 보드" desc="지원 자격, 혜택, 평가 기준, 주의사항을 분리해 확인합니다.">
                 <div className="grid gap-4 md:grid-cols-2">
                   <InfoCard title="지원 자격" items={activeAnalysis.eligibility} tone="info" />
                   <InfoCard title="혜택/지원 내용" items={activeAnalysis.benefits} tone="success" />
@@ -555,7 +555,7 @@ export default function ResultPage() {
                 </div>
               </SectionCard>
 
-              <SectionCard title="일정과 제출서류" desc="required/optional 구분과 파일 형식 요구사항을 확인합니다.">
+              <SectionCard title="일정과 제출서류" desc="필수/선택 구분과 파일 형식 요구사항을 확인합니다.">
                 <div className="grid gap-4 lg:grid-cols-[0.84fr_1fr]">
                   <div className="rounded-lg border border-white/10 bg-white/[0.035] p-4">
                     <h3 className="text-sm font-semibold text-text">일정</h3>
@@ -597,14 +597,14 @@ export default function ResultPage() {
                 </div>
               </SectionCard>
 
-              <SectionCard title="Source evidence" desc="중요 추출값의 원문 근거를 확인합니다.">
+              <SectionCard title="원문 근거" desc="중요 추출값이 어디에서 나왔는지 확인합니다.">
                 <EvidenceList evidence={activeAnalysis.source_evidence ?? []} />
               </SectionCard>
             </div>
           ) : null}
 
           {currentStep === 2 ? (
-            <SectionCard title="필수 입력 수집" eyebrow="Input" desc="비어 있는 필수 입력을 채울수록 초안 정확도가 좋아집니다. 저장 후 섹션별 초안을 생성하세요." action={<StatusBadge label={`${requiredStats.percent}% 완료`} tone={requiredStats.percent === 100 ? 'success' : 'warning'} />}>
+            <SectionCard title="확인 질문" eyebrow="Input" desc="공고에 없는 정보만 입력합니다. 저장 후 섹션별 초안을 생성하세요." action={<StatusBadge label={`${requiredStats.percent}% 완료`} tone={requiredStats.percent === 100 ? 'success' : 'warning'} />}>
               <div className="mb-5 rounded-lg border border-white/10 bg-white/[0.035] p-4">
                 <div className="flex items-center justify-between gap-4">
                   <div>
@@ -644,7 +644,7 @@ export default function ResultPage() {
           ) : null}
 
           {currentStep === 3 ? (
-            <SectionCard title="섹션별 초안" eyebrow="Draft" desc="각 섹션을 검토하고 바로 최종 문서를 생성할 수 있습니다." action={<Button type="button" variant="secondary" onClick={handleGenerateDraft} disabled={busy}>초안 다시 생성</Button>}>
+            <SectionCard title="섹션별 초안" eyebrow="Draft" desc="각 섹션을 검토하고 필요한 부분만 수정한 뒤 최종 문서로 넘깁니다." action={<Button type="button" variant="secondary" onClick={handleGenerateDraft} disabled={busy}>초안 다시 생성</Button>}>
               <motion.div variants={stagger} initial={false} animate="show" className="space-y-4">
                 {workflow.draft_sections.length ? (
                   workflow.draft_sections.map((draft) => (
@@ -670,7 +670,7 @@ export default function ResultPage() {
           ) : null}
 
           {currentStep === 4 ? (
-            <SectionCard title="최종 문서와 export" eyebrow="Final" desc="제출 전 검토용 preview를 확인하고 HTML, HWPX, 템플릿 HWPX export를 실행합니다.">
+            <SectionCard title="최종 문서와 export" eyebrow="Final" desc="제출 전 검토용 preview를 확인하고 HTML, HWPX export를 실행합니다.">
               {!workflow.final_document ? (
                 <EmptyState
                   title="최종 문서가 아직 없습니다."

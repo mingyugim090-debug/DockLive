@@ -10,8 +10,8 @@ const PAINS = [
       </svg>
     ),
     bg: 'bg-amber-50 text-amber-500',
-    title: '매번 새로 쓰는 공고문',
-    body: '모집 대상, 신청 기간, 제출 서류를 공고마다 다시 정리하고 문장을 다듬어야 합니다.',
+    title: '공고마다 다른 요구사항',
+    body: '마감일, 자격, 제출 서류, 평가 기준이 흩어져 있어 먼저 구조화해야 합니다.',
   },
   {
     icon: (
@@ -20,8 +20,8 @@ const PAINS = [
       </svg>
     ),
     bg: 'bg-amber-50 text-amber-500',
-    title: '행정문서 구조 정리',
-    body: '사업 개요부터 문의처까지 빠뜨리면 안 되는 항목이 많아 검토 시간이 길어집니다.',
+    title: '놓치기 쉬운 근거 확인',
+    body: '공고에 있는 내용과 사용자가 직접 확인해야 할 내용을 분리해야 합니다.',
   },
   {
     icon: (
@@ -30,8 +30,8 @@ const PAINS = [
       </svg>
     ),
     bg: 'bg-rose-50 text-rose-500',
-    title: '반복되는 문안 수정',
-    body: '모집공고, 지원사업 공고, 행사 안내문마다 톤과 형식을 맞춰 다시 작성해야 합니다.',
+    title: '빈칸부터 시작하는 초안',
+    body: '신청 동기, 추진 계획, 기대 효과를 매번 빈 문서에서 다시 시작하게 됩니다.',
   },
   {
     icon: (
@@ -40,8 +40,8 @@ const PAINS = [
       </svg>
     ),
     bg: 'bg-rose-50 text-rose-500',
-    title: 'HWPX 배포 파일 준비',
-    body: '최종 공고문은 HWPX, DOCX, PDF로 배포해야 해 형식 변환까지 챙겨야 합니다.',
+    title: '한글 문서로 옮기는 부담',
+    body: '검토한 초안을 다시 HWPX나 HTML 문서로 정리하는 데 시간이 듭니다.',
   },
 ] as const;
 
@@ -59,13 +59,13 @@ export function PainSection() {
         >
           <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1">
             <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-            <span className="text-xs font-bold text-amber-700">공고 담당자의 현실</span>
+            <span className="text-xs font-bold text-amber-700">제출 준비의 병목</span>
           </div>
           <h2 className="text-2xl font-bold tracking-tight text-[#1F2937] sm:text-3xl">
-            공고문 하나에도 반복 작업이 많습니다
+            공고를 읽은 뒤에도 정리할 일이 남습니다
           </h2>
           <p className="mt-3 text-sm leading-6 text-[#6B7280]">
-            유형은 비슷하지만 세부 조건과 문안은 매번 달라집니다.
+            LiveDock은 공고에 있는 사실과 사용자가 채워야 할 정보를 먼저 나눕니다.
           </p>
         </motion.div>
 
@@ -98,8 +98,8 @@ export function PainSection() {
           className="mt-8 flex items-center justify-center gap-6 rounded-2xl border border-[#ECECF1] bg-white px-6 py-4 shadow-sm"
         >
           <div className="text-center">
-            <p className="text-xl font-bold text-[#1F2937]">평균 8시간</p>
-            <p className="text-xs text-[#9AA1AD]">직접 작성할 때</p>
+            <p className="text-xl font-bold text-[#1F2937]">공고 원문</p>
+            <p className="text-xs text-[#9AA1AD]">요구사항과 근거 확인</p>
           </div>
           <div className="flex h-8 items-center gap-1 text-[#9AA1AD]">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -107,8 +107,8 @@ export function PainSection() {
             </svg>
           </div>
           <div className="text-center">
-            <p className="text-xl font-bold text-[#5263E8]">5분</p>
-            <p className="text-xs text-[#9AA1AD]">LiveDock AI</p>
+            <p className="text-xl font-bold text-[#5263E8]">제출 초안</p>
+            <p className="text-xs text-[#9AA1AD]">질문과 검토를 거쳐 작성</p>
           </div>
         </motion.div>
       </div>

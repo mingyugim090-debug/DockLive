@@ -514,7 +514,7 @@ export function NoticeWebEditor({
               <Button disabled={aiRunning} onClick={() => applyAiRequest(aiPrompt)} className="px-3">
                 {aiRunning ? 'AI 작성 중' : '선택 영역 반영'}
               </Button>
-              <Button disabled={aiRunning} variant="secondary" onClick={() => applyAiRequest(aiPrompt || '전체 문서를 행정 공고문 문체로 정리', 'all')} className="px-3">
+              <Button disabled={aiRunning} variant="secondary" onClick={() => applyAiRequest(aiPrompt || '전체 문서를 제출용 문체로 정리', 'all')} className="px-3">
                 {aiRunning ? '작성 중' : '전체 문서 반영'}
               </Button>
             </div>

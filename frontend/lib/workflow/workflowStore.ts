@@ -51,7 +51,7 @@ const PENDING_TEMPLATE_KEY = 'docklive:mvp:pending-template';
 
 export const defaultWorkflowSettings: WorkflowSettings = {
   outputFormat: 'HWPX',
-  processingMode: '행정 공고문',
+  processingMode: '공식 문체',
   themeMode: '시스템 기본',
 };
 

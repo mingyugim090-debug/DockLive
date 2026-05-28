@@ -100,16 +100,15 @@ export default function TemplatesPage() {
     <div className="space-y-6">
       {/* Page header */}
       <section className="rounded-2xl border border-[#DDE7E2] bg-white p-6 shadow-sm">
-        <p className="text-sm font-bold text-[#3A7A68]">AI 문서 유형별 템플릿</p>
+        <p className="text-sm font-bold text-[#3A7A68]">데모 공고 유형</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-[#24312D]">
-          문서 유형을 선택하면 AI가 맞춤 초안을 생성합니다.
+          대표 공고로 Agent 흐름을 확인합니다.
         </h1>
         <p className="mt-3 max-w-2xl text-sm leading-7 text-[#65736E]">
-          공고 원문 없이도 유형만 선택하면 AI가 필수 항목을 질문하고 제출 가능한 초안을 자동으로 구성합니다.
-          파일 업로드가 필요 없으며 60초 안에 초안 생성을 시작합니다.
+          파일이 없어도 유형별 fixture로 분석, 확인 질문, 섹션별 초안, export 흐름을 바로 실행할 수 있습니다.
         </p>
         <div className="mt-4 grid grid-cols-3 gap-2 md:grid-cols-6 max-w-lg">
-          {['유형 선택', 'AI 질문', '초안 생성', '검토·편집', '다운로드'].map((step, i) => (
+          {['유형 선택', '분석 확인', '확인 질문', '초안 생성', '검토', 'export'].map((step, i) => (
             <div key={step} className="rounded-xl border border-[#E4EBE7] bg-[#F8FBFA] px-2 py-2 text-center text-xs">
               <span className="block font-bold text-[#3A7A68]">{i + 1}</span>
               <span className="block text-[#65736E]">{step}</span>
@@ -165,7 +164,7 @@ export default function TemplatesPage() {
 
           {/* Sections AI generates */}
           <div className="mt-6">
-            <p className="text-xs font-bold text-[#40504B]">AI가 생성하는 섹션 ({selected.sections.length}개)</p>
+            <p className="text-xs font-bold text-[#40504B]">생성될 초안 섹션 ({selected.sections.length}개)</p>
             <div className="mt-2 flex flex-wrap gap-2">
               {selected.sections.map((s, i) => (
                 <span
@@ -181,7 +180,7 @@ export default function TemplatesPage() {
 
           {/* AI questions preview */}
           <div className="mt-5">
-            <p className="text-xs font-bold text-[#40504B]">AI가 질문할 핵심 항목 (예시)</p>
+            <p className="text-xs font-bold text-[#40504B]">확인 질문 예시</p>
             <ul className="mt-2 space-y-1.5">
               {selected.questions.map((q) => (
                 <li key={q} className="flex items-start gap-2 text-xs leading-5 text-[#65736E]">
@@ -195,7 +194,7 @@ export default function TemplatesPage() {
           {/* Timeline & checklist */}
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <div className="rounded-xl border border-[#E4EBE7] bg-[#F8FBFA] p-4">
-              <p className="text-xs font-bold text-[#40504B]">일반적인 일정</p>
+              <p className="text-xs font-bold text-[#40504B]">fixture 일정</p>
               <p className="mt-1 text-xs leading-5 text-[#65736E]">{selected.timeline}</p>
             </div>
             <div className="rounded-xl border border-[#E4EBE7] bg-[#F8FBFA] p-4">
@@ -226,7 +225,7 @@ export default function TemplatesPage() {
                 disabled={starting}
                 className="flex-1 rounded-2xl bg-[#245D50] px-6 py-3 text-sm font-bold text-white transition hover:bg-[#1E4F44] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {starting ? '준비 중...' : `${selected.label} 초안 생성 시작`}
+                {starting ? '준비 중...' : `${selected.label} 데모 시작`}
               </button>
               <span className="shrink-0 text-xs text-[#65736E]">파일 불필요</span>
             </div>
@@ -240,7 +239,7 @@ export default function TemplatesPage() {
       {/* Divider */}
       <div className="flex items-center gap-3">
         <div className="h-px flex-1 bg-[#E4EBE7]" />
-        <span className="text-xs font-bold text-[#9AABA4]">공고 원문이 있다면</span>
+        <span className="text-xs font-bold text-[#9AABA4]">실제 공고가 있다면</span>
         <div className="h-px flex-1 bg-[#E4EBE7]" />
       </div>
 
@@ -248,7 +247,7 @@ export default function TemplatesPage() {
       <section className="rounded-2xl border border-[#E4EBE7] bg-[#F8FBFA] p-5">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="text-sm font-bold text-[#24312D]">공고문 직접 업로드 분석</p>
+            <p className="text-sm font-bold text-[#24312D]">공고 원문 업로드 분석</p>
             <p className="mt-1 text-xs leading-5 text-[#65736E]">
               PDF · HWP · URL · 텍스트를 업로드하면 AI가 공고 요구사항을 추출하고 맞춤 초안을 생성합니다.
             </p>
@@ -272,9 +271,9 @@ export default function TemplatesPage() {
       {/* Existing HWPX template studio */}
       <section>
         <div className="mb-4">
-          <p className="text-sm font-bold text-[#40504B]">공고문 양식 직접 제작 (HWPX)</p>
+          <p className="text-sm font-bold text-[#40504B]">HWPX 양식 직접 작성</p>
           <p className="mt-1 text-xs text-[#65736E]">
-            샘플 HWPX 양식 구조를 확인하고 직접 항목을 채워 공고문을 다운로드합니다.
+            샘플 HWPX 구조를 확인하고 필요한 항목을 채워 완성본을 다운로드합니다.
           </p>
         </div>
         <GovernmentNoticeTemplateStudio />
