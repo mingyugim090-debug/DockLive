@@ -48,26 +48,13 @@ flowchart LR
 | 섹션별 초안 생성   | 사업계획서, 지원서, 신청서 항목별로 초안 작성                                       |
 | 사용자 확인 게이트  | 불확실한 내용은 임의로 확정하지 않고 사용자 확인 필요로 표시                               |
 | HWPX export | 최종 문서를 HWPX 중심으로 생성                                              |
-| 세션 복구       | 작성 흐름, export 이력, fallback 저장                                    |
-| 검증          | backend contract, agent eval, frontend build, HWPX validation 수행 |
-
-
-현재 MVP는 커뮤니티나 소셜 기능이 아니라 **공고문 기반 제출 문서 작성**에 집중합니다.
-
-- **문서 입력**: PDF 업로드, URL 수집, 텍스트 붙여넣기, HWP/HWPX 양식 업로드
-- **근거 기반 분석**: 원문 evidence를 포함한 구조화 JSON 분석
-- **부족 정보 수집**: 사용자에게 꼭 필요한 정보만 질문
-- **섹션별 초안 생성**: SSE 스트리밍 기반 초안 생성과 섹션 단위 재작성
-- **사용자 확인 게이트**: 불확실한 주장과 제출 전 확인 항목 유지
-- **HWPX 중심 export**: HWPX ZIP/XML 생성, namespace fix, validation, verify
-- **워크플로우 복구**: 세션 저장, export 이력, 장애 fallback
-- **하네스 검증**: backend contract, deterministic agent eval, frontend build, HWPX validation
 
 ---
 
 ## HWPX 문서 자동화 Skills
 
-LiveDock은 HWPX 문서 자동화를 위해 project-local skills와 외부 HWPX toolchain skill을 함께 사용합니다. Skills는 웹서비스 런타임 자체가 아니라, Agent가 구현과 검증 과정에서 따라야 하는 작업 지침입니다. 실제 사용자 workflow, 저장, 검증, export API는 FastAPI backend가 담당합니다.
+LiveDock은 HWPX 문서 자동화를 위해 project-local skills와 외부 HWPX toolchain skill을 함께 사용합니다. Skills는 웹서비스 런타임 자체가 아니라, Agent가 구현과 검증 과정에서 따라야 하는 작업 지침입니다. 
+실제 사용자 workflow, 저장, 검증, export API는 FastAPI backend가 담당합니다.
 
 ```mermaid
 flowchart LR
