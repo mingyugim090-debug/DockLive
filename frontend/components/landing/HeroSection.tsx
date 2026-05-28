@@ -372,11 +372,9 @@ export function HeroSection() {
           </div>
 
           <h1 className="text-[2.6rem] font-bold leading-[1.15] tracking-tight text-[#1F2937] sm:text-5xl lg:text-[3.1rem]">
-            공고를 읽고
+            문서 자동화 Agent
             <br />
-            제출 초안을
-            <br />
-            <span className="gradient-text">준비합니다</span>
+            <span className="gradient-text">"DockLive"</span>
           </h1>
 
           <p className="mt-5 max-w-[460px] text-base leading-7 text-[#6B7280]">

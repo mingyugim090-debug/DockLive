@@ -5,11 +5,11 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const items = [
-  { href: '/app', label: '워크스페이스', icon: '문' },
-  { href: '/app/templates', label: '데모 유형', icon: '템', child: true },
-  { href: '/app/documents', label: '문서함', icon: '함' },
-  { href: '/app/billing', label: '크레딧', icon: '원' },
-  { href: '/app/settings', label: '설정', icon: '설' },
+  { href: '/app', label: 'Workspace', icon: 'W' },
+  { href: '/app/templates', label: 'Templates', icon: 'T' },
+  { href: '/app/documents', label: 'Document', icon: 'D' },
+  { href: '/app/billing', label: 'Billing', icon: 'B' },
+  { href: '/app/settings', label: 'Settings', icon: 'S' },
 ];
 
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -48,7 +48,6 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                 onClick={onClose}
                 className={[
                   'flex items-center gap-3 rounded-full px-4 py-3 text-sm font-semibold transition',
-                  item.child ? 'ml-7' : '',
                   active
                     ? 'bg-[#E7F1ED] text-[#245D50]'
                     : 'text-[#65736E] hover:bg-[#F3F7F5] hover:text-[#24312D]',

@@ -9,11 +9,11 @@ import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 
 const titles: Array<[string, string]> = [
-  ['/app/templates', '데모 유형'],
-  ['/app/documents', '문서함'],
-  ['/app/billing', '크레딧'],
-  ['/app/settings', '설정'],
-  ['/app', '공고 분석'],
+  ['/app/templates', 'Templates'],
+  ['/app/documents', 'Document'],
+  ['/app/billing', 'Billing'],
+  ['/app/settings', 'Settings'],
+  ['/app', 'Workspace'],
 ];
 
 function AppLayoutInner({ children, title }: { children: ReactNode; title: string }) {
@@ -50,7 +50,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     () =>
       titles.find(
         ([path]) => pathname === path || (path !== '/app' && pathname.startsWith(path)),
-      )?.[1] ?? '공고 분석',
+      )?.[1] ?? 'Workspace',
     [pathname],
   );
 
