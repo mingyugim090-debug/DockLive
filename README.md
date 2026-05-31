@@ -140,38 +140,51 @@ flowchart LR
 
 ```text
 LiveDock/
-  frontend/                       Next.js frontend
-    app/app/page.tsx              6단계 Agent workflow 메인 화면
-    app/app/templates/            HWPX 템플릿 기반 시작 흐름
-    components/workspace/         업로드, 진행 상태, 리뷰, HWPX 폼 편집 UI
-    lib/api.ts                    FastAPI client
-    lib/types.ts                  frontend 공유 타입
-    lib/insforge.ts               InsForge SDK client
+  frontend/                    Next.js 사용자 화면
+    app/                       App Router 페이지와 workflow 화면
+    components/                업로드, 리뷰, 문서 편집 UI 컴포넌트
+    hooks/                     frontend 공통 hooks
+    lib/                       API client, 타입, 상태, InsForge client
+    public/                    정적 asset
+    __tests__/                 frontend unit/e2e tests
 
-  backend/                        FastAPI backend
-    main.py                       FastAPI entrypoint, CORS, router 등록
-    models/schemas.py             Pydantic API contracts
-    routers/                      analyze, workflow, hwpx, notices API
-    services/analyzer.py          공고문 분석 orchestration
-    services/drafting_service.py  섹션 초안, finalize, HWPX export
-    services/document_ingestion.py PDF/HWP/HWPX intake
-    services/hwpx_form_session.py HWPX 양식 세션 편집
-    services/source_preserving_export.py 원본 양식 보존 export
-    services/storage.py           InsForge/Redis/fallback 저장소
-    hwpx_toolchain/scripts/       HWPX clone, namespace, validate 도구
-    tests/contracts/              backend contract tests
-    tests/evals/                  deterministic Agent MVP eval
+  backend/                     FastAPI Agent backend
+    main.py                    app entrypoint, CORS, router 등록
+    core/                      설정, 공통 오류, runtime config
+    models/                    Pydantic API contracts
+    routers/                   analyze, workflow, hwpx, notices API
+    services/                  파싱, AI, 초안, 저장, export 로직
+    hwpx_toolchain/            HWPX clone/fix/validate scripts
+    tests/                     contract, eval, manual HWPX tests
 
-  harness/                        Agent harness
-    state-spec.yaml               제품 불변 조건과 Agent 계약
-    quality-gates.yaml            quick/backend/agent/frontend/full/hwpx profile
-    memory/                       durable project/user workflow memory
-    errors/registry.json          반복 실패 fingerprint registry
+  harness/                     Agent 검증/운영 하네스
+    state-spec.yaml            제품 불변 조건과 Agent 계약
+    quality-gates.yaml         quick/backend/agent/frontend/full/hwpx profile
+    memory/                    durable project/user workflow memory
+    errors/                    반복 실패 fingerprint registry
+    roles/                     Codex, Claude Code 역할 정의
+    handoffs/                  Claude Code handoff 템플릿
 
-  docs/                           제품, 아키텍처, 배포, HWPX, 평가 문서
-  tools/                          harness runner, handoff, HWP MCP helper
-  .claude/skills/                 LiveDock 단계별 Agent skill 정의
+  docs/                        프로젝트 문서
+    product/                   제품 계획, 데모, 요구사항
+    engineering/               아키텍처, 배포, InsForge, 환경 설정
+    agent/                     skills, harness, MCP 경계 문서
+    hwpx/                      HWPX workflow와 HWP MCP 가이드
+    evaluation/                평가 기준과 fixture 설명
+    examples/                  예시 문서와 샘플 자료
+
+  tools/                       개발/검증 보조 도구
+    harness/                   harness runner, error memory, handoff 생성
+    hwp-mcp/                   Windows/Hancom HWP 로컬 MCP helper
+
+  scripts/                     로컬 실행 wrapper와 harness entrypoint
+  migrations/                  InsForge/Postgres schema migration
+  .claude/skills/              LiveDock 단계별 Agent skill 정의
+  .github/                     GitHub Actions workflow
 ```
+
+`node_modules`, `.next`, `venv`, `.tmp`, `.pytest_cache`, `.livedock_storage`, `logs`, `outputs`, `harness/runs` 같은 설치물, 캐시, 실행 로그, 생성 산출물은 README 구조에서 제외합니다.
+
 ---
 
 **ex:** .https://kaist-overedge.com/
