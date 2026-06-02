@@ -32,7 +32,7 @@ ANALYSIS_RESPONSE_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
-        "doc_type": {"type": "string", "enum": ["competition", "research", "scholarship", "startup"]},
+        "doc_type": {"type": "string", "enum": ["competition", "research", "scholarship", "startup", "government_rnd"]},
         "title": {"type": "string"},
         "organization": {"type": "string"},
         "summary": {"type": "string"},
@@ -166,7 +166,7 @@ ANALYSIS_PROMPT = """다음 공고문을 분석해 JSON으로만 응답하세요
 
 응답 JSON 형식:
 {{
-  "doc_type": "competition | research | scholarship | startup",
+  "doc_type": "competition | research | scholarship | startup | government_rnd",
   "title": "공고문 제목",
   "organization": "주관/운영 기관명",
   "summary": "핵심 내용을 2~3문장으로 요약",
@@ -381,7 +381,7 @@ def _validate_result(data: dict, source_text: str = "") -> dict:
         raise AnalysisError("AI 분석 응답 형식이 올바르지 않습니다.")
 
     data = dict(data)
-    valid_doc_types = {"competition", "research", "scholarship", "startup"}
+    valid_doc_types = {"competition", "research", "scholarship", "startup", "government_rnd"}
     if data.get("doc_type") not in valid_doc_types:
         data["doc_type"] = "competition"
     data.setdefault("title", UNSPECIFIED)

@@ -1,4 +1,4 @@
-export type DocType = 'competition' | 'research' | 'scholarship' | 'startup';
+export type DocType = 'competition' | 'research' | 'scholarship' | 'startup' | 'government_rnd';
 export type ItemCategory = 'required' | 'optional';
 export type DayStatus = 'safe' | 'warning' | 'danger' | 'passed';
 export type SourceType = 'pdf' | 'url' | 'text' | 'demo' | 'hwpx' | 'hwp';

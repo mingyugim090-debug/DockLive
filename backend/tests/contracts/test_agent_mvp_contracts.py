@@ -2,6 +2,8 @@ import json
 import os
 import sys
 import unittest
+import zipfile
+from io import BytesIO
 from unittest.mock import patch
 from pathlib import Path
 
@@ -31,6 +33,7 @@ try:
         convert_hwp_to_hwpx,
         ingest_uploaded_document,
         parse_hwp_document,
+        extract_text_from_hwpx,
     )
     from services.drafting_service import (  # noqa: E402
         build_template_replacements,
@@ -92,6 +95,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - local minimal Python fa
     convert_hwp_to_hwpx = None
     detect_uploaded_document_type = None
     parse_hwp_document = None
+    extract_text_from_hwpx = None
     get_mock_result = None
     _validate_result = None
     build_source_preserving_hwpx = None
@@ -121,7 +125,7 @@ class AgentMvpContractTests(unittest.TestCase):
     def test_fixture_metadata_is_complete(self):
         fixture_dir = ROOT / "docs" / "evaluation" / "fixtures"
         fixtures = sorted(fixture_dir.glob("*.json"))
-        self.assertEqual(len(fixtures), 5)
+        self.assertEqual(len(fixtures), 6)
 
         for path in fixtures:
             data = json.loads(path.read_text(encoding="utf-8"))
@@ -129,6 +133,94 @@ class AgentMvpContractTests(unittest.TestCase):
             self.assertIn("expected", data)
             self.assertIn("fail_if", data)
             self.assertIn("uncertainty_rule", data)
+
+    def test_iris_government_rnd_fixture_contracts_submission_tables(self):
+        if AnalysisResult is None:
+            self.skipTest("pydantic is not installed in this Python environment")
+
+        fixture_path = ROOT / "docs" / "evaluation" / "fixtures" / "iris-sme-rnd-2026.json"
+        fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+        expected = fixture["expected"]
+        raw = {
+            "doc_type": expected["doc_type"],
+            "title": expected["title_contains"],
+            "organization": expected["organization"],
+            "summary": fixture["announcement_text"][:240],
+            "timeline": [],
+            "checklist": [
+                {
+                    "label": label,
+                    "category": "required",
+                    "description": "IRIS/government R&D submission document expected by fixture.",
+                    "file_format": "HWPX/PDF or notice-specified format",
+                }
+                for label in expected["required_documents"]
+            ],
+            "document_sections": expected["document_sections"],
+            "eligibility": [],
+            "submission_method": "범부처통합연구지원시스템(IRIS) 또는 세부사업 공고에서 안내하는 접수 시스템",
+            "evaluation_criteria": expected["evaluation_criteria"],
+            "benefits": expected["benefits_contains"],
+            "cautions": [],
+            "uncertain_fields": expected["uncertain_fields"],
+            "source_evidence": expected["source_evidence"],
+            "missing_questions": expected["missing_questions"],
+        }
+
+        result = build_analysis_result(raw, source_type="hwpx", source_name=fixture["name"])
+
+        self.assertEqual(result.doc_type, "government_rnd")
+        self.assertEqual(result.timeline, [])
+        self.assertIn("중소벤처기업부", result.organization)
+        evidence_fields = {item.field for item in result.source_evidence}
+        self.assertTrue(set(expected["must_have_source_evidence"]).issubset(evidence_fields))
+        section_titles = " | ".join(section.title for section in result.document_template)
+        for title in expected["must_have_sections"]:
+            self.assertIn(title, section_titles)
+        question_text = " | ".join(question.question for question in result.missing_questions)
+        for term in expected["must_have_missing_questions"]:
+            self.assertIn(term, question_text)
+
+        workflow = create_workflow_session(result)
+        updates = {field.id: f"{field.label}: fixture input" for field in workflow.user_inputs if field.required}
+        workflow = update_inputs(workflow, updates)
+        workflow = generate_drafts(workflow)
+        draft_text = "\n\n".join(draft.content_markdown for draft in workflow.draft_sections)
+
+        self.assertEqual(workflow.status, "reviewing")
+        self.assertIn("| 항목 | 내용 |", draft_text)
+        self.assertIn("사업개요", draft_text)
+        self.assertIn("추진일정", draft_text)
+        self.assertIn("예산/지원금 사용계획", draft_text)
+        self.assertIn("평가기준", draft_text)
+        self.assertTrue(any(draft.confirmation_required for draft in workflow.draft_sections))
+
+    def test_hwpx_text_extraction_uses_zip_xml_fallback_when_python_hwpx_is_missing(self):
+        if extract_text_from_hwpx is None:
+            self.skipTest("backend dependencies are not installed in this Python environment")
+
+        from services import document_ingestion
+
+        hwpx = BytesIO()
+        section_xml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<hs:sec xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section"
+        xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph">
+  <hp:p id="1"><hp:run><hp:t>2026년 중소기업 기술개발 지원사업</hp:t></hp:run></hp:p>
+  <hp:p id="2"><hp:run><hp:t>사업개요</hp:t></hp:run></hp:p>
+  <hp:p id="3"><hp:run><hp:t>예산/지원금 사용계획</hp:t></hp:run></hp:p>
+</hs:sec>
+"""
+        with zipfile.ZipFile(hwpx, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("mimetype", "application/hwp+zip", compress_type=zipfile.ZIP_STORED)
+            zf.writestr("Contents/header.xml", "<?xml version='1.0'?><header/>")
+            zf.writestr("Contents/section0.xml", section_xml)
+
+        with patch.object(document_ingestion.subprocess, "run", side_effect=RuntimeError("No module named hwpx")):
+            text, warnings = extract_text_from_hwpx(hwpx.getvalue())
+
+        self.assertIn("2026년 중소기업 기술개발 지원사업", text)
+        self.assertIn("사업개요", text)
+        self.assertTrue(any("fallback" in warning.lower() for warning in warnings))
 
     def test_mock_analysis_result_validates_with_required_contracts(self):
         if AnalysisResult is None:

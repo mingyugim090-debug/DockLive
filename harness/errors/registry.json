@@ -23,6 +23,28 @@
         "C:\\Users\\alseh\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\Lib\\unittest\\loader.py"
       ],
       "resolved_at": "2026-05-26T09:45:18+00:00"
+    },
+    {
+      "id": "ERR-20260602013457-a346a49f",
+      "fingerprint": "a346a49fcbf8f0894681798d",
+      "symptom": "FAILED (failures=1)",
+      "root_cause": "정부 R&D mock draft helper was added before the Korean text recovery override, but the later override redefined _mock_draft_section and bypassed the new government_rnd branch.",
+      "fix_summary": "Connected the Korean text recovery override to the government_rnd table-first draft helper and confirmation-required uncertainty fields.",
+      "guard_test": ".\\scripts\\harness.ps1 -Profile quick",
+      "first_seen": "2026-06-02T01:34:57+00:00",
+      "last_seen": "2026-06-02T01:34:57+00:00",
+      "occurrences": 1,
+      "status": "resolved",
+      "last_command": "C:\\Users\\alseh\\OneDrive\\바탕 화면\\LiveDock\\backend\\venv\\Scripts\\python.exe -m unittest discover -s backend/tests/contracts -p test_*.py",
+      "last_exit_code": 1,
+      "last_error_line": "FAILED (failures=1)",
+      "last_log_path": "harness\\runs\\20260602-103447-quick\\03-backend-contracts.log",
+      "related_paths": [
+        "backend\\venv\\Scripts\\python.exe",
+        "backend/tests/contracts",
+        "backend\\tests\\contracts\\test_agent_mvp_contracts.py"
+      ],
+      "resolved_at": "2026-06-02T01:37:51+00:00"
     }
   ]
 }

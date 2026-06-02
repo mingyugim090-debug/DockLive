@@ -10,6 +10,7 @@ const docTypeColors: Record<DocType, { bg: string; text: string }> = {
   research: { bg: 'rgba(59,130,246,0.15)', text: '#7DB9FF' },
   scholarship: { bg: 'rgba(74,222,128,0.15)', text: '#4ADE80' },
   startup: { bg: 'rgba(232,132,92,0.15)', text: '#F8A87C' },
+  government_rnd: { bg: 'rgba(36,93,80,0.16)', text: '#6FD1B2' },
 };
 
 interface DocTemplateProps {

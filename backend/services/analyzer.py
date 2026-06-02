@@ -309,7 +309,7 @@ def build_analysis_result(raw: dict, source_type: str = "pdf", source_name: str 
         )
 
     doc_type = raw.get("doc_type", "competition")
-    if doc_type not in ("competition", "research", "scholarship", "startup"):
+    if doc_type not in ("competition", "research", "scholarship", "startup", "government_rnd"):
         doc_type = "competition"
     uncertain_fields = _as_list(raw.get("uncertain_fields"))
 

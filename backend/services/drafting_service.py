@@ -215,10 +215,183 @@ def _profile_to_text(profile: CompanyProfile | None) -> str:
 
 
 def _confirmation_items(workflow: WorkflowSession) -> list[str]:
-    return []
+    items: list[str] = []
+    for value in workflow.analysis.uncertain_fields:
+        cleaned = str(value).strip()
+        if cleaned and cleaned not in items:
+            items.append(cleaned)
+    return items[:8]
+
+
+def _markdown_table(headers: list[str], rows: list[list[str]]) -> str:
+    safe_headers = [str(header).replace("|", "/").strip() or "-" for header in headers]
+    lines = [
+        "| " + " | ".join(safe_headers) + " |",
+        "| " + " | ".join("---" for _ in safe_headers) + " |",
+    ]
+    for row in rows:
+        padded = [*row, *[""] * max(0, len(safe_headers) - len(row))]
+        cells = [str(cell).replace("|", "/").replace("\n", " ").strip() or "-" for cell in padded[: len(safe_headers)]]
+        lines.append("| " + " | ".join(cells) + " |")
+    return "\n".join(lines)
+
+
+def _join_or_unspecified(values: list[str], limit: int = 4) -> str:
+    cleaned = [str(value).strip() for value in values if str(value).strip()]
+    return ", ".join(cleaned[:limit]) if cleaned else "확인 필요"
+
+
+def _mock_government_rnd_draft_section(workflow: WorkflowSession, draft: DraftSection) -> DraftSection:
+    inputs = _input_map(workflow)
+    applicant = inputs.get("applicant_name", "확인 필요")
+    profile = inputs.get("applicant_profile", "확인 필요")
+    project_summary = inputs.get("project_summary", "확인 필요")
+    evidence = inputs.get("evidence", "확인 필요")
+    section_specific = inputs.get(f"section_input_{draft.section_id}", "")
+    title = draft.title
+    support_terms = _join_or_unspecified(workflow.analysis.benefits, 6)
+    criteria_terms = _join_or_unspecified(workflow.analysis.evaluation_criteria, 6)
+    checklist_rows = [
+        [item.label, item.category, item.description or "공고 기준 확인", item.file_format or "세부사업 공고 확인"]
+        for item in workflow.analysis.checklist[:8]
+    ] or [["연구개발계획서", "required", "세부사업 공고 양식 확인", "HWPX/PDF"]]
+    schedule_rows = [
+        [item.label, item.date, "마감일" if item.is_deadline else "일정"]
+        for item in workflow.analysis.timeline[:6]
+    ] or [["통합공고 추진일정", "월 단위 일정은 source evidence 기준으로만 기재", "세부사업 공고 확인 필요"]]
+
+    if "사업개요" in title:
+        content = [
+            f"## {title}",
+            "",
+            _markdown_table(
+                ["항목", "내용"],
+                [
+                    ["공고명", workflow.analysis.title],
+                    ["주관기관", workflow.analysis.organization],
+                    ["신청기업", applicant],
+                    ["사업목적", workflow.analysis.summary or "공고 원문 기준 확인"],
+                    ["지원조건 근거", support_terms],
+                ],
+            ),
+        ]
+    elif "기술개발" in title or "목표" in title:
+        content = [
+            f"## {title}",
+            "",
+            _markdown_table(
+                ["구분", "작성 초안", "확인 필요"],
+                [
+                    ["과제명", project_summary, "IRIS 제출 과제명 확정"],
+                    ["기술개요", project_summary, "핵심 기술, 차별성, 적용 제품"],
+                    ["개발목표", section_specific or "정량 목표와 성과지표를 사용자 입력으로 보완", "수치 목표/검증 방법"],
+                    ["보유역량", profile, "연구인력, 장비, 선행실적"],
+                ],
+            ),
+        ]
+    elif "추진" in title or "일정" in title:
+        content = [
+            f"## {title}",
+            "",
+            "공고의 월 단위 추진일정과 기업의 실제 수행일정은 분리해 작성합니다.",
+            "",
+            _markdown_table(["추진일정", "근거/내용", "상태"], schedule_rows),
+            "",
+            _markdown_table(
+                ["단계", "기업 수행계획", "산출물"],
+                [
+                    ["1단계", "요구사항 정의 및 기술개발 세부계획 수립", "개발계획서/성과지표"],
+                    ["2단계", "시제품 또는 핵심 기능 개발", "시제품/시험 결과"],
+                    ["3단계", "검증, 보완, 사업화 준비", "검증보고서/사업화 계획"],
+                ],
+            ),
+        ]
+    elif "사업화" in title or "활용" in title:
+        content = [
+            f"## {title}",
+            "",
+            _markdown_table(
+                ["항목", "내용"],
+                [
+                    ["시장/고객", "사용자 입력과 근거자료를 기준으로 목표 시장을 구체화"],
+                    ["활용계획", "개발 결과를 제품·공정혁신 또는 신제품 개발에 적용"],
+                    ["보유역량", profile],
+                    ["근거자료", evidence],
+                ],
+            ),
+        ]
+    elif "예산" in title or "지원금" in title:
+        content = [
+            f"## {title}",
+            "",
+            "지원한도와 지원비율은 공고 근거가 있는 범위만 기재하고, 기업별 사업비 배분은 사용자 확인 후 확정합니다.",
+            "",
+            _markdown_table(
+                ["항목", "내용", "확인 필요"],
+                [
+                    ["공고상 지원조건", support_terms, "세부사업별 한도/비율 재확인"],
+                    ["사업비 사용계획", section_specific or "인건비, 재료비, 시험인증비 등 세부 배분 입력 필요", "기업 입력 필요"],
+                    ["민간부담금", "세부사업 공고 및 기업 사업비 계획에 따라 산정", "확정 전 검토"],
+                ],
+            ),
+        ]
+    elif "기대효과" in title:
+        content = [
+            f"## {title}",
+            "",
+            _markdown_table(
+                ["평가기준", "기대효과 초안"],
+                [
+                    ["기술경쟁력", "신기술·신제품 개발 또는 공정혁신을 통한 경쟁력 향상을 목표로 작성"],
+                    ["사업화 가능성", "시장 적용 계획과 고객/매출 근거는 사용자 입력으로 보완"],
+                    ["수행역량", profile],
+                    ["평가기준", criteria_terms],
+                ],
+            ),
+        ]
+    elif "체크리스트" in title or "제출" in title:
+        content = [
+            f"## {title}",
+            "",
+            _markdown_table(["제출서류", "구분", "작성/확인 기준", "파일 형식"], checklist_rows),
+            "",
+            _markdown_table(
+                ["확인 필요 항목", "이유"],
+                [[item, "공고 근거 또는 사용자 입력 없이는 확정하지 않음"] for item in workflow.analysis.uncertain_fields[:6]]
+                or [["세부사업별 제출 마감일", "통합공고만으로 확정하지 않음"]],
+            ),
+        ]
+    else:
+        content = [
+            f"## {title}",
+            "",
+            _markdown_table(
+                ["항목", "내용"],
+                [
+                    ["공고 근거", workflow.analysis.title],
+                    ["사용자 입력", section_specific or project_summary],
+                    ["평가기준", criteria_terms],
+                ],
+            ),
+        ]
+
+    confirmations = _confirmation_items(workflow)
+    draft.content_markdown = "\n".join(content)
+    draft.purpose = f"{title} 항목에서 IRIS/정부 R&D 제출문서에 필요한 근거와 사용자 입력을 표로 연결합니다."
+    draft.related_criteria = workflow.analysis.evaluation_criteria[:4]
+    draft.source_evidence_ids = [item.field for item in workflow.analysis.source_evidence[:6]]
+    draft.revision_notes = ["지원한도, 지원비율, 일정, 제출서류는 source evidence 또는 사용자 확인 후 확정합니다."]
+    draft.status = "drafted" if not draft.user_feedback else "revised"
+    draft.needs_confirmation = confirmations
+    draft.confirmation_required = confirmations
+    draft.updated_at = utc_now_iso()
+    return draft
 
 
 def _mock_draft_section(workflow: WorkflowSession, draft: DraftSection) -> DraftSection:
+    if workflow.analysis.doc_type == "government_rnd":
+        return _mock_government_rnd_draft_section(workflow, draft)
+
     inputs = _input_map(workflow)
     applicant = inputs.get("applicant_name", "신청자")
     profile = inputs.get("applicant_profile", "")
@@ -1220,14 +1393,22 @@ def _profile_to_text(profile: CompanyProfile | None) -> str:
 
 
 def confirmation_required_items(workflow: WorkflowSession) -> list[str]:
-    return []
+    return _confirmation_items(workflow)
 
 
 def _confirmation_items(workflow: WorkflowSession) -> list[str]:
-    return []
+    items: list[str] = []
+    for value in workflow.analysis.uncertain_fields:
+        cleaned = str(value).strip()
+        if cleaned and cleaned not in items:
+            items.append(cleaned)
+    return items[:8]
 
 
 def _mock_draft_section(workflow: WorkflowSession, draft: DraftSection) -> DraftSection:
+    if workflow.analysis.doc_type == "government_rnd":
+        return _mock_government_rnd_draft_section(workflow, draft)
+
     inputs = _input_map(workflow)
     applicant = inputs.get("applicant_name", "신청자")
     profile = inputs.get("applicant_profile", "")

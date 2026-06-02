@@ -6,6 +6,7 @@
 - Add source evidence and confirmation contracts.
 - Keep analysis, input collection, draft, confirmation, finalization as separate steps.
 - Add eval fixture definitions.
+- Add IRIS/government R&D fixture contracts for table-first submission documents.
 
 ## Milestone 2 - Improve Analysis Quality
 
@@ -13,6 +14,7 @@
 - Add deterministic schema validation tests.
 - Add AI-output validation and retry paths.
 - Add OCR/HWP/HWPX ingestion strategy.
+- Distinguish integrated R&D notice schedules from final submission deadlines.
 
 ## Milestone 3 - Live Drafting UX
 

@@ -4,7 +4,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field
 
 
-DocType = Literal["competition", "research", "scholarship", "startup"]
+DocType = Literal["competition", "research", "scholarship", "startup", "government_rnd"]
 ItemCategory = Literal["required", "optional"]
 DayStatus = Literal["safe", "warning", "danger", "passed"]
 SourceType = Literal["pdf", "url", "text", "demo", "hwpx", "hwp"]

@@ -83,6 +83,23 @@ Fail if:
 
 - Agent fills missing deadline or submission method from common patterns
 
+### Fixture 6 - IRIS SME R&D Integrated Notice
+
+Expected extraction:
+
+- `government_rnd` document type
+- Ministry and integrated R&D program title
+- business overview and support-program table evidence
+- support limit/ratio values only when source-grounded
+- missing company/project facts for submission drafting
+- table-first submission sections: business overview, technical goals, execution plan, commercialization, budget, expected impact, checklist
+
+Fail if:
+
+- integrated month-level schedules become one invented submission deadline
+- company project facts are filled without user input
+- support amount, support ratio, schedule, or required documents are finalized without source evidence
+
 ## Draft Eval
 
 For each fixture:
@@ -102,6 +119,7 @@ When the HWPX toolchain is enabled:
 3. Run `fix_namespaces.py`.
 4. Run `validate.py`.
 5. Extract text and check title/section presence.
+6. For government R&D fixtures, check title, `사업개요`, and at least one table-based section term.
 
 ## Fixture E2E Eval
 

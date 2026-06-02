@@ -37,6 +37,7 @@ export function getDocTypeLabel(docType: string): string {
     research: '연구과제',
     scholarship: '장학금',
     startup: '창업지원',
+    government_rnd: '정부 R&D',
   };
   return map[docType] ?? '기타';
 }

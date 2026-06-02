@@ -55,8 +55,11 @@ from services.drafting_service import (  # noqa: E402
 from services.openai_service import analyze_announcement  # noqa: E402
 
 
-def load_fixtures() -> list[dict[str, Any]]:
-    return [json.loads(path.read_text(encoding="utf-8")) for path in sorted(FIXTURE_DIR.glob("*.json"))]
+def load_fixtures(fixture_id: str | None = None) -> list[dict[str, Any]]:
+    fixtures = [json.loads(path.read_text(encoding="utf-8")) for path in sorted(FIXTURE_DIR.glob("*.json"))]
+    if fixture_id:
+        fixtures = [fixture for fixture in fixtures if fixture.get("id") == fixture_id]
+    return fixtures
 
 
 def _expected_list(expected: dict[str, Any], key: str) -> list[str]:
@@ -93,11 +96,24 @@ def deterministic_raw_analysis(fixture: dict[str, Any]) -> dict[str, Any]:
         for label in optional_docs
     )
 
-    timeline = []
+    timeline = list(expected.get("timeline", [])) if isinstance(expected.get("timeline"), list) else []
     if expected.get("deadline"):
         timeline.append({"label": "Submission deadline", "date": expected["deadline"], "is_deadline": True})
 
     title = expected.get("title_contains") or fixture["name"]
+    document_sections = expected.get("document_sections")
+    if not isinstance(document_sections, list):
+        document_sections = [
+            {"title": "Problem and purpose", "hint": "Use only facts from the notice and user input.", "order": 1},
+            {"title": "Execution plan", "hint": "Describe concrete activities and schedule.", "order": 2},
+            {"title": "Expected impact", "hint": "Keep claims grounded and reviewable.", "order": 3},
+        ]
+    source_evidence = expected.get("source_evidence")
+    if not isinstance(source_evidence, list):
+        source_evidence = [
+            {"field": "title", "quote": title, "note": "fixture expected"},
+            {"field": "organization", "quote": expected.get("organization", ""), "note": "fixture expected"},
+        ]
     raw = {
         "doc_type": expected.get("doc_type", "competition"),
         "title": title,
@@ -105,21 +121,15 @@ def deterministic_raw_analysis(fixture: dict[str, Any]) -> dict[str, Any]:
         "summary": evidence_text[:180],
         "timeline": timeline,
         "checklist": checklist,
-        "document_sections": [
-            {"title": "Problem and purpose", "hint": "Use only facts from the notice and user input.", "order": 1},
-            {"title": "Execution plan", "hint": "Describe concrete activities and schedule.", "order": 2},
-            {"title": "Expected impact", "hint": "Keep claims grounded and reviewable.", "order": 3},
-        ],
+        "document_sections": document_sections,
         "eligibility": _expected_list(expected, "eligibility_contains"),
         "submission_method": expected.get("submission_method_contains") or ("See source notice" if expected.get("deadline") else None),
         "evaluation_criteria": expected.get("evaluation_criteria", []) or _expected_list(expected, "research_areas"),
-        "benefits": [],
-        "cautions": [],
+        "benefits": _expected_list(expected, "benefits_contains"),
+        "cautions": _expected_list(expected, "cautions"),
         "uncertain_fields": _expected_list(expected, "uncertain_fields"),
-        "source_evidence": [
-            {"field": "title", "quote": title, "note": "fixture expected"},
-            {"field": "organization", "quote": expected.get("organization", ""), "note": "fixture expected"},
-        ],
+        "source_evidence": source_evidence,
+        "missing_questions": expected.get("missing_questions", []),
     }
     if expected.get("deadline"):
         raw["source_evidence"].append(
@@ -173,6 +183,22 @@ def score_analysis(result: AnalysisResult, fixture: dict[str, Any]) -> dict[str,
         criteria_text = " | ".join(result.evaluation_criteria)
         add(f"evaluation_criteria:{label}", label in criteria_text, criteria_text)
 
+    for label in _expected_list(expected, "eligibility_contains"):
+        eligibility_text = " | ".join(result.eligibility)
+        add(f"eligibility:{label}", label in eligibility_text, eligibility_text)
+
+    for label in _expected_list(expected, "benefits_contains"):
+        benefits_text = " | ".join(result.benefits)
+        add(f"benefit:{label}", label in benefits_text, benefits_text)
+
+    section_text = " | ".join(section.title for section in result.document_template)
+    for label in _expected_list(expected, "must_have_sections"):
+        add(f"document_section:{label}", label in section_text, section_text)
+
+    question_text = " | ".join(question.question for question in result.missing_questions)
+    for label in _expected_list(expected, "must_have_missing_questions"):
+        add(f"missing_question:{label}", label in question_text, question_text)
+
     forbidden_benefits = _expected_list(expected, "forbidden_benefits")
     if forbidden_benefits:
         benefits_text = " | ".join(result.benefits)
@@ -190,6 +216,25 @@ def score_analysis(result: AnalysisResult, fixture: dict[str, Any]) -> dict[str,
         "total": len(checks),
         "checks": checks,
     }
+
+
+def score_workflow_text(report: dict[str, Any], fixture: dict[str, Any], draft_text: str, confirmation_items: list[str]) -> None:
+    expected = fixture["expected"]
+    checks: list[dict[str, Any]] = []
+
+    def add(name: str, passed: bool, detail: str = "") -> None:
+        checks.append({"name": name, "passed": bool(passed), "detail": detail})
+
+    for label in _expected_list(expected, "draft_must_contain"):
+        add(f"draft_contains:{label}", label in draft_text, draft_text[:400])
+
+    if expected.get("doc_type") == "government_rnd":
+        add("draft_has_markdown_table", "| 항목 | 내용 |" in draft_text or "| 구분 |" in draft_text, draft_text[:400])
+        add("confirmation_required_from_uncertainty", bool(confirmation_items), " | ".join(confirmation_items))
+
+    report["draft_checks"] = checks
+    if checks and not all(item["passed"] for item in checks):
+        report["score"] = min(report["score"], 79.0)
 
 
 def run_one(fixture: dict[str, Any], mode: str, include_hwpx: bool) -> dict[str, Any]:
@@ -210,6 +255,12 @@ def run_one(fixture: dict[str, Any], mode: str, include_hwpx: bool) -> dict[str,
     }
     workflow = update_inputs(workflow, updates)
     workflow = generate_drafts(workflow)
+    draft_text = "\n\n".join(draft.content_markdown for draft in workflow.draft_sections)
+    confirmation_items = [
+        item
+        for draft in workflow.draft_sections
+        for item in (draft.confirmation_required or [])
+    ]
     workflow = confirm_workflow(workflow)
     workflow = finalize_document(workflow)
 
@@ -231,16 +282,21 @@ def run_one(fixture: dict[str, Any], mode: str, include_hwpx: bool) -> dict[str,
     report["draft_sections"] = len(workflow.draft_sections)
     report["final_document_chars"] = len(workflow.final_document.content_markdown)
     report["analysis_id"] = result.id
+    score_workflow_text(report, fixture, draft_text, confirmation_items)
     if include_hwpx:
         filename, content = export_markdown_to_hwpx(workflow.final_document.content_markdown, workflow.final_document.title)
         ingested = ingest_uploaded_document(content, filename)
+        expected_hwpx_terms = _expected_list(fixture["expected"], "hwpx_text_must_contain")
+        hwpx_terms_found = {term: term in ingested.text for term in expected_hwpx_terms}
         report["hwpx"] = {
             "filename": filename,
             "is_zip": content.startswith(b"PK"),
             "text_chars": len(ingested.text),
             "title_found": workflow.final_document.title[:20] in ingested.text,
+            "terms_found": hwpx_terms_found,
+            "table_section_found": bool(expected_hwpx_terms and any(term in ingested.text for term in expected_hwpx_terms)),
         }
-        if not report["hwpx"]["is_zip"] or report["hwpx"]["text_chars"] < 20:
+        if not report["hwpx"]["is_zip"] or report["hwpx"]["text_chars"] < 20 or not all(hwpx_terms_found.values()):
             report["score"] = min(report["score"], 79.0)
     settings.MOCK_MODE = old_mock_mode
     return report
@@ -251,10 +307,15 @@ def main() -> int:
     parser.add_argument("--mode", choices=["deterministic", "real-ai"], default="deterministic")
     parser.add_argument("--min-score", type=float, default=80.0)
     parser.add_argument("--include-hwpx", action="store_true")
+    parser.add_argument("--fixture-id")
     parser.add_argument("--output", type=Path, default=ROOT / "outputs" / "fixture-e2e-report.json")
     args = parser.parse_args()
 
-    reports = [run_one(fixture, args.mode, args.include_hwpx) for fixture in load_fixtures()]
+    fixtures = load_fixtures(args.fixture_id)
+    if args.fixture_id and not fixtures:
+        print(f"No fixture found for --fixture-id {args.fixture_id}")
+        return 2
+    reports = [run_one(fixture, args.mode, args.include_hwpx) for fixture in fixtures]
     summary = {
         "mode": args.mode,
         "min_score": args.min_score,
