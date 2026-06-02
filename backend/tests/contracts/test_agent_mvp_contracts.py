@@ -41,7 +41,9 @@ try:
         confirm_workflow,
         create_hwpx_placeholder_map,
         create_workflow_session,
+        markdown_to_hwp_compatible_html,
         export_markdown_to_hwpx,
+        export_markdown_to_hwpx_with_validation,
         finalize_document,
         generate_drafts,
         get_hwpx_toolchain_status,
@@ -85,7 +87,9 @@ except ModuleNotFoundError as exc:  # pragma: no cover - local minimal Python fa
     clone_hwpx_template = None
     confirm_workflow = None
     create_workflow_session = None
+    markdown_to_hwp_compatible_html = None
     export_markdown_to_hwpx = None
+    export_markdown_to_hwpx_with_validation = None
     finalize_document = None
     generate_drafts = None
     get_hwpx_toolchain_status = None
@@ -161,6 +165,7 @@ class AgentMvpContractTests(unittest.TestCase):
             "submission_method": "범부처통합연구지원시스템(IRIS) 또는 세부사업 공고에서 안내하는 접수 시스템",
             "evaluation_criteria": expected["evaluation_criteria"],
             "benefits": expected["benefits_contains"],
+            "support_programs": expected["support_programs"],
             "cautions": [],
             "uncertain_fields": expected["uncertain_fields"],
             "source_evidence": expected["source_evidence"],
@@ -171,7 +176,11 @@ class AgentMvpContractTests(unittest.TestCase):
 
         self.assertEqual(result.doc_type, "government_rnd")
         self.assertEqual(result.timeline, [])
+        self.assertEqual(len(result.support_programs), len(expected["support_programs"]))
         self.assertIn("중소벤처기업부", result.organization)
+        support_program_text = " | ".join(program.sub_program for program in result.support_programs)
+        for term in expected["must_have_support_programs"]:
+            self.assertIn(term, support_program_text)
         evidence_fields = {item.field for item in result.source_evidence}
         self.assertTrue(set(expected["must_have_source_evidence"]).issubset(evidence_fields))
         section_titles = " | ".join(section.title for section in result.document_template)
@@ -182,15 +191,53 @@ class AgentMvpContractTests(unittest.TestCase):
             self.assertIn(term, question_text)
 
         workflow = create_workflow_session(result)
+        field_by_id = {field.id: field for field in workflow.user_inputs}
+        for field_id in expected["required_input_field_ids"]:
+            self.assertIn(field_id, field_by_id)
+            self.assertTrue(field_by_id[field_id].required)
+        for field_id in expected["optional_input_field_ids"]:
+            self.assertIn(field_id, field_by_id)
+            self.assertFalse(field_by_id[field_id].required)
+        duplicate_question_labels = [
+            field.label
+            for field in workflow.user_inputs
+            if field.id.startswith("missing_")
+            and any(term in field.label for term in expected["covered_missing_question_terms"])
+        ]
+        self.assertEqual(duplicate_question_labels, [])
+
         updates = {field.id: f"{field.label}: fixture input" for field in workflow.user_inputs if field.required}
+        updates["technical_summary"] = "HWPX 표 구조를 보존하는 정부 R&D 제출문서 자동작성 기술"
+        updates["development_goal"] = "초안 작성 시간을 70% 줄이고 표 기반 검증 항목을 자동 생성"
+        updates["commercialization_plan"] = "IRIS 제출 준비 기업을 대상으로 SaaS 방식으로 제공"
+        updates["budget_plan"] = "인건비 50%, 문서 변환/검증 인프라 30%, 시험인증 20%"
         workflow = update_inputs(workflow, updates)
         workflow = generate_drafts(workflow)
         draft_text = "\n\n".join(draft.content_markdown for draft in workflow.draft_sections)
+        draft_by_title = {draft.title: draft for draft in workflow.draft_sections}
 
         self.assertEqual(workflow.status, "reviewing")
+        for title in expected["section_draft_titles"]:
+            self.assertIn(title, draft_by_title)
+            self.assertIn("|", draft_by_title[title].content_markdown)
+        for expectation in expected["section_confirmation_terms"]:
+            draft = draft_by_title[expectation["title"]]
+            self.assertIn(expectation["must_include"], " | ".join(draft.confirmation_required))
+        confirmation_signatures = {
+            tuple(draft.confirmation_required)
+            for draft in workflow.draft_sections
+            if draft.confirmation_required
+        }
+        self.assertGreater(len(confirmation_signatures), 1)
         self.assertIn("| 항목 | 내용 |", draft_text)
         self.assertIn("사업개요", draft_text)
         self.assertIn("추진일정", draft_text)
+        self.assertIn("지원사업 현황표", draft_text)
+        self.assertIn("글로벌 선도 수출지원형", draft_text)
+        self.assertIn("HWPX 표 구조를 보존하는 정부 R&D 제출문서 자동작성 기술", draft_text)
+        self.assertIn("초안 작성 시간을 70% 줄이고 표 기반 검증 항목을 자동 생성", draft_text)
+        self.assertIn("IRIS 제출 준비 기업을 대상으로 SaaS 방식으로 제공", draft_text)
+        self.assertIn("인건비 50%, 문서 변환/검증 인프라 30%, 시험인증 20%", draft_text)
         self.assertIn("예산/지원금 사용계획", draft_text)
         self.assertIn("평가기준", draft_text)
         self.assertTrue(any(draft.confirmation_required for draft in workflow.draft_sections))
@@ -463,6 +510,32 @@ class AgentMvpContractTests(unittest.TestCase):
         self.assertEqual(recovered.analysis.id, result.id)
         self.assertIsNotNone(storage.load_workflow(result.id))
 
+    def test_workflow_persistence_preserves_inputs_drafts_and_final_document(self):
+        if AnalysisResult is None or storage is None or load_or_recover_workflow is None:
+            self.skipTest("backend dependencies are not installed in this Python environment")
+
+        result = build_analysis_result(get_mock_result(), source_type="demo", source_name="mock")
+        workflow = create_workflow_session(result)
+        updates = {field.id: f"{field.label} fixture persistence input" for field in workflow.user_inputs if field.required}
+        workflow = update_inputs(workflow, updates)
+        workflow = generate_drafts(workflow)
+        workflow = confirm_workflow(workflow, ["마감일 확인"])
+        workflow = finalize_document(workflow)
+        storage.save_workflow(workflow.id, workflow.model_dump(mode="json"))
+
+        restored = load_or_recover_workflow(workflow.id)
+
+        self.assertIsNotNone(restored)
+        assert restored is not None
+        self.assertEqual(restored.status, "finalized")
+        self.assertEqual(len(restored.draft_sections), len(workflow.draft_sections))
+        self.assertTrue(all(draft.content_markdown for draft in restored.draft_sections))
+        self.assertTrue(any(field.value for field in restored.user_inputs))
+        self.assertIn("마감일 확인", restored.confirmed_items)
+        self.assertIsNotNone(restored.final_document)
+        assert restored.final_document is not None
+        self.assertIn(workflow.analysis.title, restored.final_document.content_markdown)
+
     def test_mock_stream_draft_events_emit_section_done(self):
         if AnalysisResult is None or stream_draft_events is None:
             self.skipTest("backend dependencies are not installed in this Python environment")
@@ -583,6 +656,73 @@ class AgentMvpContractTests(unittest.TestCase):
         self.assertTrue(filename.endswith(".hwpx"))
         self.assertGreater(len(content), 500)
         self.assertEqual(content[:2], b"PK")
+
+    def test_markdown_html_export_preserves_table_sections(self):
+        if markdown_to_hwp_compatible_html is None:
+            self.skipTest("backend dependencies are not installed in this Python environment")
+
+        markdown = "\n".join(
+            [
+                "# 2026년 중소기업 기술개발 지원사업 제출문서 초안",
+                "",
+                "## 사업개요",
+                "",
+                "| 항목 | 내용 |",
+                "| --- | --- |",
+                "| 주관부처 | 중소벤처기업부 |",
+                "| 대상사업 | 2026년 중소기업 기술개발 지원사업 |",
+                "",
+                "## 예산/지원금 사용계획",
+                "",
+                "| 구분 | 계획 |",
+                "| --- | --- |",
+                "| 정부지원금 | 공고 근거 확인 후 확정 |",
+            ]
+        )
+
+        rendered = markdown_to_hwp_compatible_html(markdown, "IRIS 제출문서 초안")
+
+        self.assertIn("<table>", rendered)
+        self.assertIn("<th>항목</th>", rendered)
+        self.assertIn("<td>중소벤처기업부</td>", rendered)
+        self.assertIn("사업개요", rendered)
+        self.assertNotIn("<p>| 항목 | 내용 |</p>", rendered)
+
+    def test_government_rnd_hwpx_export_validation_reports_expected_text(self):
+        if export_markdown_to_hwpx_with_validation is None or extract_text_from_hwpx is None:
+            self.skipTest("backend dependencies are not installed in this Python environment")
+
+        title = "2026년 중소기업 기술개발 지원사업 제출문서 초안"
+        markdown = "\n".join(
+            [
+                f"# {title}",
+                "",
+                "## 사업개요",
+                "",
+                "| 항목 | 내용 |",
+                "| --- | --- |",
+                "| 주관부처 | 중소벤처기업부 |",
+                "| 대상사업 | 2026년 중소기업 기술개발 지원사업 |",
+                "",
+                "## 예산/지원금 사용계획",
+                "",
+                "| 구분 | 계획 |",
+                "| --- | --- |",
+                "| 정부지원금 | source evidence 확인 후 확정 |",
+            ]
+        )
+
+        filename, content, summary = export_markdown_to_hwpx_with_validation(markdown, title)
+        extracted_text, warnings = extract_text_from_hwpx(content)
+
+        self.assertTrue(filename.endswith(".hwpx"))
+        self.assertEqual(content[:2], b"PK")
+        self.assertTrue(summary["validation_passed"])
+        self.assertTrue(summary["namespace_fixed"])
+        self.assertIn(title, extracted_text)
+        self.assertIn("사업개요", extracted_text)
+        self.assertIn("예산/지원금 사용계획", extracted_text)
+        self.assertIsInstance(warnings, list)
 
     def test_template_replacements_include_final_document_and_sections(self):
         if AnalysisResult is None:

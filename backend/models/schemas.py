@@ -55,6 +55,19 @@ class MissingQuestion(BaseModel):
     required_for: str
 
 
+class SupportProgram(BaseModel):
+    id: str
+    parent_program: str = ""
+    sub_program: str = ""
+    support_scale: Optional[str] = None
+    development_period: Optional[str] = None
+    support_limit: Optional[str] = None
+    support_ratio: Optional[str] = None
+    schedule: Optional[str] = None
+    notes: Optional[str] = None
+    source_evidence_ids: list[str] = Field(default_factory=list)
+
+
 class AnalysisResult(BaseModel):
     id: str
     source_type: SourceType = "pdf"
@@ -76,6 +89,7 @@ class AnalysisResult(BaseModel):
     evidence_quotes: list[str] = Field(default_factory=list)
     source_evidence: list[SourceEvidence] = Field(default_factory=list)
     missing_questions: list[MissingQuestion] = Field(default_factory=list)
+    support_programs: list[SupportProgram] = Field(default_factory=list)
 
 
 class CompanyProfile(BaseModel):

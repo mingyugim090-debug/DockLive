@@ -1,5 +1,8 @@
 # Development Plan
 
+For the IRIS/government R&D submission-document sequence, use
+`docs/product/iris-mvp-phases.md` as the phase-by-phase execution plan.
+
 ## Milestone 1 - Stabilize Agent Harness
 
 - Repair Korean docs and prompts.
@@ -35,6 +38,8 @@
 - Install HWPX toolchain in backend deployment.
 - Convert final markdown to HWPX.
 - Run namespace fix and validation.
+- Store export validation summaries and retain HTML fallback when HWPX text
+  extraction needs ZIP/XML fallback.
 - Add uploaded HWPX template cloning workflow.
 - Add HWP to HWPX conversion workflow.
 

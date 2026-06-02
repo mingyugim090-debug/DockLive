@@ -125,6 +125,38 @@ function MetricCard({ label, value, desc, tone = 'neutral' }: { label: string; v
   );
 }
 
+function SupportProgramTable({ programs }: { programs: AnalysisResult['support_programs'] }) {
+  if (!programs.length) return null;
+  return (
+    <div className="overflow-x-auto rounded-lg border border-white/10 bg-white/[0.035]">
+      <table className="min-w-full border-collapse text-left text-xs text-text2">
+        <thead className="bg-white/[0.06] text-text">
+          <tr>
+            {['상위사업', '내역사업', '지원규모', '개발기간', '지원한도', '지원비율', '추진일정'].map((header) => (
+              <th key={header} scope="col" className="border-b border-white/10 px-3 py-2 font-semibold">
+                {header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {programs.map((program) => (
+            <tr key={program.id} className="border-t border-white/[0.06]">
+              <td className="px-3 py-2 align-top">{program.parent_program || '확인 필요'}</td>
+              <td className="px-3 py-2 align-top font-semibold text-text">{program.sub_program || '확인 필요'}</td>
+              <td className="px-3 py-2 align-top">{program.support_scale || '확인 필요'}</td>
+              <td className="px-3 py-2 align-top">{program.development_period || '확인 필요'}</td>
+              <td className="px-3 py-2 align-top">{program.support_limit || '확인 필요'}</td>
+              <td className="px-3 py-2 align-top">{program.support_ratio || '확인 필요'}</td>
+              <td className="min-w-[220px] px-3 py-2 align-top">{program.schedule || '세부사업 공고 확인 필요'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function ResultPage() {
   const params = useParams();
   const router = useRouter();
@@ -555,6 +587,12 @@ export default function ResultPage() {
                   <InfoCard title="불확실한 항목" items={activeAnalysis.uncertain_fields} tone="warning" emptyText="확인 필요한 불확실 항목이 없습니다." />
                 </div>
               </SectionCard>
+
+              {activeAnalysis.support_programs.length ? (
+                <SectionCard title="지원사업 현황표" desc="공고에서 확인된 세부사업별 지원규모, 개발기간, 한도, 비율, 추진일정을 표로 검토합니다.">
+                  <SupportProgramTable programs={activeAnalysis.support_programs} />
+                </SectionCard>
+              ) : null}
 
               <SectionCard title="일정과 제출서류" desc="필수/선택 구분과 파일 형식 요구사항을 확인합니다.">
                 <div className="grid gap-4 lg:grid-cols-[0.84fr_1fr]">

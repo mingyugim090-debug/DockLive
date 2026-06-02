@@ -95,6 +95,37 @@ const exportStatusTone: Record<string, BadgeTone> = {
   validation_failed: 'danger',
 };
 
+function splitMarkdownTableRow(line: string): string[] {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith('|') || !trimmed.endsWith('|')) return [];
+  return trimmed.slice(1, -1).split('|').map((cell) => cell.trim());
+}
+
+function isMarkdownTableSeparator(line: string): boolean {
+  const cells = splitMarkdownTableRow(line);
+  return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+}
+
+function exportValidationBadges(summary: Record<string, unknown>): Array<{ label: string; tone: BadgeTone }> {
+  const badges: Array<{ label: string; tone: BadgeTone }> = [];
+  if (typeof summary.validation_passed === 'boolean') {
+    badges.push({ label: summary.validation_passed ? '검증 통과' : '검증 확인 필요', tone: summary.validation_passed ? 'success' : 'warning' });
+  }
+  if (summary.namespace_fixed === true) badges.push({ label: 'namespace 정리', tone: 'success' });
+  if (summary.title_found === true) badges.push({ label: '제목 확인', tone: 'success' });
+  if (summary.table_section_found === true) badges.push({ label: '표 섹션 확인', tone: 'success' });
+  if (summary.generated_content_found === true) badges.push({ label: '본문 확인', tone: 'success' });
+  if (summary.zip_text_fallback_used === true) badges.push({ label: 'ZIP fallback', tone: 'warning' });
+  return badges;
+}
+
+function exportValidationWarnings(summary: Record<string, unknown>): string[] {
+  const warnings = summary.warnings;
+  return Array.isArray(warnings)
+    ? warnings.map((item) => String(item)).filter(Boolean).slice(0, 3)
+    : [];
+}
+
 export function StatusBadge({ label, tone = 'neutral', className }: { label: string; tone?: BadgeTone; className?: string }) {
   return (
     <span
@@ -687,12 +718,55 @@ function MarkdownPreview({ content, emptyText }: { content: string; emptyText: s
       );
     };
 
-    trimmed.split(/\r?\n/).forEach((rawLine) => {
+    const lines = trimmed.split(/\r?\n/);
+    let index = 0;
+    while (index < lines.length) {
+      const rawLine = lines[index];
       const line = rawLine.trim();
       if (!line) {
         flushList();
         elements.push(<div key={`space-${elements.length}`} className="h-2" />);
-        return;
+        index += 1;
+        continue;
+      }
+      if (index + 1 < lines.length && line.startsWith('|') && isMarkdownTableSeparator(lines[index + 1])) {
+        flushList();
+        const header = splitMarkdownTableRow(line);
+        const rows: string[][] = [];
+        index += 2;
+        while (index < lines.length) {
+          const candidate = lines[index].trim();
+          if (!candidate || !candidate.startsWith('|') || !candidate.endsWith('|')) break;
+          if (!isMarkdownTableSeparator(candidate)) rows.push(splitMarkdownTableRow(candidate));
+          index += 1;
+        }
+        elements.push(
+          <div key={`table-${elements.length}`} className="my-4 overflow-x-auto rounded-lg border border-white/10">
+            <table className="min-w-full border-collapse text-left text-xs text-text2">
+              <thead className="bg-white/[0.06] text-text">
+                <tr>
+                  {header.map((cell, cellIndex) => (
+                    <th key={`${cell}-${cellIndex}`} scope="col" className="border-b border-white/10 px-3 py-2 font-semibold">
+                      {cell}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, rowIndex) => (
+                  <tr key={`row-${rowIndex}`} className="border-t border-white/[0.06]">
+                    {row.map((cell, cellIndex) => (
+                      <td key={`${cell}-${cellIndex}`} className="px-3 py-2 align-top">
+                        {cell}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>,
+        );
+        continue;
       }
       const heading = line.match(/^(#{1,3})\s+(.+)$/);
       if (heading) {
@@ -704,12 +778,14 @@ function MarkdownPreview({ content, emptyText }: { content: string; emptyText: s
             {heading[2]}
           </Tag>,
         );
-        return;
+        index += 1;
+        continue;
       }
       const list = line.match(/^[-*]\s+(.+)$/);
       if (list) {
         listItems.push(list[1]);
-        return;
+        index += 1;
+        continue;
       }
       flushList();
       elements.push(
@@ -717,7 +793,8 @@ function MarkdownPreview({ content, emptyText }: { content: string; emptyText: s
           {line}
         </p>,
       );
-    });
+      index += 1;
+    }
     flushList();
     return elements;
   }, [content]);
@@ -927,19 +1004,37 @@ export function ExportPanel({
         </div>
         <div className="mt-4 space-y-2">
           {exportHistory.length ? (
-            exportHistory.map((item) => (
-              <div key={item.id} className="flex flex-col gap-3 rounded-md border border-white/10 bg-bg/45 p-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="truncate text-sm font-semibold text-text">{item.filename}</p>
-                    <StatusBadge label={exportStatusLabel[item.status] ?? item.status} tone={exportStatusTone[item.status] ?? 'neutral'} />
+            exportHistory.map((item) => {
+              const validationBadges = exportValidationBadges(item.validation_summary ?? {});
+              const validationWarnings = exportValidationWarnings(item.validation_summary ?? {});
+              return (
+                <div key={item.id} className="flex flex-col gap-3 rounded-md border border-white/10 bg-bg/45 p-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate text-sm font-semibold text-text">{item.filename}</p>
+                      <StatusBadge label={exportStatusLabel[item.status] ?? item.status} tone={exportStatusTone[item.status] ?? 'neutral'} />
+                    </div>
+                    <p className="mt-1 text-xs text-text3">{item.export_type} · {Math.max(1, Math.round(item.size_bytes / 1024))}KB · {new Date(item.created_at).toLocaleString('ko-KR')}</p>
+                    {validationBadges.length ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {validationBadges.map((badge) => (
+                          <StatusBadge key={badge.label} label={badge.label} tone={badge.tone} />
+                        ))}
+                      </div>
+                    ) : null}
+                    {validationWarnings.length ? (
+                      <ul className="mt-3 space-y-1 text-xs leading-5 text-amber-100">
+                        {validationWarnings.map((warning) => (
+                          <li key={warning}>- {warning}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {item.error_message ? <p className="mt-2 text-xs leading-5 text-rose-200">{item.error_message}</p> : null}
                   </div>
-                  <p className="mt-1 text-xs text-text3">{item.export_type} · {Math.max(1, Math.round(item.size_bytes / 1024))}KB · {new Date(item.created_at).toLocaleString('ko-KR')}</p>
-                  {item.error_message ? <p className="mt-2 text-xs leading-5 text-rose-200">{item.error_message}</p> : null}
+                  <Button type="button" variant="ghost" onClick={() => onDownloadStoredExport(item.id)} disabled={busy || item.status !== 'success'}>다시 다운로드</Button>
                 </div>
-                <Button type="button" variant="ghost" onClick={() => onDownloadStoredExport(item.id)} disabled={busy || item.status !== 'success'}>다시 다운로드</Button>
-              </div>
-            ))
+              );
+            })
           ) : (
             <EmptyState title="저장된 export 파일이 없습니다." desc="HTML 또는 HWPX export를 생성하면 여기에 표시됩니다." />
           )}

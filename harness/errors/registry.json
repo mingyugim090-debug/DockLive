@@ -45,6 +45,78 @@
         "backend\\tests\\contracts\\test_agent_mvp_contracts.py"
       ],
       "resolved_at": "2026-06-02T01:37:51+00:00"
+    },
+    {
+      "id": "ERR-20260602040221-229c4f44",
+      "fingerprint": "229c4f44902616d09d97c39e",
+      "symptom": "}",
+      "root_cause": "New IRIS support-program fixture values were first inserted through a PowerShell here-string and two Korean draft expectations were corrupted into question-mark placeholders.",
+      "fix_summary": "Rewrote the fixture support-program values with Unicode-safe escaped strings and removed corrupted draft_must_contain entries.",
+      "guard_test": "powershell -ExecutionPolicy Bypass -File .\\scripts\\harness.ps1 -Profile agent -PythonPath C:\\Users\\alseh\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+      "first_seen": "2026-06-02T04:02:21+00:00",
+      "last_seen": "2026-06-02T13:04:14+00:00",
+      "occurrences": 2,
+      "status": "resolved",
+      "last_command": "C:\\Users\\alseh\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe backend/tests/evals/run_fixture_e2e.py --mode deterministic --min-score 80",
+      "last_exit_code": 1,
+      "last_error_line": "}",
+      "last_log_path": "harness\\runs\\20260602-220414-agent\\01-deterministic-fixture-e2e.log",
+      "related_paths": [
+        "backend/tests/evals/run_fixture_e2e.py"
+      ],
+      "resolved_at": "2026-06-02T04:03:12+00:00"
+    },
+    {
+      "id": "ERR-20260602040802-66f42faa",
+      "fingerprint": "66f42faac19e5858ae60fb88",
+      "symptom": "UnboundLocalError: cannot access local variable 'report' where it is not associated with a value",
+      "root_cause": "Phase 2 eval input-field scoring was inserted before run_one created the report object.",
+      "fix_summary": "Moved score_input_fields after score_analysis creates the report, while still scoring the workflow user_inputs generated before update_inputs.",
+      "guard_test": "powershell -ExecutionPolicy Bypass -File .\\scripts\\harness.ps1 -Profile agent -PythonPath C:\\Users\\alseh\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+      "first_seen": "2026-06-02T04:08:02+00:00",
+      "last_seen": "2026-06-02T04:08:02+00:00",
+      "occurrences": 1,
+      "status": "resolved",
+      "last_command": "C:\\Users\\alseh\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe backend/tests/evals/run_fixture_e2e.py --mode deterministic --min-score 80",
+      "last_exit_code": 1,
+      "last_error_line": "UnboundLocalError: cannot access local variable 'report' where it is not associated with a value",
+      "last_log_path": "harness\\runs\\20260602-130801-agent\\01-deterministic-fixture-e2e.log",
+      "related_paths": [
+        "backend/tests/evals/run_fixture_e2e.py",
+        "backend\\tests\\evals\\run_fixture_e2e.py"
+      ],
+      "resolved_at": "2026-06-02T04:08:44+00:00"
+    },
+    {
+      "id": "ERR-20260602130448-0bcc9f5f",
+      "fingerprint": "0bcc9f5f3444cbba529764df",
+      "symptom": "\"xml_errors\": []",
+      "root_cause": "HWPX fixture scoring required table-section text for every fixture, including non-table generic fixtures without hwpx_text_must_contain expectations.",
+      "fix_summary": "Scoped HWPX table-section validation to fixtures with explicit table terms or government_rnd document type.",
+      "guard_test": "powershell -ExecutionPolicy Bypass -File .\\scripts\\harness.ps1 -Profile hwpx -PythonPath C:\\Users\\alseh\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+      "first_seen": "2026-06-02T13:04:48+00:00",
+      "last_seen": "2026-06-02T13:04:48+00:00",
+      "occurrences": 1,
+      "status": "resolved",
+      "last_command": "C:\\Users\\alseh\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe backend/tests/evals/run_fixture_e2e.py --mode deterministic --min-score 80 --include-hwpx",
+      "last_exit_code": 1,
+      "last_error_line": "\"xml_errors\": []",
+      "last_log_path": "harness\\runs\\20260602-220443-hwpx\\01-deterministic-fixture-e2e-hwpx.log",
+      "related_paths": [
+        "backend/tests/evals/run_fixture_e2e.py",
+        "scripts\\\\\\\\text_extract.py",
+        "backend\\\\\\\\.tmp\\\\\\\\livedock_b363e3fccf5d400290fefbd7c0781fd0\\\\\\\\input.hwpx",
+        "scripts\\\\text_extract.py\\",
+        "backend\\\\.tmp\\\\livedock_fa99a2c1762a484085bbf493b672039b\\\\Ambiguous_URL_Notice_제출_초안.hwpx",
+        "backend\\\\.tmp\\\\livedock_fa99a2c1762a484085bbf493b672039b\\\\Ambiguous_URL_Notice_제출_초안.hwpx\\n",
+        "backend\\\\.tmp\\\\livedock_fa99a2c1762a484085bbf493b672039b\\\\verify.json",
+        "backend\\\\\\\\.tmp\\\\\\\\livedock_7f82bcc64b8448b2aa42241ea3c77a16\\\\\\\\input.hwpx",
+        "backend\\\\.tmp\\\\livedock_d214533f327b4b128b601640fe0b9aa3\\\\2026년_중소기업_기술개발_지원사업_제출_초안.hwpx",
+        "backend\\\\.tmp\\\\livedock_d214533f327b4b128b601640fe0b9aa3\\\\2026년_중소기업_기술개발_지원사업_제출_초안.hwpx\\n",
+        "backend\\\\.tmp\\\\livedock_d214533f327b4b128b601640fe0b9aa3\\\\verify.json",
+        "backend\\\\\\\\.tmp\\\\\\\\livedock_de8e46b099a8431c994f3f945f4d8ff9\\\\\\\\input.hwpx"
+      ],
+      "resolved_at": "2026-06-02T13:05:38+00:00"
     }
   ]
 }

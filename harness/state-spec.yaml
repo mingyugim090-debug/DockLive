@@ -90,6 +90,7 @@ contracts:
       - submission_method
       - evaluation_criteria
       - benefits
+      - support_programs
       - cautions
       - uncertain_fields
       - evidence_quotes

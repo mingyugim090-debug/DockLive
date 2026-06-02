@@ -90,15 +90,26 @@ Expected extraction:
 - `government_rnd` document type
 - Ministry and integrated R&D program title
 - business overview and support-program table evidence
+- structured `support_programs` rows for sub-program-specific scale, period,
+  limit, ratio, and schedule
 - support limit/ratio values only when source-grounded
 - missing company/project facts for submission drafting
+- required company/project input fields for company name, project title,
+  technical summary, development goals, capability evidence,
+  commercialization/use plan, and budget/use plan
+- no duplicate missing-question fields for facts already covered by required
+  company/project input fields
 - table-first submission sections: business overview, technical goals, execution plan, commercialization, budget, expected impact, checklist
+- section-specific `confirmation_required` values instead of copying every
+  uncertainty into every section
 
 Fail if:
 
 - integrated month-level schedules become one invented submission deadline
 - company project facts are filled without user input
 - support amount, support ratio, schedule, or required documents are finalized without source evidence
+- every government R&D draft section receives the same confirmation-required
+  list without section-specific filtering
 
 ## Draft Eval
 
@@ -120,6 +131,18 @@ When the HWPX toolchain is enabled:
 4. Run `validate.py`.
 5. Extract text and check title/section presence.
 6. For government R&D fixtures, check title, `사업개요`, and at least one table-based section term.
+7. If `python-hwpx` is unavailable, accept ZIP/XML fallback text extraction only
+   when the fallback warning is recorded in the report.
+
+## HTML Export Eval
+
+For every deterministic fixture:
+
+1. Convert the finalized markdown document to HWP-compatible HTML.
+2. Save export metadata with a validation summary.
+3. Check title, expected section text, and at least one table-based section.
+4. For government R&D fixtures, require markdown pipe tables to render as HTML
+   `<table>` elements instead of plain paragraph text.
 
 ## Fixture E2E Eval
 
@@ -131,7 +154,8 @@ py backend\tests\evals\run_fixture_e2e.py --mode deterministic
 
 This validates that each real-notice-style fixture can move through analysis
 normalization, workflow creation, required input collection, section draft
-generation, confirmation, finalization, HTML export, and persistence hooks.
+generation, confirmation, finalization, validated HTML export, and persistence
+hooks.
 
 To evaluate actual model extraction quality, configure the backend provider and
 run:

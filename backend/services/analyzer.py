@@ -3,7 +3,15 @@ import uuid
 from datetime import date, datetime, timezone
 from typing import Any
 
-from models.schemas import AnalysisResult, ChecklistItem, DocumentSection, MissingQuestion, SourceEvidence, TimelineItem
+from models.schemas import (
+    AnalysisResult,
+    ChecklistItem,
+    DocumentSection,
+    MissingQuestion,
+    SourceEvidence,
+    SupportProgram,
+    TimelineItem,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -179,6 +187,69 @@ def _missing_questions(value: Any) -> list[MissingQuestion]:
     return questions
 
 
+def _support_programs(value: Any) -> list[SupportProgram]:
+    if not isinstance(value, list):
+        return []
+    programs: list[SupportProgram] = []
+    seen: set[str] = set()
+    for index, item in enumerate(value[:20]):
+        if not isinstance(item, dict):
+            continue
+
+        def text(*keys: str) -> str:
+            for key in keys:
+                raw = item.get(key)
+                if raw is not None:
+                    cleaned = str(raw).strip()
+                    if cleaned:
+                        return cleaned
+            return ""
+
+        parent_program = text("parent_program", "parentProgram", "program", "parent")
+        sub_program = text("sub_program", "subProgram", "name", "sub_program_name", "subProgramName")
+        support_scale = text("support_scale", "supportScale", "scale")
+        development_period = text("development_period", "developmentPeriod", "period")
+        support_limit = text("support_limit", "supportLimit", "limit")
+        support_ratio = text("support_ratio", "supportRatio", "ratio")
+        schedule = text("schedule", "timeline")
+        notes = text("notes", "note")
+        if not any(
+            [
+                parent_program,
+                sub_program,
+                support_scale,
+                development_period,
+                support_limit,
+                support_ratio,
+                schedule,
+                notes,
+            ]
+        ):
+            continue
+        dedup_key = "|".join([parent_program, sub_program, support_limit, support_ratio, schedule])
+        if dedup_key in seen:
+            continue
+        seen.add(dedup_key)
+        evidence_ids = item.get("source_evidence_ids") or item.get("sourceEvidenceIds") or []
+        if not isinstance(evidence_ids, list):
+            evidence_ids = []
+        programs.append(
+            SupportProgram(
+                id=text("id") or f"support-program-{index + 1}",
+                parent_program=parent_program,
+                sub_program=sub_program,
+                support_scale=support_scale or None,
+                development_period=development_period or None,
+                support_limit=support_limit or None,
+                support_ratio=support_ratio or None,
+                schedule=schedule or None,
+                notes=notes or None,
+                source_evidence_ids=[str(value).strip() for value in evidence_ids if str(value).strip()],
+            )
+        )
+    return programs
+
+
 def _derive_missing_questions(
     raw_questions: list[MissingQuestion],
     uncertain_fields: list[str],
@@ -329,6 +400,7 @@ def build_analysis_result(raw: dict, source_type: str = "pdf", source_name: str 
     source_evidence = _ensure_deadline_evidence(_source_evidence(raw.get("source_evidence")), timeline)
     evidence_quotes = _evidence_quotes(raw.get("evidence_quotes"), source_evidence)
     submission_method = raw.get("submission_method") or None
+    support_programs = _support_programs(raw.get("support_programs"))
     missing_questions = _derive_missing_questions(
         _missing_questions(raw.get("missing_questions")),
         uncertain_fields,
@@ -358,4 +430,5 @@ def build_analysis_result(raw: dict, source_type: str = "pdf", source_name: str 
         evidence_quotes=evidence_quotes,
         source_evidence=source_evidence,
         missing_questions=missing_questions,
+        support_programs=support_programs,
     )

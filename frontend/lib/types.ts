@@ -53,6 +53,19 @@ export interface MissingQuestion {
   required_for: string;
 }
 
+export interface SupportProgram {
+  id: string;
+  parent_program: string;
+  sub_program: string;
+  support_scale?: string | null;
+  development_period?: string | null;
+  support_limit?: string | null;
+  support_ratio?: string | null;
+  schedule?: string | null;
+  notes?: string | null;
+  source_evidence_ids: string[];
+}
+
 export interface AnalysisResult {
   id: string;
   source_type: SourceType;
@@ -73,6 +86,7 @@ export interface AnalysisResult {
   uncertain_fields: string[];
   source_evidence: SourceEvidence[];
   missing_questions: MissingQuestion[];
+  support_programs: SupportProgram[];
 }
 
 export interface CompanyProfile {

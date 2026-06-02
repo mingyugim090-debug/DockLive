@@ -241,13 +241,51 @@ def _join_or_unspecified(values: list[str], limit: int = 4) -> str:
     return ", ".join(cleaned[:limit]) if cleaned else "확인 필요"
 
 
+def _government_rnd_section_confirmation_items(workflow: WorkflowSession, title: str) -> list[str]:
+    uncertain = []
+    for value in workflow.analysis.uncertain_fields:
+        cleaned = str(value).strip()
+        if cleaned and cleaned not in uncertain:
+            uncertain.append(cleaned)
+
+    def select(*terms: str) -> list[str]:
+        normalized_terms = [re.sub(r"\s+", "", term) for term in terms]
+        selected = []
+        for item in uncertain:
+            normalized_item = re.sub(r"\s+", "", item)
+            if any(term in normalized_item for term in normalized_terms) and item not in selected:
+                selected.append(item)
+        return selected
+
+    if "기술개발" in title or "목표" in title:
+        selected = select("과제명", "기술개요", "개발목표", "성과지표")
+    elif "예산" in title or "지원금" in title:
+        selected = select("사업비", "사용계획", "지원금", "지원한도", "지원비율")
+    elif "추진" in title or "일정" in title:
+        selected = select("세부사업", "마감", "일정", "접수")
+    elif "체크리스트" in title or "제출" in title:
+        selected = select("제출", "마감", "서류", "세부사업")
+    elif "사업화" in title or "활용" in title:
+        selected = select("사업화", "기술개요", "보유역량", "과제명")
+    elif "기대효과" in title:
+        selected = select("성과", "사업화", "보유역량", "평가기준")
+    else:
+        selected = select("세부사업", "지원", "마감", "제출")
+
+    return selected or uncertain[:1]
+
+
 def _mock_government_rnd_draft_section(workflow: WorkflowSession, draft: DraftSection) -> DraftSection:
     inputs = _input_map(workflow)
     applicant = inputs.get("applicant_name", "확인 필요")
     profile = inputs.get("applicant_profile", "확인 필요")
     project_summary = inputs.get("project_summary", "확인 필요")
-    evidence = inputs.get("evidence", "확인 필요")
     section_specific = inputs.get(f"section_input_{draft.section_id}", "")
+    technical_summary = inputs.get("technical_summary", project_summary)
+    development_goal = inputs.get("development_goal", section_specific)
+    commercialization_plan = inputs.get("commercialization_plan", "사용자 입력과 근거자료를 기준으로 목표 시장을 구체화")
+    budget_plan = inputs.get("budget_plan", "인건비, 재료비, 시험인증비 등 세부 배분 입력 필요")
+    evidence = inputs.get("evidence", "확인 필요")
     title = draft.title
     support_terms = _join_or_unspecified(workflow.analysis.benefits, 6)
     criteria_terms = _join_or_unspecified(workflow.analysis.evaluation_criteria, 6)
@@ -259,6 +297,23 @@ def _mock_government_rnd_draft_section(workflow: WorkflowSession, draft: DraftSe
         [item.label, item.date, "마감일" if item.is_deadline else "일정"]
         for item in workflow.analysis.timeline[:6]
     ] or [["통합공고 추진일정", "월 단위 일정은 source evidence 기준으로만 기재", "세부사업 공고 확인 필요"]]
+    support_program_rows = [
+        [
+            program.parent_program or "확인 필요",
+            program.sub_program or "확인 필요",
+            program.support_scale or "확인 필요",
+            program.development_period or "확인 필요",
+            program.support_limit or "확인 필요",
+            program.support_ratio or "확인 필요",
+            program.schedule or "세부사업 공고 확인 필요",
+        ]
+        for program in workflow.analysis.support_programs[:10]
+    ]
+    support_program_table = _markdown_table(
+        ["상위사업", "내역사업", "지원규모", "개발기간", "지원한도", "지원비율", "추진일정"],
+        support_program_rows
+        or [["확인 필요", "확인 필요", "확인 필요", "확인 필요", support_terms, "확인 필요", "세부사업 공고 확인 필요"]],
+    )
 
     if "사업개요" in title:
         content = [
@@ -270,10 +325,15 @@ def _mock_government_rnd_draft_section(workflow: WorkflowSession, draft: DraftSe
                     ["공고명", workflow.analysis.title],
                     ["주관기관", workflow.analysis.organization],
                     ["신청기업", applicant],
+                    ["과제명", project_summary],
                     ["사업목적", workflow.analysis.summary or "공고 원문 기준 확인"],
                     ["지원조건 근거", support_terms],
                 ],
             ),
+            "",
+            "### 지원사업 현황표",
+            "",
+            support_program_table,
         ]
     elif "기술개발" in title or "목표" in title:
         content = [
@@ -283,8 +343,8 @@ def _mock_government_rnd_draft_section(workflow: WorkflowSession, draft: DraftSe
                 ["구분", "작성 초안", "확인 필요"],
                 [
                     ["과제명", project_summary, "IRIS 제출 과제명 확정"],
-                    ["기술개요", project_summary, "핵심 기술, 차별성, 적용 제품"],
-                    ["개발목표", section_specific or "정량 목표와 성과지표를 사용자 입력으로 보완", "수치 목표/검증 방법"],
+                    ["기술개요", technical_summary, "핵심 기술, 차별성, 적용 제품"],
+                    ["개발목표", development_goal or "정량 목표와 성과지표를 사용자 입력으로 보완", "수치 목표/검증 방법"],
                     ["보유역량", profile, "연구인력, 장비, 선행실적"],
                 ],
             ),
@@ -314,7 +374,7 @@ def _mock_government_rnd_draft_section(workflow: WorkflowSession, draft: DraftSe
                 ["항목", "내용"],
                 [
                     ["시장/고객", "사용자 입력과 근거자료를 기준으로 목표 시장을 구체화"],
-                    ["활용계획", "개발 결과를 제품·공정혁신 또는 신제품 개발에 적용"],
+                    ["활용계획", commercialization_plan],
                     ["보유역량", profile],
                     ["근거자료", evidence],
                 ],
@@ -326,11 +386,13 @@ def _mock_government_rnd_draft_section(workflow: WorkflowSession, draft: DraftSe
             "",
             "지원한도와 지원비율은 공고 근거가 있는 범위만 기재하고, 기업별 사업비 배분은 사용자 확인 후 확정합니다.",
             "",
+            support_program_table,
+            "",
             _markdown_table(
                 ["항목", "내용", "확인 필요"],
                 [
                     ["공고상 지원조건", support_terms, "세부사업별 한도/비율 재확인"],
-                    ["사업비 사용계획", section_specific or "인건비, 재료비, 시험인증비 등 세부 배분 입력 필요", "기업 입력 필요"],
+                    ["사업비 사용계획", budget_plan, "기업 입력 필요"],
                     ["민간부담금", "세부사업 공고 및 기업 사업비 계획에 따라 산정", "확정 전 검토"],
                 ],
             ),
@@ -375,7 +437,7 @@ def _mock_government_rnd_draft_section(workflow: WorkflowSession, draft: DraftSe
             ),
         ]
 
-    confirmations = _confirmation_items(workflow)
+    confirmations = _government_rnd_section_confirmation_items(workflow, title)
     draft.content_markdown = "\n".join(content)
     draft.purpose = f"{title} 항목에서 IRIS/정부 R&D 제출문서에 필요한 근거와 사용자 입력을 표로 연결합니다."
     draft.related_criteria = workflow.analysis.evaluation_criteria[:4]
@@ -633,13 +695,60 @@ def finalize_document(workflow: WorkflowSession) -> WorkflowSession:
     return workflow
 
 
+def _render_inline_html(value: str) -> str:
+    escaped = html.escape(value)
+    return re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", escaped)
+
+
+def _split_markdown_table_row(line: str) -> list[str]:
+    stripped = line.strip()
+    if not stripped.startswith("|") or not stripped.endswith("|"):
+        return []
+    return [cell.strip() for cell in stripped.strip("|").split("|")]
+
+
+def _is_markdown_table_separator(line: str) -> bool:
+    cells = _split_markdown_table_row(line)
+    return bool(cells) and all(re.fullmatch(r":?-{3,}:?", cell.strip()) for cell in cells)
+
+
+def _render_markdown_table(header: list[str], rows: list[list[str]]) -> str:
+    header_html = "".join(f"<th>{_render_inline_html(cell)}</th>" for cell in header)
+    body_html = []
+    for row in rows:
+        body_html.append("<tr>" + "".join(f"<td>{_render_inline_html(cell)}</td>" for cell in row) + "</tr>")
+    return (
+        "<table>\n"
+        f"<thead><tr>{header_html}</tr></thead>\n"
+        f"<tbody>{chr(10).join(body_html)}</tbody>\n"
+        "</table>"
+    )
+
+
 def markdown_to_hwp_compatible_html(markdown: str, title: str) -> str:
     """Create a Hangul Word Processor friendly HTML document."""
     body_lines: list[str] = []
-    for raw_line in markdown.splitlines():
+    lines = markdown.splitlines()
+    index = 0
+    while index < len(lines):
+        raw_line = lines[index]
         line = raw_line.strip()
         if not line:
             body_lines.append("<p>&nbsp;</p>")
+            index += 1
+            continue
+        if index + 1 < len(lines) and line.startswith("|") and _is_markdown_table_separator(lines[index + 1]):
+            header = _split_markdown_table_row(line)
+            rows: list[list[str]] = []
+            index += 2
+            while index < len(lines):
+                candidate = lines[index].strip()
+                if not candidate or not candidate.startswith("|") or not candidate.endswith("|"):
+                    break
+                if not _is_markdown_table_separator(candidate):
+                    rows.append(_split_markdown_table_row(candidate))
+                index += 1
+            body_lines.append(_render_markdown_table(header, rows))
             continue
         if line.startswith("# "):
             body_lines.append(f"<h1>{html.escape(line[2:])}</h1>")
@@ -648,11 +757,10 @@ def markdown_to_hwp_compatible_html(markdown: str, title: str) -> str:
         elif line.startswith("### "):
             body_lines.append(f"<h3>{html.escape(line[4:])}</h3>")
         elif line.startswith("- "):
-            body_lines.append(f"<p class=\"bullet\">- {html.escape(line[2:])}</p>")
+            body_lines.append(f"<p class=\"bullet\">- {_render_inline_html(line[2:])}</p>")
         else:
-            escaped = html.escape(line)
-            escaped = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", escaped)
-            body_lines.append(f"<p>{escaped}</p>")
+            body_lines.append(f"<p>{_render_inline_html(line)}</p>")
+        index += 1
 
     return f"""<!doctype html>
 <html lang="ko">
@@ -666,6 +774,9 @@ def markdown_to_hwp_compatible_html(markdown: str, title: str) -> str:
     h3 {{ font-size: 13pt; margin: 12pt 0 6pt; }}
     p {{ font-size: 10.5pt; margin: 0 0 6pt; }}
     .bullet {{ margin-left: 12pt; }}
+    table {{ width: 100%; border-collapse: collapse; margin: 0 0 10pt; font-size: 10pt; }}
+    th, td {{ border: 1px solid #999; padding: 4pt 5pt; vertical-align: top; }}
+    th {{ background: #f4f6f8; font-weight: 700; }}
   </style>
 </head>
 <body>
@@ -1309,10 +1420,149 @@ def _make_tmp_dir() -> Path:
     return path
 
 
+_GOVERNMENT_RND_COVERED_INPUT_TERMS = (
+    "기업명",
+    "사업자등록",
+    "소재지",
+    "과제명",
+    "기술개요",
+    "차별성",
+    "개발목표",
+    "성과지표",
+    "보유역량",
+    "연구인력",
+    "기존 실적",
+    "사업비",
+    "지원금",
+    "사용계획",
+)
+
+
+def _question_covered_by_government_rnd_inputs(question: str) -> bool:
+    normalized = re.sub(r"\s+", "", question or "")
+    return any(re.sub(r"\s+", "", term) in normalized for term in _GOVERNMENT_RND_COVERED_INPUT_TERMS)
+
+
+def _government_rnd_input_fields(
+    analysis: AnalysisResult,
+    company_profile: CompanyProfile | None = None,
+) -> list[UserInputField]:
+    fields: list[UserInputField] = [
+        UserInputField(
+            id="applicant_name",
+            label="기업명 및 소재지",
+            field_type="text",
+            required=True,
+            section_id="section-1",
+            description="IRIS 제출문서에 들어갈 기업명, 사업자등록 기준 소재지, 대표 신청 주체를 입력하세요.",
+            placeholder="예: 주식회사 라이브독, 서울특별시 강남구",
+            value=company_profile.name if company_profile else "",
+        ),
+        UserInputField(
+            id="project_summary",
+            label="IRIS 제출 과제명",
+            field_type="text",
+            required=True,
+            section_id="section-2",
+            description="IRIS에 제출할 과제명 또는 임시 과제명을 입력하세요.",
+            placeholder="예: 생성형 AI 기반 정부 R&D 제출문서 자동작성 플랫폼 개발",
+        ),
+        UserInputField(
+            id="technical_summary",
+            label="기술개요 및 차별성",
+            required=True,
+            section_id="section-2",
+            description="개발하려는 핵심 기술, 차별성, 적용 제품/서비스를 입력하세요.",
+            placeholder="핵심 기술, 기존 방식 대비 차별성, 적용 제품 또는 공정을 적어주세요.",
+        ),
+        UserInputField(
+            id="development_goal",
+            label="개발목표 및 성과지표",
+            required=True,
+            section_id="section-2",
+            description="정량 개발목표, 성능지표, 검증 방법을 입력하세요.",
+            placeholder="예: 문서 초안 작성 시간 70% 단축, HWPX 표 구조 보존율 95% 이상",
+        ),
+        UserInputField(
+            id="applicant_profile",
+            label="보유역량 및 수행근거",
+            required=True,
+            section_id="section-4",
+            description="연구인력, 장비, 선행 개발 실적, 인증/특허/고객 검증 등 수행역량을 입력하세요.",
+            placeholder="예: AI 엔지니어 3명, HWPX 변환 PoC, 공공기관 문서 자동화 경험",
+            value=_profile_to_text(company_profile) if company_profile else "",
+        ),
+        UserInputField(
+            id="commercialization_plan",
+            label="사업화/활용계획",
+            required=True,
+            section_id="section-4",
+            description="개발 결과의 시장 적용, 고객군, 매출/확산 계획, 공정 활용 방안을 입력하세요.",
+            placeholder="목표 고객, 적용 현장, 판매/도입 경로, 활용 시나리오를 적어주세요.",
+        ),
+        UserInputField(
+            id="budget_plan",
+            label="사업비 및 지원금 사용계획",
+            required=True,
+            section_id="section-5",
+            description="인건비, 재료비, 시험인증비, 외주비 등 사업비와 지원금 사용계획을 입력하세요.",
+            placeholder="예: 인건비 50%, 클라우드/인프라 20%, 시험검증 20%, 지식재산 10%",
+        ),
+        UserInputField(
+            id="evidence",
+            label="증빙자료 및 성과근거",
+            required=False,
+            section_id="section-6",
+            description="특허, 인증, 매출, PoC, 고객 인터뷰, 투자, 수상 등 증빙 가능한 근거를 입력하세요.",
+            placeholder="예: 고객 인터뷰 12건, PoC 2건, 특허출원 1건, 이전 매출/수상 이력",
+            value=company_profile.strengths if company_profile else "",
+        ),
+    ]
+
+    existing_ids = {field.id for field in fields}
+    for section in sorted(analysis.document_template, key=lambda item: item.order):
+        field_id = f"section_input_{section.id}"
+        if field_id in existing_ids:
+            continue
+        fields.append(
+            UserInputField(
+                id=field_id,
+                label=f"{section.title} 추가 반영 내용",
+                required=False,
+                section_id=section.id,
+                description=section.hint,
+                placeholder=f"{section.title} 초안에 추가로 반영할 기업별 사실이 있으면 적어 주세요.",
+            )
+        )
+        existing_ids.add(field_id)
+
+    for question in analysis.missing_questions[:8]:
+        if _question_covered_by_government_rnd_inputs(question.question):
+            continue
+        field_id = f"missing_{question.id}"
+        if field_id in existing_ids:
+            continue
+        fields.append(
+            UserInputField(
+                id=field_id,
+                label=question.question,
+                required=False,
+                section_id=question.required_for if question.required_for.startswith("section-") else None,
+                description=question.reason,
+                placeholder="공고 근거 또는 사용자 확인이 필요한 내용을 입력해 주세요.",
+            )
+        )
+        existing_ids.add(field_id)
+    return fields
+
+
 # Korean text recovery overrides.
 # The original functions above are kept for the HWPX utility code around them,
 # but these definitions are intentionally last so imports use clean MVP copy.
 def create_input_fields(analysis: AnalysisResult, company_profile: CompanyProfile | None = None) -> list[UserInputField]:
+    if analysis.doc_type == "government_rnd":
+        return _government_rnd_input_fields(analysis, company_profile)
+
     fields: list[UserInputField] = [
         UserInputField(
             id="applicant_name",
@@ -1532,7 +1782,18 @@ def confirm_workflow(workflow: WorkflowSession, confirmed_items: list[str] | Non
     now = utc_now_iso()
     workflow.status = "confirmed"
     workflow.confirmed_at = now
-    workflow.confirmed_items = []
+    confirmed: list[str] = []
+    for item in confirmed_items or []:
+        cleaned = str(item).strip()
+        if cleaned and cleaned not in confirmed:
+            confirmed.append(cleaned)
+    if not confirmed:
+        for draft in workflow.draft_sections:
+            for item in draft.confirmation_required or []:
+                cleaned = str(item).strip()
+                if cleaned and cleaned not in confirmed:
+                    confirmed.append(cleaned)
+    workflow.confirmed_items = confirmed
     workflow.updated_at = now
     for draft in workflow.draft_sections:
         if draft.content_markdown:

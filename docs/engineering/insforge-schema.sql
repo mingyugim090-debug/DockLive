@@ -35,6 +35,9 @@ create table if not exists public.workflow_sessions (
   id text primary key,
   analysis_id text references public.analysis_results(id) on delete cascade,
   status text not null,
+  -- MVP stores user_inputs, draft_sections, confirmed_items, and final_document
+  -- together in the workflow payload. Split draft_sections into a separate table
+  -- only after collaborative editing or per-section audit history is required.
   payload jsonb not null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

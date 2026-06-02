@@ -80,6 +80,35 @@ ANALYSIS_RESPONSE_SCHEMA = {
         "submission_method": {"type": "string"},
         "evaluation_criteria": {"type": "array", "items": {"type": "string"}},
         "benefits": {"type": "array", "items": {"type": "string"}},
+        "support_programs": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "parent_program": {"type": "string"},
+                    "sub_program": {"type": "string"},
+                    "support_scale": {"type": "string"},
+                    "development_period": {"type": "string"},
+                    "support_limit": {"type": "string"},
+                    "support_ratio": {"type": "string"},
+                    "schedule": {"type": "string"},
+                    "notes": {"type": "string"},
+                    "source_evidence_ids": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": [
+                    "parent_program",
+                    "sub_program",
+                    "support_scale",
+                    "development_period",
+                    "support_limit",
+                    "support_ratio",
+                    "schedule",
+                    "notes",
+                    "source_evidence_ids",
+                ],
+            },
+        },
         "cautions": {"type": "array", "items": {"type": "string"}},
         "uncertain_fields": {"type": "array", "items": {"type": "string"}},
         "evidence_quotes": {"type": "array", "items": {"type": "string"}},
@@ -125,6 +154,7 @@ ANALYSIS_RESPONSE_SCHEMA = {
         "submission_method",
         "evaluation_criteria",
         "benefits",
+        "support_programs",
         "cautions",
         "uncertain_fields",
         "evidence_quotes",
@@ -188,6 +218,19 @@ ANALYSIS_PROMPT = """다음 공고문을 분석해 JSON으로만 응답하세요
   "submission_method": "제출 방법",
   "evaluation_criteria": ["평가 기준"],
   "benefits": ["상금, 지원금, 멘토링 등 혜택"],
+  "support_programs": [
+    {{
+      "parent_program": "상위 사업명",
+      "sub_program": "내역사업명",
+      "support_scale": "지원 규모",
+      "development_period": "개발 기간",
+      "support_limit": "지원 한도",
+      "support_ratio": "지원 비율",
+      "schedule": "세부사업별 공고/접수/선정 일정",
+      "notes": "원문 근거가 있는 확인 필요 항목",
+      "source_evidence_ids": ["support_program_table"]
+    }}
+  ],
   "cautions": ["주의사항, 결격 사유, 제출 제한"],
   "uncertain_fields": ["문서에서 불명확하거나 확인이 필요한 항목"],
   "evidence_quotes": ["SOURCE_TEXT에 실제 존재하는 원문 인용"],
@@ -205,6 +248,7 @@ ANALYSIS_PROMPT = """다음 공고문을 분석해 JSON으로만 응답하세요
 - 제출 마감, 신청 기한, 접수 마감은 is_deadline=true로 표시하세요.
 - checklist에는 공고문에 명시된 제출 서류만 포함하세요.
 - document_sections는 실제 작성 양식 항목이 있으면 그대로 추출하고, 없으면 빈 배열([])로 두세요. doc_type에 맞춰 섹션을 제안하지 마세요.
+- IRIS/정부 R&D 통합공고에 지원사업 현황표가 있으면 support_programs에 세부사업별로 분리하세요. 월 단위 추진일정을 하나의 확정 제출 마감일로 만들지 마세요.
 - 제목, 기관명, 자격, 제출 방법, 지원금액처럼 중요한 값은 근거가 없으면 "미명시"로 처리하고 uncertain_fields에 남기세요.
 - 모든 source_evidence.quote와 evidence_quotes 항목은 아래 SOURCE_TEXT에 실제로 존재하는 원문 일부여야 합니다.
 - 원문 근거를 찾지 못한 항목은 목록에서 제외하세요.
@@ -249,6 +293,7 @@ _FIELD_ALIASES = {
     "submission_method": {"submission_method", "submission", "apply", "접수", "제출방법"},
     "evaluation_criteria": {"evaluation_criteria", "criteria", "평가", "심사"},
     "benefits": {"benefits", "support", "prize", "지원금", "혜택"},
+    "support_programs": {"support_programs", "support_program_table", "program", "sub_program", "지원사업", "세부사업", "내역사업"},
     "cautions": {"cautions", "restrictions", "notice", "유의", "주의", "제한"},
 }
 
@@ -394,6 +439,7 @@ def _validate_result(data: dict, source_text: str = "") -> dict:
         "eligibility",
         "evaluation_criteria",
         "benefits",
+        "support_programs",
         "cautions",
         "uncertain_fields",
         "evidence_quotes",
@@ -424,6 +470,7 @@ def _validate_result(data: dict, source_text: str = "") -> dict:
         "eligibility",
         "evaluation_criteria",
         "benefits",
+        "support_programs",
         "cautions",
     ):
         _filter_unsupported_list(data, key, source_text, evidence)
