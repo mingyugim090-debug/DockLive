@@ -129,7 +129,7 @@ class AgentMvpContractTests(unittest.TestCase):
     def test_fixture_metadata_is_complete(self):
         fixture_dir = ROOT / "docs" / "evaluation" / "fixtures"
         fixtures = sorted(fixture_dir.glob("*.json"))
-        self.assertEqual(len(fixtures), 6)
+        self.assertEqual(len(fixtures), 7)
 
         for path in fixtures:
             data = json.loads(path.read_text(encoding="utf-8"))
@@ -241,6 +241,118 @@ class AgentMvpContractTests(unittest.TestCase):
         self.assertIn("예산/지원금 사용계획", draft_text)
         self.assertIn("평가기준", draft_text)
         self.assertTrue(any(draft.confirmation_required for draft in workflow.draft_sections))
+
+    def test_bio_medical_government_rnd_fixture_contracts_university_researcher_drafts(self):
+        if AnalysisResult is None:
+            self.skipTest("pydantic is not installed in this Python environment")
+
+        fixture_path = ROOT / "docs" / "evaluation" / "fixtures" / "iris-bio-medical-rnd-2026.json"
+        fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+        expected = fixture["expected"]
+        raw = {
+            "doc_type": expected["doc_type"],
+            "applicant_kind": expected["applicant_kind"],
+            "title": expected["title_contains"],
+            "organization": expected["organization"],
+            "summary": fixture["announcement_text"][:300],
+            "timeline": [],
+            "checklist": [
+                {
+                    "label": label,
+                    "category": "required",
+                    "description": "University/researcher R&D submission document expected by fixture.",
+                    "file_format": "IRIS upload or notice-specified format",
+                }
+                for label in expected["required_documents"]
+            ],
+            "document_sections": expected["document_sections"],
+            "eligibility": [
+                "고등교육법 제2조에 따른 학교(대학)",
+                "국가연구개발혁신법에서 정하는 기관 및 단체에 소속된 연구자",
+            ],
+            "submission_method": "범부처통합연구지원시스템(IRIS)에 연구책임자가 로그인하여 온라인 입력정보 작성 및 연구계획서 탑재 후 주관연구기관 확인·승인",
+            "evaluation_criteria": expected["evaluation_criteria"],
+            "benefits": expected["benefits_contains"],
+            "support_programs": expected["support_programs"],
+            "cautions": ["RFP 내 명시된 공동, 위탁 관련 연구개발과제 구성 형식 미준수 시 평가 제외"],
+            "uncertain_fields": expected["uncertain_fields"],
+            "source_evidence": expected["source_evidence"],
+            "missing_questions": expected["missing_questions"],
+        }
+
+        result = build_analysis_result(raw, source_type="hwpx", source_name=fixture["name"])
+
+        self.assertEqual(result.doc_type, "government_rnd")
+        self.assertEqual(getattr(result, "applicant_kind", None), "university_researcher")
+        self.assertEqual(result.timeline, [])
+        self.assertIn("과학기술정보통신부", result.organization)
+        self.assertEqual(len(result.support_programs), 1)
+        program = result.support_programs[0]
+        self.assertEqual(getattr(program, "rfp_id", None), "2026-차세대바이오-04-지정공모-01")
+        self.assertEqual(getattr(program, "research_topic", None), "민간 데이터 공유·활용 및 K-BDS 연계 지원")
+        self.assertEqual(getattr(program, "budget", None), "당해 연구비 3.675억원")
+        self.assertEqual(getattr(program, "project_count", None), "2개 내외")
+        evidence_fields = {item.field for item in result.source_evidence}
+        self.assertTrue(set(expected["must_have_source_evidence"]).issubset(evidence_fields))
+        section_titles = " | ".join(section.title for section in result.document_template)
+        for title in expected["must_have_sections"]:
+            self.assertIn(title, section_titles)
+        question_text = " | ".join(question.question for question in result.missing_questions)
+        for term in expected["must_have_missing_questions"]:
+            self.assertIn(term, question_text)
+
+        workflow = create_workflow_session(result)
+        field_by_id = {field.id: field for field in workflow.user_inputs}
+        for field_id in expected["required_input_field_ids"]:
+            self.assertIn(field_id, field_by_id)
+            self.assertTrue(field_by_id[field_id].required)
+        for field_id in expected["optional_input_field_ids"]:
+            self.assertIn(field_id, field_by_id)
+            self.assertFalse(field_by_id[field_id].required)
+        duplicate_question_labels = [
+            field.label
+            for field in workflow.user_inputs
+            if field.id.startswith("missing_")
+            and any(term in field.label for term in expected["covered_missing_question_terms"])
+        ]
+        self.assertEqual(duplicate_question_labels, [])
+
+        updates = {field.id: f"{field.label}: fixture researcher input" for field in workflow.user_inputs if field.required}
+        updates["applicant_name"] = "서울과학기술대학교 스마트ICT융합공학과 연구실"
+        updates["principal_investigator"] = "연구책임자: 확인 필요, 소속: 스마트ICT융합공학과"
+        updates["project_summary"] = "민간 바이오 데이터 공유·활용을 위한 시각지능 기반 K-BDS 연계 연구"
+        updates["research_topic_alignment"] = "RFP의 민간 데이터 공유·활용 및 K-BDS 연계 지원 조건에 맞춰 데이터 표준화와 활용 검증을 수행"
+        updates["technical_summary"] = "멀티모달 데이터 처리, 시각지능 분석, 연구데이터 메타데이터 정합성 검증"
+        updates["development_goal"] = "30개월 동안 데이터 연계 프로토타입, 공유 데이터셋, 활용 검증 지표를 도출"
+        updates["methodology_plan"] = "요구사항 분석, 데이터 스키마 설계, K-BDS 연계 모듈 구현, 병원/영리기관 데이터 공유 검증"
+        updates["research_team_plan"] = "주관연구개발기관 연구책임자, 참여연구원, 공동연구개발기관 역할을 분담"
+        updates["partner_institutions"] = "데이터 공유 참여 기관은 사용자 확인 필요"
+        updates["data_management_plan"] = "DMP에 데이터 수집, 비식별화, 저장, K-BDS 등록, 접근권한 관리 계획을 포함"
+        updates["budget_plan"] = "인건비, 연구활동비, 데이터 인프라, 검증비를 공고 연구비 규모 안에서 배분"
+        updates["expected_outcomes"] = "원천기술 확보, 데이터 공유 기반 구축, 논문·특허·기술이전 후보 도출"
+        workflow = update_inputs(workflow, updates)
+        workflow = generate_drafts(workflow)
+        draft_text = "\n\n".join(draft.content_markdown for draft in workflow.draft_sections)
+        draft_by_title = {draft.title: draft for draft in workflow.draft_sections}
+
+        self.assertEqual(workflow.status, "reviewing")
+        for title in expected["section_draft_titles"]:
+            self.assertIn(title, draft_by_title)
+            self.assertIn("|", draft_by_title[title].content_markdown)
+        for expectation in expected["section_confirmation_terms"]:
+            draft = draft_by_title[expectation["title"]]
+            self.assertIn(expectation["must_include"], " | ".join(draft.confirmation_required))
+        confirmation_signatures = {
+            tuple(draft.confirmation_required)
+            for draft in workflow.draft_sections
+            if draft.confirmation_required
+        }
+        self.assertGreater(len(confirmation_signatures), 1)
+        for term in expected["draft_must_contain"]:
+            self.assertIn(term, draft_text)
+        self.assertIn("서울과학기술대학교 스마트ICT융합공학과 연구실", draft_text)
+        self.assertIn("DMP에 데이터 수집, 비식별화, 저장, K-BDS 등록", draft_text)
+        self.assertIn("인건비, 연구활동비, 데이터 인프라, 검증비", draft_text)
 
     def test_hwpx_text_extraction_uses_zip_xml_fallback_when_python_hwpx_is_missing(self):
         if extract_text_from_hwpx is None:

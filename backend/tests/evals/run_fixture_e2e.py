@@ -121,6 +121,7 @@ def deterministic_raw_analysis(fixture: dict[str, Any]) -> dict[str, Any]:
         ]
     raw = {
         "doc_type": expected.get("doc_type", "competition"),
+        "applicant_kind": expected.get("applicant_kind", "unspecified"),
         "title": title,
         "organization": expected.get("organization", ""),
         "summary": evidence_text[:180],
@@ -152,6 +153,14 @@ def score_analysis(result: AnalysisResult, fixture: dict[str, Any]) -> dict[str,
         checks.append({"name": name, "passed": bool(passed), "detail": detail})
 
     add("doc_type", result.doc_type == expected.get("doc_type"), f"{result.doc_type} != {expected.get('doc_type')}")
+
+    applicant_kind = expected.get("applicant_kind")
+    if applicant_kind:
+        add(
+            "applicant_kind",
+            getattr(result, "applicant_kind", None) == applicant_kind,
+            str(getattr(result, "applicant_kind", None)),
+        )
 
     title_contains = expected.get("title_contains")
     if title_contains:
@@ -203,6 +212,13 @@ def score_analysis(result: AnalysisResult, fixture: dict[str, Any]) -> dict[str,
             for value in [
                 program.parent_program,
                 program.sub_program,
+                getattr(program, "rfp_id", "") or "",
+                getattr(program, "research_topic", "") or "",
+                getattr(program, "budget", "") or "",
+                getattr(program, "project_count", "") or "",
+                getattr(program, "task_type", "") or "",
+                getattr(program, "rfp_type_code", "") or "",
+                getattr(program, "security_level", "") or "",
                 program.support_scale or "",
                 program.development_period or "",
                 program.support_limit or "",
@@ -311,7 +327,7 @@ def score_input_fields(report: dict[str, Any], fixture: dict[str, Any], workflow
             for field in workflow.user_inputs
             if field.id.startswith("missing_") and any(term in field.label for term in covered_terms)
         ]
-        add("no_duplicate_company_missing_questions", not duplicate_labels, " | ".join(duplicate_labels))
+        add("no_duplicate_applicant_missing_questions", not duplicate_labels, " | ".join(duplicate_labels))
 
     report["input_checks"] = checks
     if checks and not all(item["passed"] for item in checks):

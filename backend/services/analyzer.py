@@ -208,6 +208,13 @@ def _support_programs(value: Any) -> list[SupportProgram]:
         parent_program = text("parent_program", "parentProgram", "program", "parent")
         sub_program = text("sub_program", "subProgram", "name", "sub_program_name", "subProgramName")
         support_scale = text("support_scale", "supportScale", "scale")
+        rfp_id = text("rfp_id", "rfpId", "rfp", "rfp_no", "rfpNo", "rfp_management_number")
+        research_topic = text("research_topic", "researchTopic", "topic", "research_subject", "researchSubject")
+        budget = text("budget", "research_budget", "researchBudget", "grant", "amount")
+        project_count = text("project_count", "projectCount", "selected_count", "selectedCount")
+        task_type = text("task_type", "taskType", "project_type", "projectType")
+        rfp_type_code = text("rfp_type_code", "rfpTypeCode", "type_code", "typeCode")
+        security_level = text("security_level", "securityLevel", "security")
         development_period = text("development_period", "developmentPeriod", "period")
         support_limit = text("support_limit", "supportLimit", "limit")
         support_ratio = text("support_ratio", "supportRatio", "ratio")
@@ -217,6 +224,13 @@ def _support_programs(value: Any) -> list[SupportProgram]:
             [
                 parent_program,
                 sub_program,
+                rfp_id,
+                research_topic,
+                budget,
+                project_count,
+                task_type,
+                rfp_type_code,
+                security_level,
                 support_scale,
                 development_period,
                 support_limit,
@@ -226,7 +240,7 @@ def _support_programs(value: Any) -> list[SupportProgram]:
             ]
         ):
             continue
-        dedup_key = "|".join([parent_program, sub_program, support_limit, support_ratio, schedule])
+        dedup_key = "|".join([parent_program, sub_program, rfp_id, research_topic, support_limit, support_ratio, schedule])
         if dedup_key in seen:
             continue
         seen.add(dedup_key)
@@ -238,6 +252,13 @@ def _support_programs(value: Any) -> list[SupportProgram]:
                 id=text("id") or f"support-program-{index + 1}",
                 parent_program=parent_program,
                 sub_program=sub_program,
+                rfp_id=rfp_id or None,
+                research_topic=research_topic or None,
+                budget=budget or None,
+                project_count=project_count or None,
+                task_type=task_type or None,
+                rfp_type_code=rfp_type_code or None,
+                security_level=security_level or None,
                 support_scale=support_scale or None,
                 development_period=development_period or None,
                 support_limit=support_limit or None,
@@ -382,6 +403,9 @@ def build_analysis_result(raw: dict, source_type: str = "pdf", source_name: str 
     doc_type = raw.get("doc_type", "competition")
     if doc_type not in ("competition", "research", "scholarship", "startup", "government_rnd"):
         doc_type = "competition"
+    applicant_kind = raw.get("applicant_kind") or raw.get("applicantKind") or "unspecified"
+    if applicant_kind not in ("unspecified", "company", "university_researcher", "research_institute", "mixed"):
+        applicant_kind = "unspecified"
     uncertain_fields = _as_list(raw.get("uncertain_fields"))
 
     if not checklist:
@@ -415,6 +439,7 @@ def build_analysis_result(raw: dict, source_type: str = "pdf", source_name: str 
         source_name=source_name,
         summary=raw.get("summary") or "",
         doc_type=doc_type,
+        applicant_kind=applicant_kind,
         title=raw.get("title") or "미명시",
         organization=raw.get("organization") or "미명시",
         timeline=timeline,

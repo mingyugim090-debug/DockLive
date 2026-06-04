@@ -33,6 +33,10 @@ ANALYSIS_RESPONSE_SCHEMA = {
     "additionalProperties": False,
     "properties": {
         "doc_type": {"type": "string", "enum": ["competition", "research", "scholarship", "startup", "government_rnd"]},
+        "applicant_kind": {
+            "type": "string",
+            "enum": ["unspecified", "company", "university_researcher", "research_institute", "mixed"],
+        },
         "title": {"type": "string"},
         "organization": {"type": "string"},
         "summary": {"type": "string"},
@@ -88,6 +92,13 @@ ANALYSIS_RESPONSE_SCHEMA = {
                 "properties": {
                     "parent_program": {"type": "string"},
                     "sub_program": {"type": "string"},
+                    "rfp_id": {"type": "string"},
+                    "research_topic": {"type": "string"},
+                    "budget": {"type": "string"},
+                    "project_count": {"type": "string"},
+                    "task_type": {"type": "string"},
+                    "rfp_type_code": {"type": "string"},
+                    "security_level": {"type": "string"},
                     "support_scale": {"type": "string"},
                     "development_period": {"type": "string"},
                     "support_limit": {"type": "string"},
@@ -99,6 +110,13 @@ ANALYSIS_RESPONSE_SCHEMA = {
                 "required": [
                     "parent_program",
                     "sub_program",
+                    "rfp_id",
+                    "research_topic",
+                    "budget",
+                    "project_count",
+                    "task_type",
+                    "rfp_type_code",
+                    "security_level",
                     "support_scale",
                     "development_period",
                     "support_limit",
@@ -144,6 +162,7 @@ ANALYSIS_RESPONSE_SCHEMA = {
     },
     "required": [
         "doc_type",
+        "applicant_kind",
         "title",
         "organization",
         "summary",
@@ -197,6 +216,7 @@ ANALYSIS_PROMPT = """다음 공고문을 분석해 JSON으로만 응답하세요
 응답 JSON 형식:
 {{
   "doc_type": "competition | research | scholarship | startup | government_rnd",
+  "applicant_kind": "unspecified | company | university_researcher | research_institute | mixed",
   "title": "공고문 제목",
   "organization": "주관/운영 기관명",
   "summary": "핵심 내용을 2~3문장으로 요약",
@@ -222,6 +242,13 @@ ANALYSIS_PROMPT = """다음 공고문을 분석해 JSON으로만 응답하세요
     {{
       "parent_program": "상위 사업명",
       "sub_program": "내역사업명",
+      "rfp_id": "RFP 관리번호",
+      "research_topic": "연구주제명",
+      "budget": "연구비 또는 당해 지원 금액",
+      "project_count": "선정 예정 과제 수",
+      "task_type": "과제형태",
+      "rfp_type_code": "RFP 유형코드",
+      "security_level": "보안등급",
       "support_scale": "지원 규모",
       "development_period": "개발 기간",
       "support_limit": "지원 한도",
@@ -247,6 +274,7 @@ ANALYSIS_PROMPT = """다음 공고문을 분석해 JSON으로만 응답하세요
 - 날짜를 확정할 수 없으면 timeline에 넣지 말고 uncertain_fields에 적으세요.
 - 제출 마감, 신청 기한, 접수 마감은 is_deadline=true로 표시하세요.
 - checklist에는 공고문에 명시된 제출 서류만 포함하세요.
+- applicant_kind는 공고가 기업 중심이면 company, 대학 연구자/연구실 중심이면 university_researcher, 연구기관 중심이면 research_institute, 여러 유형이 함께 명시되면 mixed로 두세요.
 - document_sections는 실제 작성 양식 항목이 있으면 그대로 추출하고, 없으면 빈 배열([])로 두세요. doc_type에 맞춰 섹션을 제안하지 마세요.
 - IRIS/정부 R&D 통합공고에 지원사업 현황표가 있으면 support_programs에 세부사업별로 분리하세요. 월 단위 추진일정을 하나의 확정 제출 마감일로 만들지 마세요.
 - 제목, 기관명, 자격, 제출 방법, 지원금액처럼 중요한 값은 근거가 없으면 "미명시"로 처리하고 uncertain_fields에 남기세요.
@@ -429,6 +457,9 @@ def _validate_result(data: dict, source_text: str = "") -> dict:
     valid_doc_types = {"competition", "research", "scholarship", "startup", "government_rnd"}
     if data.get("doc_type") not in valid_doc_types:
         data["doc_type"] = "competition"
+    valid_applicant_kinds = {"unspecified", "company", "university_researcher", "research_institute", "mixed"}
+    if data.get("applicant_kind") not in valid_applicant_kinds:
+        data["applicant_kind"] = "unspecified"
     data.setdefault("title", UNSPECIFIED)
     data.setdefault("organization", UNSPECIFIED)
     data.setdefault("summary", "")

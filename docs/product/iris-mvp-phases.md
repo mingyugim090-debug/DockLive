@@ -76,8 +76,27 @@ Progress:
   documents, and export metadata. Draft sections stay inside
   `workflow_sessions.payload` for the MVP.
 
+## Phase 6 - University And Researcher R&D Harness
+
+Status: done
+
+- Add a compact bio/medical R&D fixture derived from the uploaded HWPX notice
+  without committing the raw document.
+- Add `applicant_kind` so `government_rnd` analysis can distinguish company
+  drafts from university/researcher drafts.
+- Preserve RFP-specific table fields such as RFP management number, research
+  topic, research budget, selected project count, task type, RFP type code, and
+  security level.
+- Generate university/researcher input fields for lead research institution,
+  principal investigator, RFP alignment, research goals, methodology, research
+  team, partner institutions, DMP, budget, and expected outcomes.
+- Generate table-first research plan sections and section-specific
+  confirmation gates for RFP alignment, DMP, partner institutions, 3책5공, and
+  participation restrictions.
+
 ## Out Of Scope For V1 Harness
 
 - IRIS login or live crawler integration.
 - Native HWPX chart objects.
+- Inline AI editor UI; planned after the university/researcher harness is stable.
 - Community, feed, team recruiting, or social features.

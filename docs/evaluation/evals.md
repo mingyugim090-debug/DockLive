@@ -111,6 +111,31 @@ Fail if:
 - every government R&D draft section receives the same confirmation-required
   list without section-specific filtering
 
+### Fixture 7 - IRIS Bio/Medical R&D Reproposal Notice
+
+Expected extraction:
+
+- `government_rnd` document type with `applicant_kind: university_researcher`
+- ministry, title, RFP management number, research topic, research budget,
+  selected project count, task type, RFP type code, security level, and period
+- IRIS submission method with researcher input and lead-institution approval
+- required research-plan attachments including DMP and institution
+  participation confirmation
+- researcher-specific missing inputs: lead research institution, PI, RFP
+  alignment, partner institutions, DMP, budget, and outcomes
+- table-first research plan sections including RFP alignment, research goals,
+  execution system, research capability, data management, budget, outcomes, and
+  checklist
+
+Fail if:
+
+- researcher and institution approval deadlines are collapsed into one invented
+  deadline
+- partner institution, lab achievements, DMP, or budget facts are finalized
+  without user input
+- the draft uses company-only labels where the notice is university/researcher
+  oriented
+
 ## Draft Eval
 
 For each fixture:

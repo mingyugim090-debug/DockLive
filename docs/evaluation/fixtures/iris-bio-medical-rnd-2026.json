@@ -1,0 +1,299 @@
+{
+  "id": "iris_bio_medical_rnd_2026",
+  "name": "IRIS Bio Medical R&D 2026 Reproposal Notice",
+  "announcement_text": "과학기술정보통신부 공고 제2026-0658호\n2026년도 바이오·의료기술개발 사업 제4차 신규과제 재공모\n과학기술정보통신부가 추진하는 「바이오·의료기술개발 사업」의 제4차 신규과제를 아래와 같이 재공모하오니 관심 있는 연구자들의 많은 참여 바랍니다.\n\n1. 사업개요\n사업명: 바이오·의료기술개발 사업\n사업목적: 신약, 줄기세포 등 국민 생명과 건강에 직결된 바이오 및 첨단의료 분야 핵심원천기술 확보 및 실용화 지원\n사업기간/예산(정부출연금): '04년~계속 / '26년 4,429.76억원\n\n2. 지원내용\n지원 분야: 바이오·의료기술개발(세부사업) 총 2개 과제 내외\n내역사업: 바이오혁신기반조성\nRFP 관리번호: 2026-차세대바이오-04-지정공모-01\n연구주제명: 민간 데이터 공유·활용 및 K-BDS 연계 지원\n당해 연구비(억원): 3.675\n선정 예정 과제 수: 2개 내외\n과제형태: 일반연구개발\nRFP 유형코드: R1-1\n보안등급: 일반\n공동연구개발기관에 데이터 공유 참여 기관(영리기관 또는 병원) 필수\n총 연구기간: 2026.7.1.~2028.12.31.(30개월)\n\n3. 신청자격 및 신청제한\n연구개발기관의 자격: 국가연구개발혁신법 제2조 제3호 및 동법 시행령 제2조에서 정하는 기관 및 단체. 고등교육법 제2조에 따른 학교(대학)를 포함한다.\n연구책임자의 자격: 국가연구개발혁신법 제2조 제3호에서 정하는 기관 및 단체에 소속된 연구자.\n\n4. 신청방법 및 제출서류\n범부처통합연구지원시스템(IRIS, https://www.iris.go.kr)에 연구책임자가 로그인하여 온라인 입력정보 작성 및 연구계획서 등 탑재 후 주관연구기관 확인·승인.\n제출서류: 2026년도 바이오·의료기술개발사업 연구개발계획서 각 1부, 연구개발계획서 별첨 서류 각 1부.\n별첨1 [필수] 연구데이터 관리계획(DMP), 별첨2 [필수] 기관참여 확약서, 별첨3 [필수] 신청 자격의 적정성 확인서, 별첨4 [필수] 개인정보·과세정보 제공·활용 동의서, 연구윤리 준수서약서 등.\n연구개발계획서 분량 제한: 연 5억원 미만은 주관연구개발기관 60쪽 이내, 공동연구개발기관 15쪽 이내.\n\n5. 신청기간 및 신청 시 유의사항\n공고 기간: 2026. 6. 1.(월) ~ 2026. 6. 10.(수) 18:00\n연구책임자 신청 기간: 2026. 6. 1.(월) ~ 2026. 6. 9.(화) 18:00\n주관연구기관 검토·승인기간: ~ 2026. 6. 10.(수) 18:00\n연구책임자 신청 기간과 연구수행기관 검토·승인 기간 내에 각각 신청 및 승인이 완료되지 않은 과제에 대한 구제는 절대 불가.\nRFP 내 명시된 공동, 위탁 관련 연구개발과제 구성 형식을 반드시 준수하여야 하며, 미준수 시 평가 제외.\n\n6. 선정평가\n평가항목 및 배점: 연구계획 35점, 연구역량 25점, 성과활용 40점. 연구계획은 창의성 및 혁신성 20점, 연구계획의 타당성 15점. 연구역량은 연구책임자 및 공동연구개발기관 책임자의 연구경력 및 연구업적 25점. 성과활용은 원천기술 확보가능성 및 기대효과 20점, 성과창출전략의 적절성 20점.\n\n8. 향후일정(안)\n2026. 6. 1.(월) ~ 6. 10.(수) 공고 기간, 2026. 6. 1.(월) ~ 6. 9.(화) 연구개발계획서 접수, ~ 6. 10.(수) 주관연구기관 검토·승인기간, 2026. 6월 선정평가 실시, 2026. 7월 연구개시.",
+  "expected": {
+    "doc_type": "government_rnd",
+    "applicant_kind": "university_researcher",
+    "title_contains": "2026년도 바이오·의료기술개발 사업 제4차 신규과제 재공모",
+    "organization": "과학기술정보통신부",
+    "required_documents": [
+      "연구개발계획서",
+      "연구데이터 관리계획(DMP)",
+      "기관참여 확약서",
+      "신청 자격의 적정성 확인서",
+      "개인정보·과세정보 제공·활용 동의서"
+    ],
+    "uncertain_fields": [
+      "연구실별 연구책임자 및 참여연구자 정보",
+      "RFP 적합 연구주제 및 차별성 근거",
+      "공동연구개발기관 데이터 공유 참여 기관",
+      "연구데이터 관리계획(DMP)",
+      "연구비 세부 사용계획",
+      "3책5공 및 참여제한 해당 여부"
+    ],
+    "benefits_contains": [
+      "당해 연구비 3.675억원",
+      "총 연구기간 30개월",
+      "선정 예정 과제 수 2개 내외"
+    ],
+    "evaluation_criteria": [
+      "연구계획 35점",
+      "연구역량 25점",
+      "성과활용 40점",
+      "연구목표의 명확성",
+      "연구책임자의 연구경력 및 연구업적",
+      "성과창출전략의 적절성"
+    ],
+    "must_have_sections": [
+      "사업개요",
+      "RFP 적합",
+      "연구개발 목표",
+      "연구개발 내용 및 추진체계",
+      "연구역량 및 연구수행 기반",
+      "데이터 관리 및 공동연구 체계",
+      "연구개발비 사용계획",
+      "성과활용 및 기대효과",
+      "제출 체크리스트"
+    ],
+    "must_have_missing_questions": [
+      "주관연구개발기관",
+      "연구책임자",
+      "연구주제",
+      "RFP 적합",
+      "공동연구개발기관",
+      "DMP",
+      "연구비"
+    ],
+    "must_have_source_evidence": [
+      "title",
+      "organization",
+      "rfp_summary_table",
+      "submission_method",
+      "required_documents",
+      "application_period",
+      "evaluation_criteria"
+    ],
+    "source_evidence": [
+      {
+        "field": "title",
+        "quote": "2026년도 바이오·의료기술개발 사업 제4차 신규과제 재공모",
+        "note": "fixture source",
+        "confidence": 0.98
+      },
+      {
+        "field": "organization",
+        "quote": "과학기술정보통신부 공고 제2026-0658호",
+        "note": "fixture source",
+        "confidence": 0.95
+      },
+      {
+        "field": "rfp_summary_table",
+        "quote": "RFP 관리번호: 2026-차세대바이오-04-지정공모-01",
+        "note": "fixture source",
+        "confidence": 0.95
+      },
+      {
+        "field": "submission_method",
+        "quote": "범부처통합연구지원시스템(IRIS, https://www.iris.go.kr)에 연구책임자가 로그인하여 온라인 입력정보 작성",
+        "note": "fixture source",
+        "confidence": 0.95
+      },
+      {
+        "field": "required_documents",
+        "quote": "별첨1 [필수] 연구데이터 관리계획(DMP)",
+        "note": "fixture source",
+        "confidence": 0.95
+      },
+      {
+        "field": "application_period",
+        "quote": "연구책임자 신청 기간: 2026. 6. 1.(월) ~ 2026. 6. 9.(화) 18:00",
+        "note": "fixture source",
+        "confidence": 0.95
+      },
+      {
+        "field": "evaluation_criteria",
+        "quote": "평가항목 및 배점: 연구계획 35점, 연구역량 25점, 성과활용 40점",
+        "note": "fixture source",
+        "confidence": 0.95
+      }
+    ],
+    "document_sections": [
+      {
+        "title": "사업개요",
+        "hint": "공고 사업명, RFP, 연구비, 연구기간, 신청 주체를 표로 정리합니다.",
+        "order": 1
+      },
+      {
+        "title": "RFP 적합성",
+        "hint": "연구주제명과 연구실 제안 주제의 부합성, 차별성, 데이터 공유 조건을 정리합니다.",
+        "order": 2
+      },
+      {
+        "title": "연구개발 목표",
+        "hint": "정량 목표, 연구가설, 성과지표, 검증 방법을 작성합니다.",
+        "order": 3
+      },
+      {
+        "title": "연구개발 내용 및 추진체계",
+        "hint": "연차별 연구내용, 방법론, 주관·공동·위탁 역할을 표로 구성합니다.",
+        "order": 4
+      },
+      {
+        "title": "연구역량 및 연구수행 기반",
+        "hint": "연구책임자, 참여연구자, 장비, 선행연구, 논문·특허 등 근거를 작성합니다.",
+        "order": 5
+      },
+      {
+        "title": "데이터 관리 및 공동연구 체계",
+        "hint": "DMP, K-BDS 연계, 데이터 공유 참여 기관, 보안·윤리 계획을 작성합니다.",
+        "order": 6
+      },
+      {
+        "title": "연구개발비 사용계획",
+        "hint": "정부출연금 규모와 연구실 예산 배분 계획을 분리해 표로 작성합니다.",
+        "order": 7
+      },
+      {
+        "title": "성과활용 및 기대효과",
+        "hint": "원천기술 확보, 논문·특허, 기술이전, 사회·산업 파급효과를 작성합니다.",
+        "order": 8
+      },
+      {
+        "title": "제출 체크리스트",
+        "hint": "IRIS 입력, 주관연구기관 승인, 필수 별첨, 확인 필요 항목을 정리합니다.",
+        "order": 9
+      }
+    ],
+    "missing_questions": [
+      {
+        "id": "q-lead-institution",
+        "question": "주관연구개발기관과 연구실명은 무엇인가요?",
+        "reason": "연구개발계획서의 신청 주체를 확정해야 합니다.",
+        "required_for": "section-1"
+      },
+      {
+        "id": "q-principal-investigator",
+        "question": "연구책임자 성명, 소속, 주요 연구실적은 무엇인가요?",
+        "reason": "연구역량 평가 항목에 필요합니다.",
+        "required_for": "section-5"
+      },
+      {
+        "id": "q-research-topic",
+        "question": "RFP에 맞춰 제안할 연구주제와 핵심 가설은 무엇인가요?",
+        "reason": "RFP 적합성과 연구개발 목표 작성에 필요합니다.",
+        "required_for": "section-2"
+      },
+      {
+        "id": "q-partner-institution",
+        "question": "데이터 공유 참여 기관(영리기관 또는 병원) 등 공동연구개발기관이 있나요?",
+        "reason": "공고에서 공동연구개발기관 조건을 명시했습니다.",
+        "required_for": "section-6"
+      },
+      {
+        "id": "q-dmp",
+        "question": "연구데이터 관리계획(DMP)과 K-BDS 연계 계획은 무엇인가요?",
+        "reason": "DMP는 필수 별첨 서류입니다.",
+        "required_for": "section-6"
+      },
+      {
+        "id": "q-budget",
+        "question": "연구비 세부 사용계획은 어떻게 구성되나요?",
+        "reason": "연구개발비 사용계획 표에 필요합니다.",
+        "required_for": "section-7"
+      }
+    ],
+    "required_input_field_ids": [
+      "applicant_name",
+      "principal_investigator",
+      "project_summary",
+      "research_topic_alignment",
+      "technical_summary",
+      "development_goal",
+      "methodology_plan",
+      "research_team_plan",
+      "partner_institutions",
+      "data_management_plan",
+      "budget_plan",
+      "expected_outcomes"
+    ],
+    "optional_input_field_ids": [
+      "evidence"
+    ],
+    "covered_missing_question_terms": [
+      "주관연구개발기관",
+      "연구책임자",
+      "연구주제",
+      "공동연구개발기관",
+      "DMP",
+      "연구비"
+    ],
+    "section_draft_titles": [
+      "사업개요",
+      "RFP 적합성",
+      "연구개발 목표",
+      "연구개발 내용 및 추진체계",
+      "연구역량 및 연구수행 기반",
+      "데이터 관리 및 공동연구 체계",
+      "연구개발비 사용계획",
+      "성과활용 및 기대효과",
+      "제출 체크리스트"
+    ],
+    "section_confirmation_terms": [
+      {
+        "title": "RFP 적합성",
+        "must_include": "공동연구개발기관 데이터 공유 참여 기관"
+      },
+      {
+        "title": "데이터 관리 및 공동연구 체계",
+        "must_include": "연구데이터 관리계획(DMP)"
+      },
+      {
+        "title": "제출 체크리스트",
+        "must_include": "3책5공 및 참여제한 해당 여부"
+      }
+    ],
+    "draft_must_contain": [
+      "| 항목 | 내용 |",
+      "RFP 요약표",
+      "2026-차세대바이오-04-지정공모-01",
+      "민간 데이터 공유·활용 및 K-BDS 연계 지원",
+      "연구책임자",
+      "공동연구개발기관",
+      "연구데이터 관리계획(DMP)",
+      "연구개발비 사용계획",
+      "평가기준표",
+      "제출 체크리스트"
+    ],
+    "hwpx_text_must_contain": [
+      "2026년도 바이오·의료기술개발 사업 제4차 신규과제 재공모",
+      "RFP 적합성",
+      "연구데이터 관리계획(DMP)"
+    ],
+    "html_text_must_contain": [
+      "2026년도 바이오·의료기술개발 사업 제4차 신규과제 재공모",
+      "RFP 적합성",
+      "연구데이터 관리계획(DMP)"
+    ],
+    "table_section_terms": [
+      "RFP 요약표",
+      "평가기준표",
+      "제출 체크리스트"
+    ],
+    "support_programs": [
+      {
+        "parent_program": "바이오·의료기술개발 사업",
+        "sub_program": "바이오혁신기반조성",
+        "rfp_id": "2026-차세대바이오-04-지정공모-01",
+        "research_topic": "민간 데이터 공유·활용 및 K-BDS 연계 지원",
+        "budget": "당해 연구비 3.675억원",
+        "project_count": "2개 내외",
+        "task_type": "일반연구개발",
+        "rfp_type_code": "R1-1",
+        "security_level": "일반",
+        "development_period": "2026.7.1.~2028.12.31.(30개월)",
+        "notes": "공동연구개발기관에 데이터 공유 참여 기관(영리기관 또는 병원) 필수",
+        "source_evidence_ids": [
+          "rfp_summary_table"
+        ]
+      }
+    ]
+  },
+  "fail_if": [
+    "연구책임자 신청 기간을 기관 승인 마감일과 하나의 단일 마감일로 합치지 않는다.",
+    "데이터 공유 참여 기관 필수 조건을 사용자 입력 없이 충족된 것으로 쓰지 않는다.",
+    "연구실의 논문, 특허, 장비, 성과를 source evidence 없이 임의 생성하지 않는다.",
+    "DMP와 기관참여 확약서를 선택 서류로 낮추지 않는다."
+  ],
+  "uncertainty_rule": "Notice facts are grounded in extracted HWPX text. Research-lab facts remain missing until the user supplies them."
+}

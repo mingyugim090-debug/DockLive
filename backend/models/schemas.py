@@ -5,6 +5,13 @@ from pydantic import BaseModel, Field
 
 
 DocType = Literal["competition", "research", "scholarship", "startup", "government_rnd"]
+ApplicantKind = Literal[
+    "unspecified",
+    "company",
+    "university_researcher",
+    "research_institute",
+    "mixed",
+]
 ItemCategory = Literal["required", "optional"]
 DayStatus = Literal["safe", "warning", "danger", "passed"]
 SourceType = Literal["pdf", "url", "text", "demo", "hwpx", "hwp"]
@@ -59,6 +66,13 @@ class SupportProgram(BaseModel):
     id: str
     parent_program: str = ""
     sub_program: str = ""
+    rfp_id: Optional[str] = None
+    research_topic: Optional[str] = None
+    budget: Optional[str] = None
+    project_count: Optional[str] = None
+    task_type: Optional[str] = None
+    rfp_type_code: Optional[str] = None
+    security_level: Optional[str] = None
     support_scale: Optional[str] = None
     development_period: Optional[str] = None
     support_limit: Optional[str] = None
@@ -74,6 +88,7 @@ class AnalysisResult(BaseModel):
     source_name: Optional[str] = None
     summary: str = ""
     doc_type: DocType
+    applicant_kind: ApplicantKind = "unspecified"
     title: str
     organization: str
     timeline: list[TimelineItem]

@@ -7,9 +7,9 @@ source-grounded, and useful for future Codex or Claude Code work.
 
 - Dock Live is an Agent MVP for public notice ingestion, grounded analysis,
   section-by-section drafting, user confirmation, and editable HTML/HWPX export.
-- Current MVP emphasis is IRIS/government R&D notice analysis for company
-  submission documents and business/R&D plan drafts, not public notice
-  publication as the primary output.
+- Current MVP emphasis is IRIS/government R&D notice analysis for company,
+  university, researcher, and research-lab submission documents and R&D plan
+  drafts, not public notice publication as the primary output.
 - The target experience is Inline AI-like assisted authoring, but the first
   product priority is reliability: upload, parse, analyze, ask only missing
   questions, draft, review, export.
@@ -25,6 +25,9 @@ source-grounded, and useful for future Codex or Claude Code work.
 - HWP/HWPX reliability is a core workflow, not an optional export feature.
 - v1 R&D document visuals are table-first. Native HWPX chart objects are out of
   scope until the table-based harness is stable.
+- Government R&D analysis now carries `applicant_kind`; university/researcher
+  notices must ask for research institution, PI, RFP alignment, DMP, partner
+  institutions, budget, and outcomes instead of company-only facts.
 - API schema changes must stay synchronized across backend schemas, frontend
   types, and API consumers.
 

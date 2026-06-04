@@ -2,12 +2,13 @@ product:
   name: Dock Live
   purpose: >
     Analyze public notices and official forms, especially IRIS/government R&D
-    calls, collect only missing company/project inputs, draft submission
-    documents section by section, and export editable HTML/HWPX.
+    calls, collect only missing company, university, researcher, or research-lab
+    project inputs, draft submission documents section by section, and export
+    editable HTML/HWPX.
   priority:
     - grounded_document_ingestion
     - fact_based_analysis
-    - company_project_input_collection
+    - applicant_project_input_collection
     - government_rnd_submission_drafting
     - missing_input_collection
     - section_drafting
@@ -80,6 +81,7 @@ contracts:
   analysis_result:
     must_include:
       - doc_type
+      - applicant_kind
       - title
       - organization
       - summary
@@ -102,6 +104,7 @@ contracts:
       - inferred_support_amounts_without_source
       - invented_government_rnd_support_limits_or_ratios
       - invented_company_project_facts
+      - invented_research_lab_project_facts
   draft:
     must:
       - use_analysis_output_and_user_inputs_only

@@ -1,4 +1,5 @@
 export type DocType = 'competition' | 'research' | 'scholarship' | 'startup' | 'government_rnd';
+export type ApplicantKind = 'unspecified' | 'company' | 'university_researcher' | 'research_institute' | 'mixed';
 export type ItemCategory = 'required' | 'optional';
 export type DayStatus = 'safe' | 'warning' | 'danger' | 'passed';
 export type SourceType = 'pdf' | 'url' | 'text' | 'demo' | 'hwpx' | 'hwp';
@@ -57,6 +58,13 @@ export interface SupportProgram {
   id: string;
   parent_program: string;
   sub_program: string;
+  rfp_id?: string | null;
+  research_topic?: string | null;
+  budget?: string | null;
+  project_count?: string | null;
+  task_type?: string | null;
+  rfp_type_code?: string | null;
+  security_level?: string | null;
   support_scale?: string | null;
   development_period?: string | null;
   support_limit?: string | null;
@@ -72,6 +80,7 @@ export interface AnalysisResult {
   source_name?: string | null;
   summary: string;
   doc_type: DocType;
+  applicant_kind: ApplicantKind;
   title: string;
   organization: string;
   timeline: TimelineItem[];
