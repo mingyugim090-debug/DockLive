@@ -608,12 +608,15 @@ def generate_drafts(workflow: WorkflowSession) -> WorkflowSession:
         for draft in workflow.draft_sections:
             item = by_section.get(draft.section_id)
             if not item:
-                draft.status = "needs_input"
-                draft.needs_confirmation = ["이 섹션 초안을 생성하지 못했습니다. 다시 시도해 주세요."]
-                draft.confirmation_required = draft.needs_confirmation
+                _mock_draft_section(workflow, draft)
+                draft.revision_notes.insert(0, "AI 응답에 해당 섹션이 없어 로컬 보강 초안으로 작성했습니다.")
                 continue
             confirmations: list[str] = []
             draft.content_markdown = str(item.get("content_markdown", "")).strip()
+            if not draft.content_markdown:
+                _mock_draft_section(workflow, draft)
+                draft.revision_notes.insert(0, "AI 응답 본문이 비어 있어 로컬 보강 초안으로 작성했습니다.")
+                continue
             draft.purpose = str(item.get("purpose", "")).strip()
             draft.related_criteria = [str(v).strip() for v in item.get("related_criteria", []) if str(v).strip()]
             draft.source_evidence_ids = [str(v).strip() for v in item.get("source_evidence_ids", []) if str(v).strip()]

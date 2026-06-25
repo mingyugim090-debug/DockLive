@@ -627,6 +627,26 @@ class AgentMvpContractTests(unittest.TestCase):
         self.assertIn("제출 초안", workflow.final_document.title)
         self.assertTrue(all(draft.content_markdown for draft in workflow.draft_sections))
 
+    def test_ai_draft_generation_falls_back_when_section_response_is_missing(self):
+        if AnalysisResult is None:
+            self.skipTest("pydantic is not installed in this Python environment")
+        result = build_analysis_result(get_mock_result(), source_type="text", source_name="empty-ai-sections")
+        result.document_template = []
+        workflow = create_workflow_session(result)
+        updates = {field.id: f"{field.label} 테스트 입력" for field in workflow.user_inputs if field.required}
+
+        with (
+            patch("services.drafting_service.should_use_mock_ai", return_value=False),
+            patch("services.drafting_service.call_json", return_value={"draft_sections": []}),
+        ):
+            workflow = generate_drafts(update_inputs(workflow, updates))
+
+        self.assertEqual(workflow.status, "reviewing")
+        self.assertTrue(all(draft.content_markdown for draft in workflow.draft_sections))
+        self.assertTrue(
+            all(any("로컬 보강 초안" in note for note in draft.revision_notes) for draft in workflow.draft_sections)
+        )
+
     def test_missing_workflow_recovers_from_saved_analysis(self):
         if AnalysisResult is None or storage is None or load_or_recover_workflow is None:
             self.skipTest("backend dependencies are not installed in this Python environment")
