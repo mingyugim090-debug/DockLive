@@ -80,14 +80,19 @@ async function readError(res: Response, fallback: string): Promise<Error> {
   return new Error(message);
 }
 
-async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = 45000): Promise<Response> {
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  timeoutMs = 45000,
+  timeoutMessage = 'AI 초안 생성 응답이 지연되고 있습니다. 현재 초안을 기준으로 자동 보강을 계속합니다.',
+): Promise<Response> {
   const controller = new AbortController();
   const timeout = globalThis.setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(input, { ...init, signal: controller.signal });
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new Error('AI 초안 생성 응답이 지연되고 있습니다. 현재 초안을 기준으로 자동 보강을 계속합니다.');
+      throw new Error(timeoutMessage);
     }
     throw error;
   } finally {
@@ -321,7 +326,12 @@ export async function createHwpxFormSession(file: File): Promise<HwpxFormSession
 }
 
 export async function getHwpxFormSession(id: string): Promise<HwpxFormSessionResponse> {
-  const res = await fetch(`${API_URL}/api/hwpx/sessions/${id}`);
+  const res = await fetchWithTimeout(
+    `${API_URL}/api/hwpx/sessions/${id}`,
+    {},
+    10000,
+    '이전 HWPX 세션 응답이 지연되어 새 업로드로 시작합니다.',
+  );
   if (!res.ok) throw await readError(res, `HWPX 세션 조회 실패: ${res.status}`);
   return res.json();
 }

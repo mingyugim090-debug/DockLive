@@ -160,6 +160,53 @@ def create_input_fields(analysis: AnalysisResult, company_profile: CompanyProfil
     return fields
 
 
+def _fallback_draft_titles(analysis: AnalysisResult) -> list[str]:
+    """Create conservative drafting containers when a notice has no official form outline."""
+    if analysis.doc_type == "government_rnd":
+        return [
+            "사업개요",
+            "기술개발 목표",
+            "추진일정",
+            "사업화 및 활용계획",
+            "예산/지원금 계획",
+            "제출 체크리스트",
+        ]
+
+    titles = ["신청 개요", "프로젝트/아이디어 요약", "수행 역량 및 근거"]
+    if analysis.evaluation_criteria:
+        titles.append("평가 기준 대응")
+    if analysis.checklist:
+        titles.append("제출 서류 체크리스트")
+    return titles
+
+
+def _draft_sections_for_analysis(analysis: AnalysisResult) -> list[DraftSection]:
+    template_sections = sorted(analysis.document_template, key=lambda item: item.order)
+    if template_sections:
+        return [
+            DraftSection(id=f"draft-{section.id}", section_id=section.id, title=section.title, status="empty")
+            for section in template_sections
+        ]
+
+    return [
+        DraftSection(
+            id=f"draft-fallback-{index}",
+            section_id=f"fallback-{index}",
+            title=title,
+            purpose="공고에 공식 작성 항목이 없을 때 사용자 입력과 공고 근거를 담는 임시 작성 섹션입니다.",
+            revision_notes=["공고 원문에서 공식 양식 항목이 확인되지 않아 임시 섹션으로 작성합니다."],
+            status="empty",
+        )
+        for index, title in enumerate(_fallback_draft_titles(analysis), start=1)
+    ]
+
+
+def _ensure_draft_sections(workflow: WorkflowSession) -> None:
+    if workflow.draft_sections:
+        return
+    workflow.draft_sections = _draft_sections_for_analysis(workflow.analysis)
+
+
 def create_workflow_session(
     analysis: AnalysisResult,
     company_profile: CompanyProfile | None = None,
@@ -173,10 +220,7 @@ def create_workflow_session(
         match_report=match_report,
         status="collecting_inputs",
         user_inputs=create_input_fields(analysis, company_profile),
-        draft_sections=[
-            DraftSection(id=f"draft-{section.id}", section_id=section.id, title=section.title, status="empty")
-            for section in sorted(analysis.document_template, key=lambda item: item.order)
-        ],
+        draft_sections=_draft_sections_for_analysis(analysis),
         created_at=now,
         updated_at=now,
     )
@@ -538,6 +582,7 @@ def _single_section_prompt(workflow: WorkflowSession, draft: DraftSection) -> st
 
 
 def generate_drafts(workflow: WorkflowSession) -> WorkflowSession:
+    _ensure_draft_sections(workflow)
     missing = missing_required_inputs(workflow)
     workflow.status = "collecting_inputs" if missing else "drafting"
 
@@ -586,6 +631,7 @@ def generate_drafts(workflow: WorkflowSession) -> WorkflowSession:
 
 def stream_draft_events(workflow: WorkflowSession) -> Iterator[dict]:
     """Yield SSE-ready draft events, using real OpenAI token streaming when available."""
+    _ensure_draft_sections(workflow)
     missing = missing_required_inputs(workflow)
     if missing or should_use_mock_ai() or provider_name() != "openai":
         workflow = generate_drafts(workflow)

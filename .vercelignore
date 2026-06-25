@@ -1,5 +1,6 @@
 backend/.tmp/
 backend/.livedock_storage/
+backend/hwpx_toolchain/.hwp2hwpx-repo/
 backend/venv/
 frontend/.next/
 frontend/node_modules/

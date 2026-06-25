@@ -608,6 +608,25 @@ class AgentMvpContractTests(unittest.TestCase):
         self.assertIsNotNone(workflow.final_document)
         self.assertNotIn("제출 전 확인 필요", workflow.final_document.content_markdown)
 
+    def test_workflow_uses_fallback_draft_sections_when_notice_has_no_template(self):
+        if AnalysisResult is None:
+            self.skipTest("pydantic is not installed in this Python environment")
+        result = build_analysis_result(get_mock_result(), source_type="text", source_name="no-template-notice")
+        result.document_template = []
+
+        workflow = create_workflow_session(result)
+        self.assertGreaterEqual(len(workflow.draft_sections), 3)
+        self.assertTrue(all(draft.section_id.startswith("fallback-") for draft in workflow.draft_sections))
+
+        updates = {field.id: f"{field.label} 테스트 입력" for field in workflow.user_inputs if field.required}
+        workflow = finalize_document(generate_drafts(update_inputs(workflow, updates)))
+
+        self.assertEqual(workflow.status, "finalized")
+        self.assertIsNotNone(workflow.final_document)
+        assert workflow.final_document is not None
+        self.assertIn("제출 초안", workflow.final_document.title)
+        self.assertTrue(all(draft.content_markdown for draft in workflow.draft_sections))
+
     def test_missing_workflow_recovers_from_saved_analysis(self):
         if AnalysisResult is None or storage is None or load_or_recover_workflow is None:
             self.skipTest("backend dependencies are not installed in this Python environment")

@@ -340,6 +340,7 @@ export function HwpxFormEditor() {
     const savedSessionId = localStorage.getItem(HWPX_SESSION_STORAGE_KEY);
     if (!savedSessionId) return;
     setBusy('restore');
+    setError(null);
     getHwpxFormSession(savedSessionId)
       .then((response) => {
         const firstRegion = sortRegions(response.data.regions)[0] ?? null;
@@ -350,6 +351,10 @@ export function HwpxFormEditor() {
       })
       .catch(() => {
         localStorage.removeItem(HWPX_SESSION_STORAGE_KEY);
+        setSession(null);
+        setSelectedId(null);
+        setPrompt('');
+        setStep('upload');
       })
       .finally(() => setBusy(null));
   }, []);
