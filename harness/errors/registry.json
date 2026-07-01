@@ -117,6 +117,70 @@
         "backend\\\\\\\\.tmp\\\\\\\\livedock_de8e46b099a8431c994f3f945f4d8ff9\\\\\\\\input.hwpx"
       ],
       "resolved_at": "2026-06-02T13:05:38+00:00"
+    },
+    {
+      "id": "ERR-20260701010717-f0f40c69",
+      "fingerprint": "f0f40c69b21b8ab10fa17854",
+      "symptom": "ModuleNotFoundError: No module named 'pydantic'",
+      "root_cause": "hwpx harness profile used the default macOS Python without backend dependencies, so pydantic was unavailable before product code executed.",
+      "fix_summary": "Re-ran the deterministic HWPX eval with the bundled Codex Python and HWPX_SKILL_DIR pointing at backend/hwpx_toolchain; validation passed.",
+      "guard_test": "HWPX_SKILL_DIR=/Users/mcmj/Desktop/LiveDock/backend/hwpx_toolchain /Users/mcmj/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 backend/tests/evals/run_fixture_e2e.py --mode deterministic --min-score 80 --include-hwpx",
+      "first_seen": "2026-07-01T01:07:17+00:00",
+      "last_seen": "2026-07-01T01:07:17+00:00",
+      "occurrences": 1,
+      "status": "resolved",
+      "last_command": "/Library/Frameworks/Python.framework/Versions/3.14/bin/python3 backend/tests/evals/run_fixture_e2e.py --mode deterministic --min-score 80 --include-hwpx",
+      "last_exit_code": 1,
+      "last_error_line": "ModuleNotFoundError: No module named 'pydantic'",
+      "last_log_path": "harness/runs/20260701-100717-hwpx/01-deterministic-fixture-e2e-hwpx.log",
+      "related_paths": [
+        "backend/tests/evals/run_fixture_e2e.py",
+        "backend/models/schemas.py"
+      ],
+      "resolved_at": "2026-07-01T01:09:20+00:00"
+    },
+    {
+      "id": "ERR-20260701065914-788ac738",
+      "fingerprint": "788ac7380b014bba6451b954",
+      "symptom": "FAILED (failures=1, skipped=2)",
+      "root_cause": "New prior-notice recall contract test reused a fixed organization_id, so prior test data left in the local file cache could produce duplicate top-ranked similar notices.",
+      "fix_summary": "Changed the recall and clause-library contract tests to generate fresh UUID organization_ids for each run.",
+      "guard_test": "/Users/mcmj/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 tools/harness/run_harness.py --profile quick",
+      "first_seen": "2026-07-01T06:59:14+00:00",
+      "last_seen": "2026-07-01T06:59:14+00:00",
+      "occurrences": 1,
+      "status": "resolved",
+      "last_command": "/Users/mcmj/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest discover -s backend/tests/contracts -p test_*.py",
+      "last_exit_code": 1,
+      "last_error_line": "FAILED (failures=1, skipped=2)",
+      "last_log_path": "harness/runs/20260701-155913-quick/03-backend-contracts.log",
+      "related_paths": [
+        "backend/tests/contracts",
+        "backend/tests/contracts/test_agency_noticeops_contracts.py"
+      ],
+      "resolved_at": "2026-07-01T06:59:38+00:00"
+    },
+    {
+      "id": "ERR-20260701070818-6c94f589",
+      "fingerprint": "6c94f589560a48976f5884d3",
+      "symptom": "core.errors.AnalysisError: OpenAI API 연결에 실패했습니다. 네트워크 상태를 확인하세요.",
+      "root_cause": "A deterministic full harness run hit a transient OpenAI embedding connection failure while Ver2 agency recall tests were being exercised.",
+      "fix_summary": "Re-ran the full harness after the Ver2 recall fixture loader cleanup; the deterministic provider path completed and all backend, agent, frontend test, and frontend build gates passed.",
+      "guard_test": "/Users/mcmj/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 tools/harness/run_harness.py --profile full",
+      "first_seen": "2026-07-01T07:08:18+00:00",
+      "last_seen": "2026-07-01T07:08:18+00:00",
+      "occurrences": 1,
+      "status": "resolved",
+      "last_command": "/Users/mcmj/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 backend/tests/evals/run_fixture_e2e.py --mode deterministic --min-score 80",
+      "last_exit_code": 1,
+      "last_error_line": "core.errors.AnalysisError: OpenAI API 연결에 실패했습니다. 네트워크 상태를 확인하세요.",
+      "last_log_path": "harness/runs/20260701-160752-full/03-deterministic-fixture-e2e.log",
+      "related_paths": [
+        "backend/tests/evals/run_fixture_e2e.py",
+        "backend/services/ai_provider.py",
+        "backend/services/prior_notice_recall.py"
+      ],
+      "resolved_at": "2026-07-01T07:08:59+00:00"
     }
   ]
 }

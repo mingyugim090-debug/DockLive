@@ -7,6 +7,12 @@ export type InputFieldType = 'text' | 'textarea' | 'number' | 'date' | 'file_not
 export type DraftStatus = 'empty' | 'needs_input' | 'drafted' | 'revised' | 'confirmed';
 export type DraftStreamEventType = 'section_start' | 'delta' | 'section_done' | 'workflow_done' | 'error';
 export type ExportJobStatus = 'pending' | 'success' | 'failed' | 'validation_failed';
+export type AgencyMemberRole = 'staff' | 'lead' | 'approver' | 'admin';
+export type AgencyNoticeStatus = 'draft' | 'under_review' | 'revision_requested' | 'approving' | 'approved' | 'published';
+export type AgencyClauseStatus = 'satisfied' | 'missing' | 'needs_confirmation';
+export type AgencyApprovalStepStatus = 'pending' | 'active' | 'approved' | 'changes_requested' | 'skipped';
+export type AgencyReferenceSourceType = 'brief' | 'guideline' | 'prior_notice' | 'template' | 'manual';
+export type AgencyClauseSource = 'org_default' | 'agency_supplied';
 export type WorkflowStatus =
   | 'analyzed'
   | 'collecting_inputs'
@@ -220,6 +226,220 @@ export interface ExportMetadata {
 export interface ExportListResponse {
   success: boolean;
   data: ExportMetadata[];
+}
+
+export interface AgencyNoticeReference {
+  id: string;
+  source_type: AgencyReferenceSourceType;
+  filename: string;
+  title: string;
+  text: string;
+  evidence_label: string;
+}
+
+export interface AgencyNoticeBrief {
+  organization_id: string;
+  author_id: string;
+  author_name: string;
+  agency_name: string;
+  title: string;
+  program_type: string;
+  program_purpose: string;
+  budget: string;
+  program_period: string;
+  eligibility_rules: string;
+  support_details: string;
+  evaluation_criteria: string;
+  submission_method: string;
+  required_documents: string[];
+  contact: string;
+  legal_basis: string;
+  privacy_policy: string;
+  fair_competition_clause: string;
+  appeal_process: string;
+  references: AgencyNoticeReference[];
+}
+
+export interface AgencySourceEvidence {
+  id: string;
+  label: string;
+  quote: string;
+  source_type: AgencyReferenceSourceType;
+  confidence: number;
+}
+
+export interface AgencySourceTrace {
+  evidence_id: string;
+  label: string;
+  quote: string;
+  source_type: AgencyReferenceSourceType;
+  field_name?: string | null;
+  reference_id?: string | null;
+  confidence: number;
+}
+
+export interface AgencyNoticeSection {
+  id: string;
+  title: string;
+  content_markdown: string;
+  order: number;
+  source_evidence_ids: string[];
+  source_traces: AgencySourceTrace[];
+  confirmation_required: string[];
+  updated_at: string;
+}
+
+export interface MandatoryClauseCheck {
+  id: string;
+  label: string;
+  status: AgencyClauseStatus;
+  note: string;
+  source_evidence_ids: string[];
+  source_traces: AgencySourceTrace[];
+  confirmation_required: string[];
+}
+
+export interface NoticeVersion {
+  id: string;
+  draft_id: string;
+  version_number: number;
+  created_by: string;
+  change_summary: string;
+  sections_snapshot: AgencyNoticeSection[];
+  mandatory_clause_checks: MandatoryClauseCheck[];
+  created_at: string;
+}
+
+export interface ApprovalStep {
+  id: string;
+  draft_id: string;
+  step_order: number;
+  title: string;
+  role: AgencyMemberRole;
+  assigned_to?: string | null;
+  status: AgencyApprovalStepStatus;
+  decided_at?: string | null;
+  decision_note: string;
+}
+
+export interface ApprovalComment {
+  id: string;
+  draft_id: string;
+  version_id: string;
+  section_id?: string | null;
+  author_id: string;
+  author_name: string;
+  body: string;
+  resolved: boolean;
+  created_at: string;
+}
+
+export interface NoticeAuditEvent {
+  id: string;
+  draft_id: string;
+  actor_id: string;
+  action: string;
+  message: string;
+  created_at: string;
+}
+
+export interface ApprovalWorkflow {
+  status: AgencyNoticeStatus;
+  current_step_order: number;
+  steps: ApprovalStep[];
+}
+
+export interface AgencyNoticeDraft {
+  id: string;
+  organization_id: string;
+  title: string;
+  status: AgencyNoticeStatus;
+  brief: AgencyNoticeBrief;
+  sections: AgencyNoticeSection[];
+  mandatory_clause_checks: MandatoryClauseCheck[];
+  source_evidence: AgencySourceEvidence[];
+  confirmation_required: string[];
+  versions: NoticeVersion[];
+  approval_workflow: ApprovalWorkflow;
+  comments: ApprovalComment[];
+  audit_events: NoticeAuditEvent[];
+  current_version_id?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgencyNoticeDraftResponse {
+  success: boolean;
+  data: AgencyNoticeDraft;
+}
+
+export interface AgencyNoticeListResponse {
+  success: boolean;
+  data: AgencyNoticeDraft[];
+}
+
+export interface ClauseLibraryEntry {
+  id: string;
+  organization_id: string;
+  clause_type: string;
+  label: string;
+  required_for_program_types: string[];
+  template_text: string;
+  source: AgencyClauseSource;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClauseLibraryListResponse {
+  success: boolean;
+  data: ClauseLibraryEntry[];
+}
+
+export interface ClauseLibraryEntryResponse {
+  success: boolean;
+  data: ClauseLibraryEntry;
+}
+
+export interface AgencyPriorNotice {
+  id: string;
+  organization_id: string;
+  title: string;
+  program_type: string;
+  budget: string;
+  budget_band: string;
+  program_period: string;
+  summary: string;
+  text: string;
+  source_filename: string;
+  source_type: AgencyReferenceSourceType;
+  source_evidence: AgencySourceEvidence[];
+  embedding: number[];
+  embedding_model: string;
+  embedding_dimension: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgencyPriorNoticeResponse {
+  success: boolean;
+  data: AgencyPriorNotice;
+}
+
+export interface AgencyPriorNoticeRecallItem {
+  id: string;
+  title: string;
+  program_type: string;
+  budget_band: string;
+  program_period: string;
+  summary: string;
+  similarity: number;
+  source_evidence: AgencySourceEvidence[];
+}
+
+export interface AgencyPriorNoticeRecallResponse {
+  success: boolean;
+  data: AgencyPriorNoticeRecallItem[];
 }
 
 export interface HwpxPlaceholderMapResponse {

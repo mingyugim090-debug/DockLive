@@ -6,6 +6,9 @@ This file captures stable preferences from the product owner.
 
 - Build Dock Live toward an Inline AI-like workflow for official document
   creation, while keeping the actual MVP focused on public notices and HWPX.
+- DockLive Ver2 should pivot toward an agency-facing NoticeOps SaaS: public
+  agency staff draft notices, verify mandatory clauses, collaborate through
+  internal approval, and export publish-ready files.
 - Recenter the MVP on IRIS/government R&D calls: users upload or paste a public
   R&D notice, provide company/project or university/research-lab facts, and
   receive a submission document, business plan, or research-development plan
@@ -14,6 +17,8 @@ This file captures stable preferences from the product owner.
   grounding, and draft preparation, then ask the user only for missing facts.
 - Keep the repository clean so future feature work is easier and safer.
 - Use harness engineering to prevent repeated mistakes.
+- The first Ver2 wow surface is the approval control room, not a marketing
+  landing page or a community/feed surface.
 
 ## Agent Collaboration Preference
 

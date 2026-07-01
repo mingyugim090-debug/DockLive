@@ -21,6 +21,16 @@ WorkflowStatus = Literal["analyzed", "collecting_inputs", "drafting", "reviewing
 DraftStreamEventType = Literal["section_start", "delta", "section_done", "workflow_done", "error"]
 ExportJobStatus = Literal["pending", "success", "failed", "validation_failed"]
 ParsedDocumentBlockType = Literal["paragraph", "table", "checkboxGroup", "heading", "spacer", "signature"]
+AgencyMemberRole = Literal["staff", "lead", "approver", "admin"]
+AgencyNoticeStatus = Literal["draft", "under_review", "revision_requested", "approving", "approved", "published"]
+AgencyClauseStatus = Literal["satisfied", "missing", "needs_confirmation"]
+AgencyApprovalStepStatus = Literal["pending", "active", "approved", "changes_requested", "skipped"]
+AgencyReferenceSourceType = Literal["brief", "guideline", "prior_notice", "template", "manual"]
+AgencyClauseSource = Literal["org_default", "agency_supplied"]
+
+
+def _default_utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 class TimelineItem(BaseModel):
@@ -567,6 +577,279 @@ class NoticeGenerateResponse(BaseModel):
 class NoticeExportRequest(BaseModel):
     document: NoticeDocument
     style_profile: Optional[DocumentStyleProfile] = None
+
+
+class AgencyNoticeReference(BaseModel):
+    id: str
+    source_type: AgencyReferenceSourceType = "guideline"
+    filename: str = ""
+    title: str = ""
+    text: str = ""
+    evidence_label: str = ""
+
+
+class AgencyNoticeBrief(BaseModel):
+    organization_id: str = "00000000-0000-4000-8000-000000000001"
+    author_id: str = "demo-user"
+    author_name: str = "담당자"
+    agency_name: str = ""
+    title: str
+    program_type: str = "support_program"
+    program_purpose: str = ""
+    budget: str = ""
+    program_period: str = ""
+    eligibility_rules: str = ""
+    support_details: str = ""
+    evaluation_criteria: str = ""
+    submission_method: str = ""
+    required_documents: list[str] = Field(default_factory=list)
+    contact: str = ""
+    legal_basis: str = ""
+    privacy_policy: str = ""
+    fair_competition_clause: str = ""
+    appeal_process: str = ""
+    references: list[AgencyNoticeReference] = Field(default_factory=list)
+
+
+class AgencySourceEvidence(BaseModel):
+    id: str
+    label: str
+    quote: str
+    source_type: AgencyReferenceSourceType = "brief"
+    confidence: float = Field(default=0.8, ge=0, le=1)
+
+
+class AgencySourceTrace(BaseModel):
+    evidence_id: str
+    label: str
+    quote: str
+    source_type: AgencyReferenceSourceType = "brief"
+    field_name: Optional[str] = None
+    reference_id: Optional[str] = None
+    confidence: float = Field(default=0.8, ge=0, le=1)
+
+
+class AgencyNoticeSection(BaseModel):
+    id: str
+    title: str
+    content_markdown: str = ""
+    order: int = 0
+    source_evidence_ids: list[str] = Field(default_factory=list)
+    source_traces: list[AgencySourceTrace] = Field(default_factory=list)
+    confirmation_required: list[str] = Field(default_factory=list)
+    updated_at: str = Field(default_factory=_default_utc_now_iso)
+
+
+class MandatoryClauseCheck(BaseModel):
+    id: str
+    label: str
+    status: AgencyClauseStatus = "missing"
+    note: str = ""
+    source_evidence_ids: list[str] = Field(default_factory=list)
+    source_traces: list[AgencySourceTrace] = Field(default_factory=list)
+    confirmation_required: list[str] = Field(default_factory=list)
+
+
+class NoticeVersion(BaseModel):
+    id: str
+    draft_id: str
+    version_number: int
+    created_by: str = "demo-user"
+    change_summary: str = ""
+    sections_snapshot: list[AgencyNoticeSection] = Field(default_factory=list)
+    mandatory_clause_checks: list[MandatoryClauseCheck] = Field(default_factory=list)
+    created_at: str = Field(default_factory=_default_utc_now_iso)
+
+
+class ApprovalStep(BaseModel):
+    id: str
+    draft_id: str
+    step_order: int
+    title: str
+    role: AgencyMemberRole = "lead"
+    assigned_to: Optional[str] = None
+    status: AgencyApprovalStepStatus = "pending"
+    decided_at: Optional[str] = None
+    decision_note: str = ""
+
+
+class ApprovalComment(BaseModel):
+    id: str
+    draft_id: str
+    version_id: str
+    section_id: Optional[str] = None
+    author_id: str = "demo-user"
+    author_name: str = "담당자"
+    body: str
+    resolved: bool = False
+    created_at: str = Field(default_factory=_default_utc_now_iso)
+
+
+class NoticeAuditEvent(BaseModel):
+    id: str
+    draft_id: str
+    actor_id: str = "system"
+    action: str
+    message: str
+    created_at: str = Field(default_factory=_default_utc_now_iso)
+
+
+class ApprovalWorkflow(BaseModel):
+    status: AgencyNoticeStatus = "draft"
+    current_step_order: int = 1
+    steps: list[ApprovalStep] = Field(default_factory=list)
+
+
+class AgencyNoticeDraft(BaseModel):
+    id: str
+    organization_id: str
+    title: str
+    status: AgencyNoticeStatus = "draft"
+    brief: AgencyNoticeBrief
+    sections: list[AgencyNoticeSection] = Field(default_factory=list)
+    mandatory_clause_checks: list[MandatoryClauseCheck] = Field(default_factory=list)
+    source_evidence: list[AgencySourceEvidence] = Field(default_factory=list)
+    confirmation_required: list[str] = Field(default_factory=list)
+    versions: list[NoticeVersion] = Field(default_factory=list)
+    approval_workflow: ApprovalWorkflow
+    comments: list[ApprovalComment] = Field(default_factory=list)
+    audit_events: list[NoticeAuditEvent] = Field(default_factory=list)
+    current_version_id: Optional[str] = None
+    created_at: str = Field(default_factory=_default_utc_now_iso)
+    updated_at: str = Field(default_factory=_default_utc_now_iso)
+
+
+class AgencyNoticeDraftCreateRequest(BaseModel):
+    brief: AgencyNoticeBrief
+
+
+class AgencyNoticeDraftResponse(BaseModel):
+    success: bool = True
+    data: AgencyNoticeDraft
+
+
+class AgencyNoticeListResponse(BaseModel):
+    success: bool = True
+    data: list[AgencyNoticeDraft] = Field(default_factory=list)
+
+
+class AgencyNoticeSectionUpdateRequest(BaseModel):
+    content_markdown: str
+    change_summary: str = "섹션 내용을 수정했습니다."
+    actor_id: str = "demo-user"
+
+
+class AgencyNoticeTransitionRequest(BaseModel):
+    actor_id: str = "demo-user"
+    note: str = ""
+
+
+class AgencyNoticeCommentCreateRequest(BaseModel):
+    version_id: Optional[str] = None
+    section_id: Optional[str] = None
+    author_id: str = "demo-user"
+    author_name: str = "담당자"
+    body: str
+
+
+class AgencyNoticeExportRequest(BaseModel):
+    style_profile: Optional[DocumentStyleProfile] = None
+
+
+class ClauseLibraryEntry(BaseModel):
+    id: str
+    organization_id: str = "00000000-0000-4000-8000-000000000001"
+    clause_type: str
+    label: str
+    required_for_program_types: list[str] = Field(default_factory=list)
+    template_text: str = ""
+    source: AgencyClauseSource = "org_default"
+    active: bool = True
+    created_at: str = Field(default_factory=_default_utc_now_iso)
+    updated_at: str = Field(default_factory=_default_utc_now_iso)
+
+
+class ClauseLibraryListResponse(BaseModel):
+    success: bool = True
+    data: list[ClauseLibraryEntry] = Field(default_factory=list)
+
+
+class ClauseLibraryEntryRequest(BaseModel):
+    organization_id: str = "00000000-0000-4000-8000-000000000001"
+    clause_type: str
+    label: str
+    required_for_program_types: list[str] = Field(default_factory=list)
+    template_text: str = ""
+    source: AgencyClauseSource = "agency_supplied"
+    active: bool = True
+
+
+class ClauseLibraryEntryResponse(BaseModel):
+    success: bool = True
+    data: ClauseLibraryEntry
+
+
+class AgencyPriorNotice(BaseModel):
+    id: str
+    organization_id: str = "00000000-0000-4000-8000-000000000001"
+    title: str
+    program_type: str = "support_program"
+    budget: str = ""
+    budget_band: str = "unspecified"
+    program_period: str = ""
+    summary: str = ""
+    text: str = ""
+    source_filename: str = ""
+    source_type: AgencyReferenceSourceType = "prior_notice"
+    source_evidence: list[AgencySourceEvidence] = Field(default_factory=list)
+    embedding: list[float] = Field(default_factory=list)
+    embedding_model: str = ""
+    embedding_dimension: int = 0
+    created_at: str = Field(default_factory=_default_utc_now_iso)
+    updated_at: str = Field(default_factory=_default_utc_now_iso)
+
+
+class AgencyPriorNoticeCreateRequest(BaseModel):
+    organization_id: str = "00000000-0000-4000-8000-000000000001"
+    title: str = ""
+    program_type: str = "support_program"
+    budget: str = ""
+    program_period: str = ""
+    text: str = ""
+    source_filename: str = ""
+
+
+class AgencyPriorNoticeResponse(BaseModel):
+    success: bool = True
+    data: AgencyPriorNotice
+
+
+class AgencyPriorNoticeRecallRequest(BaseModel):
+    organization_id: str = "00000000-0000-4000-8000-000000000001"
+    brief: Optional[AgencyNoticeBrief] = None
+    title: str = ""
+    program_type: str = "support_program"
+    budget: str = ""
+    program_period: str = ""
+    program_purpose: str = ""
+    eligibility_rules: str = ""
+    limit: int = Field(default=5, ge=1, le=20)
+
+
+class AgencyPriorNoticeRecallItem(BaseModel):
+    id: str
+    title: str
+    program_type: str = "support_program"
+    budget_band: str = "unspecified"
+    program_period: str = ""
+    summary: str = ""
+    similarity: float = Field(default=0, ge=0, le=1)
+    source_evidence: list[AgencySourceEvidence] = Field(default_factory=list)
+
+
+class AgencyPriorNoticeRecallResponse(BaseModel):
+    success: bool = True
+    data: list[AgencyPriorNoticeRecallItem] = Field(default_factory=list)
 
 
 def utc_now_iso() -> str:

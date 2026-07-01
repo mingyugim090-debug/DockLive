@@ -24,6 +24,7 @@ if BaseSettings:
         INSFORGE_TIMEOUT_SECONDS: int = 10
         OPENAI_ANALYSIS_MODEL: str = "gpt-4o-mini"
         OPENAI_DRAFT_MODEL: str = "gpt-4o-mini"
+        OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
         GEMMA_ANALYSIS_MODEL: str = "gemma-4-26b-a4b-it"
         GEMMA_DRAFT_MODEL: str = "gemma-4-31b-it"
         HWPX_SKILL_DIR: str = ""
@@ -57,6 +58,7 @@ else:
         INSFORGE_TIMEOUT_SECONDS: int = int(os.getenv("INSFORGE_TIMEOUT_SECONDS", "10"))
         OPENAI_ANALYSIS_MODEL: str = os.getenv("OPENAI_ANALYSIS_MODEL", "gpt-4o-mini")
         OPENAI_DRAFT_MODEL: str = os.getenv("OPENAI_DRAFT_MODEL", "gpt-4o-mini")
+        OPENAI_EMBEDDING_MODEL: str = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
         GEMMA_ANALYSIS_MODEL: str = os.getenv("GEMMA_ANALYSIS_MODEL", "gemma-4-26b-a4b-it")
         GEMMA_DRAFT_MODEL: str = os.getenv("GEMMA_DRAFT_MODEL", "gemma-4-31b-it")
         HWPX_SKILL_DIR: str = os.getenv("HWPX_SKILL_DIR", "")

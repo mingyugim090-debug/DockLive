@@ -10,6 +10,9 @@ source-grounded, and useful for future Codex or Claude Code work.
 - Current MVP emphasis is IRIS/government R&D notice analysis for company,
   university, researcher, and research-lab submission documents and R&D plan
   drafts, not public notice publication as the primary output.
+- Ver2 is a separate Agency NoticeOps track for agency staff who author public
+  notices and route them through internal review/approval. Keep Ver1 applicant
+  drafting intact while adding organization-scoped agency workflows.
 - The target experience is Inline AI-like assisted authoring, but the first
   product priority is reliability: upload, parse, analyze, ask only missing
   questions, draft, review, export.
@@ -30,6 +33,9 @@ source-grounded, and useful for future Codex or Claude Code work.
   institutions, budget, and outcomes instead of company-only facts.
 - API schema changes must stay synchronized across backend schemas, frontend
   types, and API consumers.
+- Ver2 agency records must be scoped by `organization_id`; approval comments
+  stay tied to specific notice versions, and published state is blocked until
+  approved.
 
 ## Harness Decisions
 

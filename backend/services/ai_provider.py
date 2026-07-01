@@ -4,6 +4,8 @@ import os
 import re
 import urllib.error
 import urllib.request
+import hashlib
+import math
 from typing import Any, Iterator, Literal
 
 from core.config import settings
@@ -12,6 +14,8 @@ from core.errors import AnalysisError
 logger = logging.getLogger(__name__)
 
 AiTask = Literal["analysis", "draft", "match"]
+MOCK_EMBEDDING_MODEL = "mock-token-hash-64"
+MOCK_EMBEDDING_DIMENSION = 64
 
 
 def provider_name() -> str:
@@ -85,6 +89,79 @@ def stream_text(task: AiTask, system_prompt: str, user_prompt: str, max_tokens: 
     if provider != "openai":
         raise AnalysisError("실시간 토큰 스트리밍은 현재 OpenAI provider에서만 지원됩니다.")
     yield from _stream_openai_text(task, system_prompt, user_prompt, max_tokens)
+
+
+def embed_text(text: str) -> tuple[list[float], str]:
+    """Return an embedding through the configured provider abstraction.
+
+    Agency NoticeOps uses this wrapper so recall code stays provider-neutral.
+    In mock or missing-key environments the hash embedding is deterministic,
+    small, and good enough for contract ranking tests.
+    """
+    cleaned = (text or "").strip()
+    if should_use_mock_ai() or not settings.OPENAI_API_KEY:
+        return _mock_embedding(cleaned), MOCK_EMBEDDING_MODEL
+    return _call_openai_embedding(cleaned)
+
+
+def _mock_embedding(text: str) -> list[float]:
+    vector = [0.0] * MOCK_EMBEDDING_DIMENSION
+    tokens = re.findall(r"[0-9A-Za-z가-힣]+", text.lower())
+    for token in tokens:
+        digest = hashlib.sha256(token.encode("utf-8")).digest()
+        index = int.from_bytes(digest[:2], "big") % MOCK_EMBEDDING_DIMENSION
+        sign = 1.0 if digest[2] % 2 == 0 else -1.0
+        vector[index] += sign
+    norm = math.sqrt(sum(value * value for value in vector))
+    if norm == 0:
+        return vector
+    return [value / norm for value in vector]
+
+
+def _call_openai_embedding(text: str) -> tuple[list[float], str]:
+    model = settings.OPENAI_EMBEDDING_MODEL
+    try:
+        from openai import APIConnectionError, AuthenticationError, OpenAI, RateLimitError
+    except ImportError:
+        return _call_openai_embedding_http(text, model), model
+
+    try:
+        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        response = client.embeddings.create(model=model, input=text[:16_000])
+        return list(response.data[0].embedding), model
+    except AuthenticationError as exc:
+        raise AnalysisError("OpenAI API 키가 유효하지 않습니다.") from exc
+    except APIConnectionError as exc:
+        raise AnalysisError("OpenAI API 연결에 실패했습니다. 네트워크 상태를 확인하세요.") from exc
+    except RateLimitError as exc:
+        raise AnalysisError("OpenAI API 요청 한도를 초과했습니다. 잠시 후 다시 시도하세요.") from exc
+
+
+def _call_openai_embedding_http(text: str, model: str) -> list[float]:
+    payload = {"model": model, "input": text[:16_000]}
+    request = urllib.request.Request(
+        "https://api.openai.com/v1/embeddings",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=90) as response:
+            data = json.loads(response.read().decode("utf-8"))
+        embedding = data.get("data", [{}])[0].get("embedding", [])
+        return [float(value) for value in embedding]
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:500]
+        if exc.code in {401, 403}:
+            raise AnalysisError("OpenAI API 키가 유효하지 않습니다.") from exc
+        if exc.code == 429:
+            raise AnalysisError("OpenAI API 요청 한도를 초과했습니다. 잠시 후 다시 시도하세요.") from exc
+        raise AnalysisError(f"OpenAI embedding 요청에 실패했습니다: {detail}") from exc
+    except urllib.error.URLError as exc:
+        raise AnalysisError("OpenAI API 연결에 실패했습니다. 네트워크 상태를 확인하세요.") from exc
 
 
 def _structured_response_format(json_schema: dict[str, Any] | None, schema_name: str | None) -> dict[str, Any]:

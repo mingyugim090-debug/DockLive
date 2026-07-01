@@ -1,5 +1,12 @@
 import type {
+  AgencyNoticeBrief,
+  AgencyNoticeDraftResponse,
+  AgencyNoticeListResponse,
+  AgencyPriorNoticeRecallResponse,
+  AgencyPriorNoticeResponse,
   ApiResponse,
+  ClauseLibraryEntryResponse,
+  ClauseLibraryListResponse,
   CompanyProfile,
   DraftStreamEvent,
   ExportListResponse,
@@ -491,6 +498,144 @@ export async function exportNoticeDocx(document: NoticeDocument): Promise<Export
     body: JSON.stringify({ document }),
   });
   if (!res.ok) throw await readError(res, `DOCX 다운로드 생성 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function listAgencyNoticeDrafts(
+  organizationId = '00000000-0000-4000-8000-000000000001',
+): Promise<AgencyNoticeListResponse> {
+  const params = new URLSearchParams({ organization_id: organizationId });
+  const res = await fetch(`${API_URL}/api/agency/notices/drafts?${params.toString()}`);
+  if (!res.ok) throw await readError(res, `기관 공고 목록 조회 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function createAgencyNoticeDraft(brief: AgencyNoticeBrief): Promise<AgencyNoticeDraftResponse> {
+  const res = await fetch(`${API_URL}/api/agency/notices/drafts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ brief }),
+  });
+  if (!res.ok) throw await readError(res, `기관 공고 초안 생성 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function createAgencyPriorNotice(payload: {
+  organization_id: string;
+  title: string;
+  program_type?: string;
+  budget?: string;
+  program_period?: string;
+  text: string;
+  source_filename?: string;
+}): Promise<AgencyPriorNoticeResponse> {
+  const res = await fetch(`${API_URL}/api/agency/prior-notices`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw await readError(res, `과거 공고 저장 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function recallAgencyPriorNotices(brief: AgencyNoticeBrief): Promise<AgencyPriorNoticeRecallResponse> {
+  const res = await fetch(`${API_URL}/api/agency/prior-notices/recall`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ organization_id: brief.organization_id, brief, limit: 5 }),
+  });
+  if (!res.ok) throw await readError(res, `유사 과거 공고 검색 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function listClauseLibrary(
+  organizationId = '00000000-0000-4000-8000-000000000001',
+  programType?: string,
+): Promise<ClauseLibraryListResponse> {
+  const params = new URLSearchParams({ organization_id: organizationId });
+  if (programType) params.set('program_type', programType);
+  const res = await fetch(`${API_URL}/api/agency/clause-library?${params.toString()}`);
+  if (!res.ok) throw await readError(res, `조항 라이브러리 조회 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function createClauseLibraryEntry(payload: {
+  organization_id: string;
+  clause_type: string;
+  label: string;
+  required_for_program_types: string[];
+  template_text: string;
+  source?: 'org_default' | 'agency_supplied';
+  active?: boolean;
+}): Promise<ClauseLibraryEntryResponse> {
+  const res = await fetch(`${API_URL}/api/agency/clause-library`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      source: 'agency_supplied',
+      active: true,
+      ...payload,
+    }),
+  });
+  if (!res.ok) throw await readError(res, `조항 라이브러리 저장 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function updateAgencyNoticeSection(
+  draftId: string,
+  sectionId: string,
+  contentMarkdown: string,
+): Promise<AgencyNoticeDraftResponse> {
+  const res = await fetch(`${API_URL}/api/agency/notices/drafts/${draftId}/sections/${sectionId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      content_markdown: contentMarkdown,
+      change_summary: `${sectionId} 섹션을 수정했습니다.`,
+    }),
+  });
+  if (!res.ok) throw await readError(res, `기관 공고 섹션 저장 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function addAgencyNoticeComment(
+  draftId: string,
+  body: string,
+  sectionId?: string | null,
+): Promise<AgencyNoticeDraftResponse> {
+  const res = await fetch(`${API_URL}/api/agency/notices/drafts/${draftId}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body, section_id: sectionId ?? null }),
+  });
+  if (!res.ok) throw await readError(res, `기관 공고 댓글 저장 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function transitionAgencyNoticeDraft(
+  draftId: string,
+  action: 'submit-review' | 'request-revision' | 'approve' | 'publish',
+  note = '',
+): Promise<AgencyNoticeDraftResponse> {
+  const res = await fetch(`${API_URL}/api/agency/notices/drafts/${draftId}/${action}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ note }),
+  });
+  if (!res.ok) throw await readError(res, `기관 공고 상태 전환 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function exportAgencyNoticeDraft(
+  draftId: string,
+  format: 'hwpx' | 'pdf' | 'docx',
+): Promise<ExportResponse> {
+  const res = await fetch(`${API_URL}/api/agency/notices/drafts/${draftId}/export/${format}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) throw await readError(res, `기관 공고 ${format.toUpperCase()} export 실패: ${res.status}`);
   return res.json();
 }
 

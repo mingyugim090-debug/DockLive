@@ -21,6 +21,9 @@ INSFORGE_ANALYSIS_TABLE = "analysis_results"
 INSFORGE_WORKFLOW_TABLE = "workflow_sessions"
 INSFORGE_DOCUMENT_TABLE = "documents"
 INSFORGE_EXPORT_TABLE = "exports"
+INSFORGE_AGENCY_NOTICE_TABLE = "notice_drafts"
+INSFORGE_AGENCY_PRIOR_NOTICE_TABLE = "agency_notice_references"
+INSFORGE_CLAUSE_LIBRARY_TABLE = "clause_library"
 
 
 def _file_path_for_key(key: str) -> Path:
@@ -289,6 +292,53 @@ def _save_insforge_json(key: str, data: dict) -> bool:
                 "updated_at": now,
             },
         )
+    if prefix == "agency_notice":
+        brief = data.get("brief") if isinstance(data.get("brief"), dict) else {}
+        return _insforge_upsert(
+            INSFORGE_AGENCY_NOTICE_TABLE,
+            {
+                "id": item_id,
+                "organization_id": data.get("organization_id"),
+                "title": data.get("title"),
+                "status": data.get("status"),
+                "current_version_id": data.get("current_version_id"),
+                "created_by": brief.get("author_id"),
+                "payload": data,
+                "updated_at": now,
+            },
+        )
+    if prefix == "agency_prior_notice":
+        return _insforge_upsert(
+            INSFORGE_AGENCY_PRIOR_NOTICE_TABLE,
+            {
+                "id": item_id,
+                "organization_id": data.get("organization_id"),
+                "title": data.get("title"),
+                "program_type": data.get("program_type"),
+                "budget_band": data.get("budget_band"),
+                "program_period": data.get("program_period"),
+                "embedding": data.get("embedding") or None,
+                "embedding_model": data.get("embedding_model"),
+                "payload": data,
+                "updated_at": now,
+            },
+        )
+    if prefix == "clause_library":
+        return _insforge_upsert(
+            INSFORGE_CLAUSE_LIBRARY_TABLE,
+            {
+                "id": item_id,
+                "organization_id": data.get("organization_id"),
+                "clause_type": data.get("clause_type"),
+                "label": data.get("label"),
+                "required_for_program_types": data.get("required_for_program_types") or [],
+                "template_text": data.get("template_text"),
+                "source": data.get("source"),
+                "active": data.get("active", True),
+                "payload": data,
+                "updated_at": now,
+            },
+        )
     return False
 
 
@@ -300,6 +350,12 @@ def _load_insforge_json(key: str) -> Optional[dict]:
         return _insforge_load_payload(INSFORGE_ANALYSIS_TABLE, item_id)
     if prefix == "workflow":
         return _insforge_load_payload(INSFORGE_WORKFLOW_TABLE, item_id)
+    if prefix == "agency_notice":
+        return _insforge_load_payload(INSFORGE_AGENCY_NOTICE_TABLE, item_id)
+    if prefix == "agency_prior_notice":
+        return _insforge_load_payload(INSFORGE_AGENCY_PRIOR_NOTICE_TABLE, item_id)
+    if prefix == "clause_library":
+        return _insforge_load_payload(INSFORGE_CLAUSE_LIBRARY_TABLE, item_id)
     return None
 
 
@@ -363,6 +419,95 @@ def save_workflow(workflow_id: str, data: dict) -> None:
 
 def load_workflow(workflow_id: str) -> Optional[dict]:
     return _load_json(f"workflow:{workflow_id}")
+
+
+def save_agency_notice_draft(draft_id: str, data: dict) -> None:
+    _save_json(f"agency_notice:{draft_id}", data, settings.WORKFLOW_TTL_SECONDS)
+    organization_id = str(data.get("organization_id") or "00000000-0000-4000-8000-000000000001")
+    index_key = f"agency_notice_index:{organization_id}"
+    existing = _load_json(index_key) or {}
+    ids = [item for item in existing.get("ids", []) if isinstance(item, str) and item != draft_id]
+    ids.insert(0, draft_id)
+    _save_json(index_key, {"ids": ids}, settings.WORKFLOW_TTL_SECONDS)
+
+
+def load_agency_notice_draft(draft_id: str) -> Optional[dict]:
+    return _load_json(f"agency_notice:{draft_id}")
+
+
+def list_agency_notice_draft_ids(organization_id: str) -> list[str]:
+    existing = _load_json(f"agency_notice_index:{organization_id}") or {}
+    return [item for item in existing.get("ids", []) if isinstance(item, str)]
+
+
+def save_agency_prior_notice(reference_id: str, data: dict) -> None:
+    _save_json(f"agency_prior_notice:{reference_id}", data, settings.WORKFLOW_TTL_SECONDS)
+    organization_id = str(data.get("organization_id") or "00000000-0000-4000-8000-000000000001")
+    index_key = f"agency_prior_notice_index:{organization_id}"
+    existing = _load_json(index_key) or {}
+    ids = [item for item in existing.get("ids", []) if isinstance(item, str) and item != reference_id]
+    ids.insert(0, reference_id)
+    _save_json(index_key, {"ids": ids}, settings.WORKFLOW_TTL_SECONDS)
+
+
+def load_agency_prior_notice(reference_id: str) -> Optional[dict]:
+    return _load_json(f"agency_prior_notice:{reference_id}")
+
+
+def list_agency_prior_notices(organization_id: str) -> list[dict[str, Any]]:
+    encoded_org = quote(organization_id, safe="")
+    rows = _insforge_select(
+        f"/api/database/records/{INSFORGE_AGENCY_PRIOR_NOTICE_TABLE}"
+        f"?organization_id=eq.{encoded_org}&select=payload&order=updated_at.desc"
+    )
+    payloads = [row.get("payload") for row in rows if isinstance(row.get("payload"), dict)]
+    if payloads:
+        return [dict(payload) for payload in payloads]
+
+    existing = _load_json(f"agency_prior_notice_index:{organization_id}") or {}
+    payloads = []
+    for item_id in existing.get("ids", []):
+        if not isinstance(item_id, str):
+            continue
+        payload = load_agency_prior_notice(item_id)
+        if payload:
+            payloads.append(payload)
+    return payloads
+
+
+def save_clause_library_entry(entry_id: str, data: dict) -> None:
+    _save_json(f"clause_library:{entry_id}", data, settings.WORKFLOW_TTL_SECONDS)
+    organization_id = str(data.get("organization_id") or "00000000-0000-4000-8000-000000000001")
+    index_key = f"clause_library_index:{organization_id}"
+    existing = _load_json(index_key) or {}
+    ids = [item for item in existing.get("ids", []) if isinstance(item, str) and item != entry_id]
+    ids.insert(0, entry_id)
+    _save_json(index_key, {"ids": ids}, settings.WORKFLOW_TTL_SECONDS)
+
+
+def load_clause_library_entry(entry_id: str) -> Optional[dict]:
+    return _load_json(f"clause_library:{entry_id}")
+
+
+def list_clause_library_entries(organization_id: str) -> list[dict[str, Any]]:
+    encoded_org = quote(organization_id, safe="")
+    rows = _insforge_select(
+        f"/api/database/records/{INSFORGE_CLAUSE_LIBRARY_TABLE}"
+        f"?organization_id=eq.{encoded_org}&select=payload&order=updated_at.desc"
+    )
+    payloads = [row.get("payload") for row in rows if isinstance(row.get("payload"), dict)]
+    if payloads:
+        return [dict(payload) for payload in payloads]
+
+    existing = _load_json(f"clause_library_index:{organization_id}") or {}
+    payloads = []
+    for item_id in existing.get("ids", []):
+        if not isinstance(item_id, str):
+            continue
+        payload = load_clause_library_entry(item_id)
+        if payload:
+            payloads.append(payload)
+    return payloads
 
 
 def save_source_file(

@@ -10,6 +10,8 @@ product:
     - fact_based_analysis
     - applicant_project_input_collection
     - government_rnd_submission_drafting
+    - agency_notice_authoring
+    - approval_workflow_state
     - missing_input_collection
     - section_drafting
     - user_confirmation
@@ -117,6 +119,41 @@ contracts:
       - preserve_user_work_when_hwpx_fails
       - provide_html_fallback
       - include_validation_summary_when_available
+  agency_notice:
+    must_include:
+      - organization_id
+      - program_purpose
+      - budget
+      - program_period
+      - eligibility_rules
+      - evaluation_criteria
+      - submission_method
+      - notice_sections
+      - mandatory_clause_checks
+      - confirmation_required
+      - source_evidence
+      - current_version_id
+    forbidden:
+      - invented_legal_basis
+      - invented_budget_ceilings
+      - invented_eligibility_rules
+      - invented_mandatory_clauses
+      - untraceable_standard_boilerplate
+      - live_publication_without_user_action
+  approval_workflow:
+    states:
+      - draft
+      - under_review
+      - revision_requested
+      - approving
+      - approved
+      - published
+    must:
+      - preserve_version_history
+      - block_published_state_without_approved
+      - keep_comments_tied_to_specific_version
+      - keep_audit_events_append_only
+      - keep_every_row_scoped_by_organization_id
 
 api_boundaries:
   backend:
@@ -159,3 +196,6 @@ non_goals:
   - speculative_notice_completion
   - iris_live_crawling_or_login_automation_for_harness_v1
   - native_hwpx_chart_objects_for_v1
+  - live_publishing_platform_integration_for_v2
+  - government_identity_provider_integration_for_v2
+  - on_prem_or_closed_network_deployment_for_v2

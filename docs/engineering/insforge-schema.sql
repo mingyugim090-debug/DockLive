@@ -95,3 +95,20 @@ create index if not exists exports_workflow_id_idx
 
 -- The backend uses INSFORGE_API_KEY server-side. Add user-scoped policies only
 -- when Auth is introduced after the Agent MVP.
+
+-- Ver2 Agency NoticeOps tables are defined in:
+--   migrations/20260701090000_add-agency-noticeops.sql
+--   migrations/20260701103000_add-agency-reference-features.sql
+--
+-- Summary:
+-- - organizations and organization_members model self-serve agency tenants.
+-- - notice_drafts, notice_versions, approval_steps, approval_comments, and
+--   notice_audit_events carry organization_id from the first migration.
+-- - agency_notice_references stores organization-owned prior notices for
+--   pgvector-backed recall; clause_library stores org-editable required
+--   clause definitions and confirmation-gate metadata.
+-- - RLS uses SECURITY DEFINER helpers public.is_agency_member and
+--   public.is_agency_admin to avoid recursive membership policy lookups.
+-- - notice_versions and notice_audit_events are append-only for authenticated
+--   clients; backend service-role persistence may still write full workflow
+--   payloads for demo and recovery paths.

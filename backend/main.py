@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import settings
-from routers import analyze, demo, hwpx, notices, workflow
+from routers import agency, analyze, demo, hwpx, notices, workflow
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,6 +41,7 @@ app.include_router(analyze.router, prefix="/api")
 app.include_router(demo.router, prefix="/api")
 app.include_router(hwpx.router, prefix="/api")
 app.include_router(notices.router, prefix="/api")
+app.include_router(agency.router, prefix="/api/agency")
 app.include_router(workflow.router, prefix="/api/workflow")
 
 

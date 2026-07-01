@@ -14,6 +14,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -23,6 +24,7 @@ if hasattr(sys.stderr, "reconfigure"):
 ROOT = Path(__file__).resolve().parents[3]
 BACKEND = ROOT / "backend"
 FIXTURE_DIR = ROOT / "docs" / "evaluation" / "fixtures"
+AGENCY_FIXTURE_DIR = ROOT / "docs" / "evaluation" / "agency-fixtures"
 
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
@@ -44,7 +46,12 @@ load_backend_env()
 os.environ.setdefault("MOCK_MODE", "true")
 
 from core.config import settings  # noqa: E402
-from models.schemas import AnalysisResult  # noqa: E402
+from models.schemas import (  # noqa: E402
+    AgencyNoticeBrief,
+    AgencyPriorNoticeCreateRequest,
+    AgencyPriorNoticeRecallRequest,
+    AnalysisResult,
+)
 from services import storage  # noqa: E402
 from services.analyzer import build_analysis_result  # noqa: E402
 from services.document_ingestion import ingest_uploaded_document  # noqa: E402
@@ -58,10 +65,22 @@ from services.drafting_service import (  # noqa: E402
     update_inputs,
 )
 from services.openai_service import analyze_announcement  # noqa: E402
+from services.prior_notice_recall import create_prior_notice, recall_prior_notices  # noqa: E402
 
 
 def load_fixtures(fixture_id: str | None = None) -> list[dict[str, Any]]:
     fixtures = [json.loads(path.read_text(encoding="utf-8")) for path in sorted(FIXTURE_DIR.glob("*.json"))]
+    if fixture_id:
+        fixtures = [fixture for fixture in fixtures if fixture.get("id") == fixture_id]
+    return fixtures
+
+
+def load_agency_recall_fixtures(fixture_id: str | None = None) -> list[dict[str, Any]]:
+    fixtures: list[dict[str, Any]] = []
+    for path in sorted(AGENCY_FIXTURE_DIR.glob("*.json")):
+        fixture = json.loads(path.read_text(encoding="utf-8"))
+        if "prior_notice_recall" in fixture.get("expected", {}):
+            fixtures.append(fixture)
     if fixture_id:
         fixtures = [fixture for fixture in fixtures if fixture.get("id") == fixture_id]
     return fixtures
@@ -453,6 +472,40 @@ def run_one(fixture: dict[str, Any], mode: str, include_hwpx: bool) -> dict[str,
     return report
 
 
+def run_agency_recall_fixture(fixture: dict[str, Any]) -> dict[str, Any]:
+    checks: list[dict[str, Any]] = []
+
+    def add(name: str, passed: bool, detail: str = "") -> None:
+        checks.append({"name": name, "passed": bool(passed), "detail": detail})
+
+    org_id = str(uuid4())
+    for prior in fixture.get("prior_notices", []):
+        create_prior_notice(AgencyPriorNoticeCreateRequest.model_validate({**prior, "organization_id": org_id}))
+    for prior in fixture.get("other_org_prior_notices", []):
+        create_prior_notice(AgencyPriorNoticeCreateRequest.model_validate(prior))
+
+    brief = AgencyNoticeBrief.model_validate({**fixture["brief"], "organization_id": org_id})
+    results = recall_prior_notices(AgencyPriorNoticeRecallRequest(organization_id=org_id, brief=brief))
+    expected = fixture["expected"]["prior_notice_recall"]
+    top_title = results[0].title if results else ""
+    add("recall_has_results", bool(results), str(len(results)))
+    add("similar_notice_first", expected["top_title_contains"] in top_title, top_title)
+    forbidden_title = expected.get("must_not_return_title_contains", "")
+    if forbidden_title:
+        all_titles = " | ".join(item.title for item in results)
+        add("cross_org_notice_not_returned", forbidden_title not in all_titles, all_titles)
+
+    passed = sum(1 for check in checks if check["passed"])
+    return {
+        "fixture_id": fixture["id"],
+        "kind": "agency_prior_notice_recall",
+        "score": round(100 * passed / max(1, len(checks)), 1),
+        "passed": passed,
+        "total": len(checks),
+        "checks": checks,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=["deterministic", "real-ai"], default="deterministic")
@@ -463,10 +516,16 @@ def main() -> int:
     args = parser.parse_args()
 
     fixtures = load_fixtures(args.fixture_id)
+    agency_fixtures = load_agency_recall_fixtures(args.fixture_id)
     if args.fixture_id and not fixtures:
-        print(f"No fixture found for --fixture-id {args.fixture_id}")
-        return 2
-    reports = [run_one(fixture, args.mode, args.include_hwpx) for fixture in fixtures]
+        if not agency_fixtures:
+            print(f"No fixture found for --fixture-id {args.fixture_id}")
+            return 2
+    if args.fixture_id and fixtures == [] and agency_fixtures:
+        reports = []
+    else:
+        reports = [run_one(fixture, args.mode, args.include_hwpx) for fixture in fixtures]
+    reports.extend(run_agency_recall_fixture(fixture) for fixture in agency_fixtures)
     summary = {
         "mode": args.mode,
         "min_score": args.min_score,
@@ -477,7 +536,11 @@ def main() -> int:
     args.output.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(summary, ensure_ascii=False, indent=2))
 
-    failing = [item for item in reports if item["score"] < args.min_score or item["workflow_status"] != "finalized"]
+    failing = [
+        item
+        for item in reports
+        if item["score"] < args.min_score or ("workflow_status" in item and item["workflow_status"] != "finalized")
+    ]
     return 1 if failing else 0
 
 
