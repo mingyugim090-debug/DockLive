@@ -38,6 +38,57 @@ Do not append "confirmation needed" checklists to the draft body.
 The `needs_confirmation` field is retained for backward compatibility only; always return it as an empty array.
 If a required fact is absent, write neutral wording based on the available source instead of guessing."""
 
+OFFICIAL_STYLE_RULES = """
+개조식 문체 규칙(모든 초안에 항상 적용):
+- 서술형 장문 대신 핵심 키워드 중심의 짧은 문장이나 불릿으로 작성하세요.
+- 근거 없는 수식어("혁신적인", "획기적인", "국내 최초" 등)를 사용하지 마세요.
+- 한 문장에는 하나의 주장만 담고, 접속사로 여러 절을 잇지 마세요.
+- 핵심 수치를 쓸 때는 근거를 함께 표기하고, 근거가 없으면 [확인 필요]로 표시하세요."""
+
+PSST_DRAFT_RULES = """
+PSST 프레임워크 규칙(사업계획서형 문서일 때 적용):
+- Problem/Solution/Scale-up/Team 축 간 고객·문제 정의를 일관되게 유지하세요.
+- 시장 규모, 수치, 기관명은 분석 결과 또는 사용자 입력에 있는 것만 사용하고, 없으면 확인 필요로 표시하세요.
+- 각 섹션의 첫 문장(또는 첫 불릿)만 읽어도 핵심을 파악할 수 있게 작성하세요."""
+
+_BUSINESS_PLAN_SECTION_KEYWORDS = ("문제 인식", "실현 가능성", "성장 전략", "팀 구성", "사업계획서", "창업")
+
+_PSST_AXIS_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "problem": ("문제", "필요성", "배경", "시장 현황", "시장현황"),
+    "solution": ("준비", "구체화", "추진일정", "추진 일정", "실현"),
+    "scaleup": ("비즈니스 모델", "시장 진입", "성장", "확장", "사업화"),
+    "team": ("팀", "대표자", "협력기관", "협력 기관", "구성원"),
+}
+
+
+def _is_business_plan_style(analysis: AnalysisResult) -> bool:
+    if analysis.doc_type == "startup":
+        return True
+    section_titles = " ".join(section.title for section in analysis.document_template)
+    return any(keyword in section_titles for keyword in _BUSINESS_PLAN_SECTION_KEYWORDS)
+
+
+def _infer_psst_axis(analysis: AnalysisResult, draft: DraftSection) -> str:
+    if not _is_business_plan_style(analysis):
+        return "none"
+    haystack = f"{draft.title} {draft.purpose}"
+    for axis, keywords in _PSST_AXIS_KEYWORDS.items():
+        if any(keyword in haystack for keyword in keywords):
+            return axis
+    return "none"
+
+
+def _tag_psst_axes(workflow: WorkflowSession) -> None:
+    for draft in workflow.draft_sections:
+        draft.psst_axis = _infer_psst_axis(workflow.analysis, draft)
+
+
+def _section_draft_system_prompt(analysis: AnalysisResult) -> str:
+    prompt = SECTION_DRAFT_SYSTEM_PROMPT + "\n" + OFFICIAL_STYLE_RULES
+    if _is_business_plan_style(analysis):
+        prompt += "\n" + PSST_DRAFT_RULES
+    return prompt
+
 DRAFT_RESPONSE_SCHEMA = {
     "title": "generated_draft_sections",
     "type": "object",
@@ -596,13 +647,15 @@ def generate_drafts(workflow: WorkflowSession) -> WorkflowSession:
 
     if should_use_mock_ai():
         workflow.draft_sections = [_mock_draft_section(workflow, draft) for draft in workflow.draft_sections]
+        _tag_psst_axes(workflow)
         workflow.status = "reviewing"
         workflow.updated_at = utc_now_iso()
         return workflow
 
     try:
         t0 = time.time()
-        data = _call_draft_json(SECTION_DRAFT_SYSTEM_PROMPT + "\n반드시 JSON 객체만 반환하세요.", _draft_json_prompt(workflow))
+        system_prompt = _section_draft_system_prompt(workflow.analysis) + "\n반드시 JSON 객체만 반환하세요."
+        data = _call_draft_json(system_prompt, _draft_json_prompt(workflow))
         logger.info("%s draft response received (%.1fs)", provider_name(), time.time() - t0)
         by_section = {item.get("section_id"): item for item in data.get("draft_sections", [])}
         for draft in workflow.draft_sections:
@@ -625,6 +678,7 @@ def generate_drafts(workflow: WorkflowSession) -> WorkflowSession:
             draft.confirmation_required = confirmations
             draft.status = "drafted"
             draft.updated_at = utc_now_iso()
+        _tag_psst_axes(workflow)
         workflow.status = "reviewing"
         workflow.updated_at = utc_now_iso()
         return workflow
@@ -651,11 +705,12 @@ def stream_draft_events(workflow: WorkflowSession) -> Iterator[dict]:
         return
 
     workflow.status = "drafting"
+    system_prompt = _section_draft_system_prompt(workflow.analysis)
     for draft in workflow.draft_sections:
         yield {"type": "section_start", "workflow_id": workflow.id, "section_id": draft.section_id, "content": draft.title, "_workflow": workflow}
         chunks: list[str] = []
         try:
-            for chunk in stream_text("draft", SECTION_DRAFT_SYSTEM_PROMPT, _single_section_prompt(workflow, draft)):
+            for chunk in stream_text("draft", system_prompt, _single_section_prompt(workflow, draft)):
                 chunks.append(chunk)
                 yield {"type": "delta", "workflow_id": workflow.id, "section_id": draft.section_id, "content": chunk, "_workflow": workflow}
         except Exception as exc:
@@ -673,6 +728,7 @@ def stream_draft_events(workflow: WorkflowSession) -> Iterator[dict]:
         draft.status = "drafted"
         draft.confirmation_required = _confirmation_items(workflow)
         draft.needs_confirmation = draft.confirmation_required
+        draft.psst_axis = _infer_psst_axis(workflow.analysis, draft)
         draft.updated_at = utc_now_iso()
         yield {
             "type": "section_done",

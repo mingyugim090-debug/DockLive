@@ -23,6 +23,7 @@ import type {
   HwpxTemplateAnalysisResponse,
   WorkflowSession,
   WorkflowResponse,
+  ScoreResponse,
 } from './types';
 
 function resolveApiUrl(): string {
@@ -217,6 +218,12 @@ export async function saveDraftFeedback(
 export async function reviseDraft(id: string, sectionId: string): Promise<WorkflowResponse> {
   const res = await fetch(`${API_URL}/api/workflow/${id}/draft/${sectionId}/revise`, { method: 'POST' });
   if (!res.ok) throw await readError(res, `초안 수정 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function scoreWorkflow(id: string): Promise<ScoreResponse> {
+  const res = await fetch(`${API_URL}/api/workflow/${id}/score`, { method: 'POST' });
+  if (!res.ok) throw await readError(res, `평가기준 채점 실패: ${res.status}`);
   return res.json();
 }
 

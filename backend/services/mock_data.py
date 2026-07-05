@@ -97,6 +97,36 @@ def _mock_startup() -> dict:
             "사업화 가능성과 기대 효과",
             "팀 역량과 실행 계획의 타당성",
         ],
+        "rubric": {
+            "criteria": [
+                {
+                    "name": "문제 인식의 구체성",
+                    "weight": 30,
+                    "description": "문제 정의와 근거의 구체성을 평가합니다.",
+                    "source_ref": "공고 평가기준",
+                },
+                {
+                    "name": "아이디어의 혁신성과 실현 가능성",
+                    "weight": 30,
+                    "description": "아이디어의 차별성과 실행 계획의 구체성을 평가합니다.",
+                    "source_ref": "공고 평가기준",
+                },
+                {
+                    "name": "사업화 가능성과 기대 효과",
+                    "weight": 20,
+                    "description": "성장 전략과 시장 진입 계획을 평가합니다.",
+                    "source_ref": "공고 평가기준",
+                },
+                {
+                    "name": "팀 역량과 실행 계획의 타당성",
+                    "weight": 20,
+                    "description": "팀 구성과 역할 분담의 타당성을 평가합니다.",
+                    "source_ref": "공고 평가기준",
+                },
+            ],
+            "total_weight": 100,
+            "source": "notice",
+        },
         "benefits": [
             "대상 1팀 상금 500만원",
             "우수팀 창업 멘토링 및 후속 사업 연계",

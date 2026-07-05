@@ -83,6 +83,29 @@ ANALYSIS_RESPONSE_SCHEMA = {
         "eligibility": {"type": "array", "items": {"type": "string"}},
         "submission_method": {"type": "string"},
         "evaluation_criteria": {"type": "array", "items": {"type": "string"}},
+        "rubric": {
+            "type": ["object", "null"],
+            "additionalProperties": False,
+            "properties": {
+                "criteria": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "name": {"type": "string"},
+                            "weight": {"type": "integer", "minimum": 0, "maximum": 100},
+                            "description": {"type": "string"},
+                            "source_ref": {"type": "string"},
+                        },
+                        "required": ["name", "weight", "description", "source_ref"],
+                    },
+                },
+                "total_weight": {"type": "integer"},
+                "source": {"type": "string", "enum": ["notice"]},
+            },
+            "required": ["criteria", "total_weight", "source"],
+        },
         "benefits": {"type": "array", "items": {"type": "string"}},
         "support_programs": {
             "type": "array",
@@ -172,6 +195,7 @@ ANALYSIS_RESPONSE_SCHEMA = {
         "eligibility",
         "submission_method",
         "evaluation_criteria",
+        "rubric",
         "benefits",
         "support_programs",
         "cautions",
@@ -237,6 +261,13 @@ ANALYSIS_PROMPT = """다음 공고문을 분석해 JSON으로만 응답하세요
   "eligibility": ["지원 자격"],
   "submission_method": "제출 방법",
   "evaluation_criteria": ["평가 기준"],
+  "rubric": {{
+    "criteria": [
+      {{"name": "평가항목명", "weight": 30, "description": "해당 항목 심사 설명", "source_ref": "공고 p.X 또는 표 위치"}}
+    ],
+    "total_weight": 100,
+    "source": "notice"
+  }},
   "benefits": ["상금, 지원금, 멘토링 등 혜택"],
   "support_programs": [
     {{
@@ -276,6 +307,8 @@ ANALYSIS_PROMPT = """다음 공고문을 분석해 JSON으로만 응답하세요
 - checklist에는 공고문에 명시된 제출 서류만 포함하세요.
 - applicant_kind는 공고가 기업 중심이면 company, 대학 연구자/연구실 중심이면 university_researcher, 연구기관 중심이면 research_institute, 여러 유형이 함께 명시되면 mixed로 두세요.
 - document_sections는 실제 작성 양식 항목이 있으면 그대로 추출하고, 없으면 빈 배열([])로 두세요. doc_type에 맞춰 섹션을 제안하지 마세요.
+- rubric은 공고 원문에 "평가기준", "심사기준", "평가항목", "배점" 표가 실제로 있을 때만 채우세요. 표가 없으면 rubric은 반드시 null입니다. 일반적인 심사 관행을 근거로 배점표를 임의로 만들지 마세요.
+- rubric.criteria의 name은 원문에 실제로 등장하는 항목명이어야 하며, weight 합이 total_weight와 다르면 uncertain_fields에 기록하세요.
 - IRIS/정부 R&D 통합공고에 지원사업 현황표가 있으면 support_programs에 세부사업별로 분리하세요. 월 단위 추진일정을 하나의 확정 제출 마감일로 만들지 마세요.
 - 제목, 기관명, 자격, 제출 방법, 지원금액처럼 중요한 값은 근거가 없으면 "미명시"로 처리하고 uncertain_fields에 남기세요.
 - 모든 source_evidence.quote와 evidence_quotes 항목은 아래 SOURCE_TEXT에 실제로 존재하는 원문 일부여야 합니다.
@@ -449,6 +482,43 @@ def _validated_evidence_quotes(data: dict, source_text: str, evidence: list[dict
     return quotes
 
 
+def _validate_rubric(data: dict, source_text: str) -> None:
+    rubric = data.get("rubric")
+    if not isinstance(rubric, dict):
+        data["rubric"] = None
+        return
+
+    criteria = rubric.get("criteria")
+    if not isinstance(criteria, list) or not criteria:
+        data["rubric"] = None
+        return
+
+    if source_text:
+        grounded = [item for item in criteria if isinstance(item, dict) and _value_in_source(item.get("name", ""), source_text)]
+    else:
+        grounded = [item for item in criteria if isinstance(item, dict)]
+
+    if len(grounded) != len(criteria):
+        _append_uncertain(data, "rubric: 원문 근거가 확인되지 않은 평가항목을 제외했습니다.")
+
+    if not grounded:
+        data["rubric"] = None
+        return
+
+    total_weight = rubric.get("total_weight")
+    if not isinstance(total_weight, int):
+        total_weight = 100
+    weight_sum = sum(int(item.get("weight") or 0) for item in grounded)
+    if weight_sum != total_weight:
+        _append_uncertain(data, f"rubric: 평가항목 배점 합계({weight_sum})가 total_weight({total_weight})와 일치하지 않습니다.")
+
+    data["rubric"] = {
+        "criteria": grounded,
+        "total_weight": total_weight,
+        "source": "notice",
+    }
+
+
 def _validate_result(data: dict, source_text: str = "") -> dict:
     if not isinstance(data, dict):
         raise AnalysisError("AI 분석 응답 형식이 올바르지 않습니다.")
@@ -487,6 +557,7 @@ def _validate_result(data: dict, source_text: str = "") -> dict:
     evidence = _validated_evidence(data, source_text)
     data["source_evidence"] = evidence
     data["evidence_quotes"] = _validated_evidence_quotes(data, source_text, evidence)
+    _validate_rubric(data, source_text)
 
     for key in ("title", "organization", "submission_method"):
         value = str(data.get(key) or "").strip()

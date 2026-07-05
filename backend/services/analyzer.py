@@ -7,6 +7,8 @@ from models.schemas import (
     AnalysisResult,
     ChecklistItem,
     DocumentSection,
+    EvaluationCriterion,
+    EvaluationRubric,
     MissingQuestion,
     SourceEvidence,
     SupportProgram,
@@ -335,6 +337,43 @@ def _derive_missing_questions(
     return questions
 
 
+def _evaluation_rubric(value: Any) -> EvaluationRubric | None:
+    if not isinstance(value, dict):
+        return None
+    raw_criteria = value.get("criteria")
+    if not isinstance(raw_criteria, list) or not raw_criteria:
+        return None
+
+    criteria: list[EvaluationCriterion] = []
+    for item in raw_criteria:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()
+        if not name:
+            continue
+        try:
+            weight = max(0, min(100, int(item.get("weight") or 0)))
+        except (TypeError, ValueError):
+            weight = 0
+        criteria.append(
+            EvaluationCriterion(
+                name=name,
+                weight=weight,
+                description=str(item.get("description") or "").strip(),
+                source_ref=str(item.get("source_ref") or "").strip(),
+            )
+        )
+    if not criteria:
+        return None
+
+    try:
+        total_weight = int(value.get("total_weight") or 100)
+    except (TypeError, ValueError):
+        total_weight = 100
+
+    return EvaluationRubric(criteria=criteria, total_weight=total_weight, source="notice")
+
+
 def build_analysis_result(raw: dict, source_type: str = "pdf", source_name: str | None = None) -> AnalysisResult:
     result_id = str(uuid.uuid4())
 
@@ -449,6 +488,7 @@ def build_analysis_result(raw: dict, source_type: str = "pdf", source_name: str 
         eligibility=_as_list(raw.get("eligibility")),
         submission_method=submission_method,
         evaluation_criteria=_as_list(raw.get("evaluation_criteria")),
+        rubric=_evaluation_rubric(raw.get("rubric")),
         benefits=_as_list(raw.get("benefits")),
         cautions=_as_list(raw.get("cautions")),
         uncertain_fields=uncertain_fields,

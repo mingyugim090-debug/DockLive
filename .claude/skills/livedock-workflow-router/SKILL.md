@@ -21,23 +21,27 @@ LiveDock의 시작점 디스패처입니다. 어떤 입력을 받았는지 먼�
 ### A. Announcement Only
 
 ```text
-livedock-announce-analyze
+livedock-announce-analyze (+livedock-eval-rubric extraction)
   -> livedock-input-collect
-    -> livedock-section-draft
-      -> livedock-export-html
+    -> livedock-section-draft (+livedock-psst-draft, +livedock-official-style)
+      -> livedock-eval-rubric (scoring, optional)
+        -> livedock-export-html
 ```
 
 ### B. Announcement + HWPX/HWP Template
 
 ```text
-livedock-announce-analyze
+livedock-announce-analyze (+livedock-eval-rubric extraction)
   -> livedock-input-collect
-    -> livedock-section-draft
-      -> livedock-hwpx-intake
-        -> livedock-hwpx-content
-          -> livedock-hwpx-export
-            -> livedock-hwpx-validate
+    -> livedock-section-draft (+livedock-psst-draft, +livedock-official-style)
+      -> livedock-eval-rubric (scoring, optional)
+        -> livedock-hwpx-intake
+          -> livedock-hwpx-content
+            -> livedock-hwpx-export
+              -> livedock-hwpx-validate
 ```
+
+`livedock-eval-rubric`'s scoring phase only runs when the notice actually contains a rubric (`AnalysisResult.rubric` is non-null); otherwise skip it silently and continue to export. `livedock-psst-draft` only activates for business-plan-style submissions per its own activation rule — `livedock-section-draft` remains the default drafting skill for everything else. `livedock-official-style` applies to every draft/revise regardless of document type.
 
 If the form is `.hwp`, convert it to `.hwpx` first through the backend HWP conversion path.
 

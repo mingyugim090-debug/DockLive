@@ -80,6 +80,19 @@ export interface SupportProgram {
   source_evidence_ids: string[];
 }
 
+export interface EvaluationCriterion {
+  name: string;
+  weight: number;
+  description: string;
+  source_ref: string;
+}
+
+export interface EvaluationRubric {
+  criteria: EvaluationCriterion[];
+  total_weight: number;
+  source: 'notice';
+}
+
 export interface AnalysisResult {
   id: string;
   source_type: SourceType;
@@ -96,6 +109,7 @@ export interface AnalysisResult {
   eligibility: string[];
   submission_method?: string | null;
   evaluation_criteria: string[];
+  rubric?: EvaluationRubric | null;
   benefits: string[];
   cautions: string[];
   uncertain_fields: string[];
@@ -140,6 +154,8 @@ export interface UserInputField {
   value: string;
 }
 
+export type PsstAxis = 'problem' | 'solution' | 'scaleup' | 'team' | 'none';
+
 export interface DraftSection {
   id: string;
   section_id: string;
@@ -153,6 +169,7 @@ export interface DraftSection {
   needs_confirmation: string[];
   confirmation_required: string[];
   user_feedback: string;
+  psst_axis: PsstAxis;
   updated_at?: string | null;
 }
 
@@ -170,6 +187,22 @@ export interface FinalDocument {
   created_at: string;
 }
 
+export interface RubricCriterionScore {
+  name: string;
+  score: number;
+  max: number;
+  weakness: string;
+  suggestion: string;
+  target_section_id?: string | null;
+}
+
+export interface RubricScore {
+  per_criterion: RubricCriterionScore[];
+  total: number;
+  grounded_only: boolean;
+  scored_at: string;
+}
+
 export interface WorkflowSession {
   id: string;
   analysis: AnalysisResult;
@@ -178,6 +211,7 @@ export interface WorkflowSession {
   status: WorkflowStatus;
   user_inputs: UserInputField[];
   draft_sections: DraftSection[];
+  rubric_score?: RubricScore | null;
   final_document?: FinalDocument | null;
   confirmed_at?: string | null;
   confirmed_items: string[];
@@ -194,6 +228,12 @@ export interface ApiResponse {
 export interface WorkflowResponse {
   success: boolean;
   data: WorkflowSession;
+}
+
+export interface ScoreResponse {
+  success: boolean;
+  data: WorkflowSession;
+  skipped: boolean;
 }
 
 export interface ApiError {

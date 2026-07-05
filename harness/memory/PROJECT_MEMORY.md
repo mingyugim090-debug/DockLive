@@ -36,6 +36,14 @@ source-grounded, and useful for future Codex or Claude Code work.
 - Ver2 agency records must be scoped by `organization_id`; approval comments
   stay tied to specific notice versions, and published state is blocked until
   approved.
+- `docs/product/pivot-plan.md` adds an optional rubric-scoring loop to Ver1's
+  Draft step: extract `EvaluationRubric` only when a notice states one
+  verbatim (never invent one), score confirmed draft sections against it,
+  and let the user revise only the weak sections (capped at 2 rounds) via
+  the existing feedback/revise endpoints. PSST framing and 개조식 official
+  style are applied during drafting for business-plan-style submissions.
+  Rubric-null notices must skip Score entirely with no UI/step regression
+  to the existing 6-step happy path.
 
 ## Harness Decisions
 

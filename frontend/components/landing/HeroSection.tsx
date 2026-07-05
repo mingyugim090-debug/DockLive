@@ -379,6 +379,7 @@ export function HeroSection() {
 
           <p className="mt-5 max-w-[460px] text-base leading-7 text-[#6B7280]">
             PDF, HWPX, URL, 텍스트 공고에서 요구사항과 근거를 정리하고 부족한 정보만 질문합니다. 답변을 바탕으로 섹션별 제출 초안을 만들고 HWPX로 내보냅니다.
+            공고가 근거, 평가기준이 기준입니다.
           </p>
 
           <div className="mt-7 flex flex-col gap-3 sm:flex-row">

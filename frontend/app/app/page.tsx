@@ -16,10 +16,12 @@ import {
   restoreWorkflow,
   saveDraftFeedback,
   saveWorkflowInputs,
+  scoreWorkflow,
 } from '@/lib/api';
 import type { DraftSection, DraftStreamEvent, ExportResponse, WorkflowSession } from '@/lib/types';
 import { Button } from '@/components/ui/Button';
 import { HwpxFormEditor } from '@/components/workspace/HwpxFormEditor';
+import { RubricScoreCard } from '@/components/score/RubricScoreCard';
 
 type AgentStep = 'input' | 'analysis' | 'questions' | 'draft' | 'review' | 'download';
 
@@ -83,6 +85,7 @@ export default function AppPage() {
   const [localEdits, setLocalEdits] = useState<Record<string, string>>({});
   const [revisingSectionId, setRevisingSectionId] = useState<string | null>(null);
   const [activeDelta, setActiveDelta] = useState<string>('');
+  const [scoreReviseCounts, setScoreReviseCounts] = useState<Record<string, number>>({});
   const esRef = useRef<EventSource | null>(null);
 
   // Restore session from localStorage on mount
@@ -221,6 +224,25 @@ export default function AppPage() {
     } finally {
       setRevisingSectionId(null);
     }
+  }
+
+  async function handleScoreWorkflow() {
+    if (!workflow) return;
+    setBusy('score');
+    setError(null);
+    try {
+      const res = await withWorkflowRecovery((wf) => scoreWorkflow(wf.id));
+      setWorkflow(res.data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '평가기준 채점에 실패했습니다.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleReviseWeakSection(sectionId: string, feedback: string) {
+    setScoreReviseCounts((prev) => ({ ...prev, [sectionId]: (prev[sectionId] ?? 0) + 1 }));
+    await handleAiRevise(sectionId, feedback);
   }
 
   function handleStartDraft(workflowId: string, recovered = false) {
@@ -450,6 +472,9 @@ export default function AppPage() {
           busy={busy}
           onBack={() => setStep('draft')}
           onFinalize={handleFinalize}
+          onScore={handleScoreWorkflow}
+          onReviseWeak={handleReviseWeakSection}
+          scoreReviseCounts={scoreReviseCounts}
         />
       ) : null}
 
@@ -1022,6 +1047,9 @@ function ReviewStep({
   busy,
   onBack,
   onFinalize,
+  onScore,
+  onReviseWeak,
+  scoreReviseCounts,
 }: {
   workflow: WorkflowSession;
   localEdits: Record<string, string>;
@@ -1031,6 +1059,9 @@ function ReviewStep({
   busy: string | null;
   onBack: () => void;
   onFinalize: () => void;
+  onScore: () => void;
+  onReviseWeak: (sectionId: string, feedback: string) => void;
+  scoreReviseCounts: Record<string, number>;
 }) {
   return (
     <section className="space-y-5">
@@ -1043,6 +1074,17 @@ function ReviewStep({
           제출 전 문장, 근거, 확인 필요 항목을 살펴보고 필요한 부분만 수정하세요.
         </p>
       </div>
+
+      {workflow.analysis.rubric && (
+        <RubricScoreCard
+          rubric={workflow.analysis.rubric}
+          rubricScore={workflow.rubric_score ?? null}
+          busy={busy === 'score'}
+          onScore={onScore}
+          onReviseWeak={onReviseWeak}
+          reviseCounts={scoreReviseCounts}
+        />
+      )}
 
       {workflow.draft_sections.map((section) => (
         <DraftSectionCard

@@ -473,37 +473,42 @@ def run_one(fixture: dict[str, Any], mode: str, include_hwpx: bool) -> dict[str,
 
 
 def run_agency_recall_fixture(fixture: dict[str, Any]) -> dict[str, Any]:
+    old_mock_mode = settings.MOCK_MODE
+    settings.MOCK_MODE = True
     checks: list[dict[str, Any]] = []
 
     def add(name: str, passed: bool, detail: str = "") -> None:
         checks.append({"name": name, "passed": bool(passed), "detail": detail})
 
-    org_id = str(uuid4())
-    for prior in fixture.get("prior_notices", []):
-        create_prior_notice(AgencyPriorNoticeCreateRequest.model_validate({**prior, "organization_id": org_id}))
-    for prior in fixture.get("other_org_prior_notices", []):
-        create_prior_notice(AgencyPriorNoticeCreateRequest.model_validate(prior))
+    try:
+        org_id = str(uuid4())
+        for prior in fixture.get("prior_notices", []):
+            create_prior_notice(AgencyPriorNoticeCreateRequest.model_validate({**prior, "organization_id": org_id}))
+        for prior in fixture.get("other_org_prior_notices", []):
+            create_prior_notice(AgencyPriorNoticeCreateRequest.model_validate(prior))
 
-    brief = AgencyNoticeBrief.model_validate({**fixture["brief"], "organization_id": org_id})
-    results = recall_prior_notices(AgencyPriorNoticeRecallRequest(organization_id=org_id, brief=brief))
-    expected = fixture["expected"]["prior_notice_recall"]
-    top_title = results[0].title if results else ""
-    add("recall_has_results", bool(results), str(len(results)))
-    add("similar_notice_first", expected["top_title_contains"] in top_title, top_title)
-    forbidden_title = expected.get("must_not_return_title_contains", "")
-    if forbidden_title:
-        all_titles = " | ".join(item.title for item in results)
-        add("cross_org_notice_not_returned", forbidden_title not in all_titles, all_titles)
+        brief = AgencyNoticeBrief.model_validate({**fixture["brief"], "organization_id": org_id})
+        results = recall_prior_notices(AgencyPriorNoticeRecallRequest(organization_id=org_id, brief=brief))
+        expected = fixture["expected"]["prior_notice_recall"]
+        top_title = results[0].title if results else ""
+        add("recall_has_results", bool(results), str(len(results)))
+        add("similar_notice_first", expected["top_title_contains"] in top_title, top_title)
+        forbidden_title = expected.get("must_not_return_title_contains", "")
+        if forbidden_title:
+            all_titles = " | ".join(item.title for item in results)
+            add("cross_org_notice_not_returned", forbidden_title not in all_titles, all_titles)
 
-    passed = sum(1 for check in checks if check["passed"])
-    return {
-        "fixture_id": fixture["id"],
-        "kind": "agency_prior_notice_recall",
-        "score": round(100 * passed / max(1, len(checks)), 1),
-        "passed": passed,
-        "total": len(checks),
-        "checks": checks,
-    }
+        passed = sum(1 for check in checks if check["passed"])
+        return {
+            "fixture_id": fixture["id"],
+            "kind": "agency_prior_notice_recall",
+            "score": round(100 * passed / max(1, len(checks)), 1),
+            "passed": passed,
+            "total": len(checks),
+            "checks": checks,
+        }
+    finally:
+        settings.MOCK_MODE = old_mock_mode
 
 
 def main() -> int:

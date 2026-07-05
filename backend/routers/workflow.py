@@ -12,6 +12,7 @@ from models.schemas import (
     ExportMetadata,
     ExportResponse,
     HwpxPlaceholderMapResponse,
+    ScoreResponse,
     UserInputsRequest,
     WorkflowResponse,
     WorkflowSession,
@@ -32,6 +33,7 @@ from services.drafting_service import (
     update_inputs,
 )
 from services.pdf_export_service import PDF_MEDIA_TYPE, convert_hwpx_bytes_to_pdf
+from services.scoring_service import score_workflow
 from services.source_preserving_export import build_source_preserving_hwpx, is_hwpx_like_source
 from services.workflow_recovery import load_or_recover_workflow
 
@@ -172,6 +174,15 @@ async def revise_draft(workflow_id: str, section_id: str):
     workflow = _load_workflow_or_404(workflow_id)
     workflow = revise_section(workflow, section_id)
     return _save_and_respond(workflow)
+
+
+@router.post("/{workflow_id}/score", response_model=ScoreResponse)
+async def score_draft(workflow_id: str):
+    workflow = _load_workflow_or_404(workflow_id)
+    had_rubric = bool(workflow.analysis.rubric and workflow.analysis.rubric.criteria)
+    workflow = score_workflow(workflow)
+    _save_workflow(workflow)
+    return ScoreResponse(success=True, data=workflow, skipped=not had_rubric)
 
 
 @router.post("/{workflow_id}/confirm", response_model=WorkflowResponse)

@@ -129,7 +129,7 @@ class AgentMvpContractTests(unittest.TestCase):
     def test_fixture_metadata_is_complete(self):
         fixture_dir = ROOT / "docs" / "evaluation" / "fixtures"
         fixtures = sorted(fixture_dir.glob("*.json"))
-        self.assertEqual(len(fixtures), 7)
+        self.assertEqual(len(fixtures), 9)
 
         for path in fixtures:
             data = json.loads(path.read_text(encoding="utf-8"))

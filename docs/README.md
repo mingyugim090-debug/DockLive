@@ -22,6 +22,8 @@ docs/
 
 - [product/product-plan.md](./product/product-plan.md): 제품 비전, Agent MVP 범위, 장기 방향
 - [product/development-plan.md](./product/development-plan.md): 마일스톤 단위 개발 계획
+- [product/current-status-and-roadmap.md](./product/current-status-and-roadmap.md): 현재 구현 상태, 정리된 폴더 구조, 후속 계획
+- [product/pivot-plan.md](./product/pivot-plan.md): 평가기준 채점 루프와 PSST/공식 문체 피벗 계획
 - [product/tasks.md](./product/tasks.md): 현재 작업 백로그와 완료된 작업
 - [product/designs.md](./product/designs.md): UI와 workflow 설계 메모
 - [product/archive/](./product/archive/): 이전 프론트엔드 디자인 참고와 사용하지 않는 랜딩 컴포넌트 보관
@@ -37,6 +39,7 @@ docs/
 ## Agent, Skills, MCP
 
 - [agent/agent-harness.md](./agent/agent-harness.md): Agent harness와 테스트 workflow
+- [agent/codex-claude-workflow.md](./agent/codex-claude-workflow.md): Codex와 Claude Code 협업 루프
 - [agent/skills.md](./agent/skills.md): 문서 자동화 skill 사용 방향
 - [agent/skills-mcp-architecture.md](./agent/skills-mcp-architecture.md): Claude skills와 MCP 구조 정리
 - [../harness/](../harness/): 실행 가능한 하네스 state spec, quality gates, error memory

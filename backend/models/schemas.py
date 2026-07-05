@@ -27,6 +27,7 @@ AgencyClauseStatus = Literal["satisfied", "missing", "needs_confirmation"]
 AgencyApprovalStepStatus = Literal["pending", "active", "approved", "changes_requested", "skipped"]
 AgencyReferenceSourceType = Literal["brief", "guideline", "prior_notice", "template", "manual"]
 AgencyClauseSource = Literal["org_default", "agency_supplied"]
+PsstAxis = Literal["problem", "solution", "scaleup", "team", "none"]
 
 
 def _default_utc_now_iso() -> str:
@@ -72,6 +73,19 @@ class MissingQuestion(BaseModel):
     required_for: str
 
 
+class EvaluationCriterion(BaseModel):
+    name: str
+    weight: int = Field(ge=0, le=100)
+    description: str = ""
+    source_ref: str = ""
+
+
+class EvaluationRubric(BaseModel):
+    criteria: list[EvaluationCriterion] = Field(default_factory=list)
+    total_weight: int = 100
+    source: Literal["notice"] = "notice"
+
+
 class SupportProgram(BaseModel):
     id: str
     parent_program: str = ""
@@ -108,6 +122,7 @@ class AnalysisResult(BaseModel):
     eligibility: list[str] = Field(default_factory=list)
     submission_method: Optional[str] = None
     evaluation_criteria: list[str] = Field(default_factory=list)
+    rubric: Optional[EvaluationRubric] = None
     benefits: list[str] = Field(default_factory=list)
     cautions: list[str] = Field(default_factory=list)
     uncertain_fields: list[str] = Field(default_factory=list)
@@ -115,6 +130,22 @@ class AnalysisResult(BaseModel):
     source_evidence: list[SourceEvidence] = Field(default_factory=list)
     missing_questions: list[MissingQuestion] = Field(default_factory=list)
     support_programs: list[SupportProgram] = Field(default_factory=list)
+
+
+class RubricCriterionScore(BaseModel):
+    name: str
+    score: int = Field(ge=0)
+    max: int = Field(ge=0)
+    weakness: str = ""
+    suggestion: str = ""
+    target_section_id: Optional[str] = None
+
+
+class RubricScore(BaseModel):
+    per_criterion: list[RubricCriterionScore] = Field(default_factory=list)
+    total: int = 0
+    grounded_only: bool = True
+    scored_at: str = Field(default_factory=_default_utc_now_iso)
 
 
 class CompanyProfile(BaseModel):
@@ -193,6 +224,7 @@ class DraftSection(BaseModel):
     needs_confirmation: list[str] = Field(default_factory=list)
     confirmation_required: list[str] = Field(default_factory=list)
     user_feedback: str = ""
+    psst_axis: PsstAxis = "none"
     updated_at: Optional[str] = None
 
 
@@ -226,6 +258,7 @@ class WorkflowSession(BaseModel):
     status: WorkflowStatus = "analyzed"
     user_inputs: list[UserInputField] = Field(default_factory=list)
     draft_sections: list[DraftSection] = Field(default_factory=list)
+    rubric_score: Optional[RubricScore] = None
     final_document: Optional[FinalDocument] = None
     confirmed_at: Optional[str] = None
     confirmed_items: list[str] = Field(default_factory=list)
@@ -241,6 +274,12 @@ class AnalysisResponse(AnalyzeResponse):
 class WorkflowResponse(BaseModel):
     success: bool
     data: WorkflowSession
+
+
+class ScoreResponse(BaseModel):
+    success: bool
+    data: WorkflowSession
+    skipped: bool = False
 
 
 class ExportResponse(BaseModel):

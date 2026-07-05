@@ -181,6 +181,32 @@
         "backend/services/prior_notice_recall.py"
       ],
       "resolved_at": "2026-07-01T07:08:59+00:00"
+    },
+    {
+      "id": "ERR-20260705053157-df9dde82",
+      "fingerprint": "df9dde82f5ccd45a484fd66c",
+      "symptom": "core.errors.AnalysisError: OpenAI API 연결에 실패했습니다. 네트워크 상태를 확인하세요.",
+      "root_cause": "deterministic run_one restored settings.MOCK_MODE to the local environment value before agency prior-notice recall fixtures ran, so a real OPENAI_API_KEY made embed_text call live OpenAI embeddings in the agent harness.",
+      "fix_summary": "Added a contract test proving agency recall fixtures do not call live embeddings and forced run_agency_recall_fixture to use deterministic mock embeddings while restoring the previous setting afterward.",
+      "guard_test": "powershell -ExecutionPolicy Bypass -File .\\scripts\\harness.ps1 -Profile agent -PythonPath C:\\Users\\alseh\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+      "first_seen": "2026-07-05T05:31:57+00:00",
+      "last_seen": "2026-07-05T05:31:57+00:00",
+      "occurrences": 1,
+      "status": "resolved",
+      "last_command": "C:\\Users\\alseh\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe backend/tests/evals/run_fixture_e2e.py --mode deterministic --min-score 80",
+      "last_exit_code": 1,
+      "last_error_line": "core.errors.AnalysisError: OpenAI API 연결에 실패했습니다. 네트워크 상태를 확인하세요.",
+      "last_log_path": "harness\\runs\\20260705-143156-agent\\01-deterministic-fixture-e2e.log",
+      "related_paths": [
+        "backend/tests/evals/run_fixture_e2e.py",
+        "backend\\services\\ai_provider.py",
+        "backend\\tests\\evals\\run_fixture_e2e.py",
+        "backend\\services\\prior_notice_recall.py",
+        "C:\\Users\\alseh\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\Lib\\urllib\\request.py",
+        "C:\\Users\\alseh\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\Lib\\http\\client.py",
+        "C:\\Users\\alseh\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\Lib\\socket.py"
+      ],
+      "resolved_at": "2026-07-05T05:34:27+00:00"
     }
   ]
 }

@@ -1,0 +1,17 @@
+{
+  "id": "rubric_startup_grant",
+  "name": "Startup Grant With Evaluation Rubric",
+  "announcement_text": "2026 초기창업패키지 모집 공고. 주관: 중소벤처기업부. 신청 기간은 2026-04-01부터 2026-04-30까지입니다. 평가기준은 다음과 같습니다. 평가항목: 문제인식(30점), 실현가능성(30점), 성장전략(20점), 팀구성(20점). 총점은 100점이며 서면평가와 발표평가로 진행합니다. 제출 서류는 사업계획서, 참가 신청서입니다.",
+  "expected": {
+    "doc_type": "startup",
+    "title_contains": "초기창업패키지",
+    "organization": "중소벤처기업부",
+    "rubric_criteria_names": ["문제인식", "실현가능성", "성장전략", "팀구성"],
+    "rubric_total_weight": 100
+  },
+  "fail_if": [
+    "평가기준 표에 없는 항목을 rubric.criteria에 추가한다.",
+    "배점표가 있음에도 rubric을 null로 둔다."
+  ],
+  "uncertainty_rule": "평가항목별 배점 합이 total_weight와 다르면 uncertain_fields에 기록하고 항목은 유지한다."
+}
