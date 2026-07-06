@@ -13,3 +13,6 @@ README.md
 .pytest_cache/
 htmlcov/
 .coverage
+.tmp/
+.livedock_storage/
+hwpx_toolchain/.hwp2hwpx-repo/
