@@ -11,6 +11,7 @@ from models.schemas import (
     AgencyNoticeListResponse,
     AgencyNoticeSectionUpdateRequest,
     AgencyNoticeTransitionRequest,
+    AgencySectionAiReviseRequest,
     AgencyPriorNoticeCreateRequest,
     AgencyPriorNoticeRecallRequest,
     AgencyPriorNoticeRecallResponse,
@@ -19,6 +20,9 @@ from models.schemas import (
     ClauseLibraryEntryResponse,
     ClauseLibraryListResponse,
     ExportResponse,
+    IrisNoticeDetailResponse,
+    IrisNoticeListResponse,
+    IrisSaveReferenceRequest,
 )
 from services.agency_clause_library import (
     create_clause_library_entry,
@@ -34,7 +38,9 @@ from services.agency_noticeops import (
     transition_agency_notice,
     update_agency_notice_section,
 )
+from services.agency_section_ai import ai_revise_section
 from services.document_ingestion import ingest_uploaded_document
+from services.iris_ingestion import fetch_iris_notice_detail, fetch_iris_notice_list
 from services.notice_service import export_notice_docx, export_notice_hwpx, export_notice_pdf
 from services.prior_notice_recall import create_prior_notice, recall_prior_notices
 
@@ -94,6 +100,41 @@ async def recall_prior_notice_route(payload: AgencyPriorNoticeRecallRequest):
     return AgencyPriorNoticeRecallResponse(data=recall_prior_notices(payload))
 
 
+@router.get("/iris/notices", response_model=IrisNoticeListResponse)
+async def list_iris_notices(page: int = 1, keyword: str = "", progress: str = "ancmIng"):
+    return IrisNoticeListResponse(data=await fetch_iris_notice_list(page, keyword, progress))
+
+
+@router.get("/iris/notices/{ancm_id}", response_model=IrisNoticeDetailResponse)
+async def get_iris_notice_detail(ancm_id: str, progress: str = "ancmIng"):
+    return IrisNoticeDetailResponse(data=await fetch_iris_notice_detail(ancm_id, progress))
+
+
+@router.post("/iris/notices/{ancm_id}/save-reference", response_model=AgencyPriorNoticeResponse)
+async def save_iris_notice_reference(ancm_id: str, payload: IrisSaveReferenceRequest | None = None):
+    payload = payload or IrisSaveReferenceRequest()
+    detail = await fetch_iris_notice_detail(ancm_id, payload.progress)
+    meta_lines = [
+        line
+        for line in (
+            f"공고번호: {detail.notice_number}" if detail.notice_number else "",
+            f"소관부처: {detail.ministry}" if detail.ministry else "",
+            f"전문기관: {detail.agency}" if detail.agency else "",
+            f"공고일자: {detail.notice_date}" if detail.notice_date else "",
+            f"접수기간: {detail.receipt_period}" if detail.receipt_period else "",
+        )
+        if line
+    ]
+    text = "\n".join([*meta_lines, "", detail.body_text]).strip()
+    request = AgencyPriorNoticeCreateRequest(
+        organization_id=payload.organization_id,
+        title=detail.title or f"IRIS 공고 {ancm_id}",
+        text=text,
+        source_filename=detail.detail_url,
+    )
+    return AgencyPriorNoticeResponse(data=create_prior_notice(request))
+
+
 @router.get("/clause-library", response_model=ClauseLibraryListResponse)
 async def list_clause_library(
     organization_id: str = "00000000-0000-4000-8000-000000000001",
@@ -132,6 +173,12 @@ async def update_section(draft_id: str, section_id: str, payload: AgencyNoticeSe
         payload.actor_id,
     )
     return AgencyNoticeDraftResponse(data=draft)
+
+
+@router.post("/notices/drafts/{draft_id}/sections/{section_id}/ai-revise", response_model=AgencyNoticeDraftResponse)
+async def ai_revise_section_route(draft_id: str, section_id: str, payload: AgencySectionAiReviseRequest | None = None):
+    request = payload or AgencySectionAiReviseRequest()
+    return AgencyNoticeDraftResponse(data=ai_revise_section(draft_id, section_id, request.instruction))
 
 
 @router.post("/notices/drafts/{draft_id}/comments", response_model=AgencyNoticeDraftResponse)

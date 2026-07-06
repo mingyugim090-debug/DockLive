@@ -778,6 +778,10 @@ class AgencyNoticeSectionUpdateRequest(BaseModel):
     actor_id: str = "demo-user"
 
 
+class AgencySectionAiReviseRequest(BaseModel):
+    instruction: str = ""
+
+
 class AgencyNoticeTransitionRequest(BaseModel):
     actor_id: str = "demo-user"
     note: str = ""
@@ -889,6 +893,65 @@ class AgencyPriorNoticeRecallItem(BaseModel):
 class AgencyPriorNoticeRecallResponse(BaseModel):
     success: bool = True
     data: list[AgencyPriorNoticeRecallItem] = Field(default_factory=list)
+
+
+class IrisNoticeItem(BaseModel):
+    ancm_id: str
+    title: str = ""
+    ministry: str = ""
+    agency: str = ""
+    notice_number: str = ""
+    notice_date: str = ""
+    status: str = ""
+    competition_type: str = ""
+    receipt_start: str = ""
+    receipt_end: str = ""
+    d_day: str = ""
+    detail_url: str = ""
+
+
+class IrisNoticeListResult(BaseModel):
+    items: list[IrisNoticeItem] = Field(default_factory=list)
+    page: int = 1
+    total_pages: int = 0
+    total_count: int = 0
+    has_more: bool = False
+
+
+class IrisNoticeListResponse(BaseModel):
+    success: bool = True
+    data: IrisNoticeListResult
+
+
+class IrisNoticeAttachment(BaseModel):
+    filename: str
+    download_url: str = ""
+    size_bytes: int = 0
+
+
+class IrisNoticeDetail(BaseModel):
+    ancm_id: str
+    title: str = ""
+    ministry: str = ""
+    agency: str = ""
+    notice_number: str = ""
+    notice_date: str = ""
+    receipt_period: str = ""
+    contact: str = ""
+    body_text: str = ""
+    attachments: list[IrisNoticeAttachment] = Field(default_factory=list)
+    detail_available: bool = False
+    detail_url: str = ""
+
+
+class IrisNoticeDetailResponse(BaseModel):
+    success: bool = True
+    data: IrisNoticeDetail
+
+
+class IrisSaveReferenceRequest(BaseModel):
+    organization_id: str = "00000000-0000-4000-8000-000000000001"
+    progress: str = "ancmIng"
 
 
 def utc_now_iso() -> str:

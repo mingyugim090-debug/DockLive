@@ -154,6 +154,17 @@ contracts:
       - keep_comments_tied_to_specific_version
       - keep_audit_events_append_only
       - keep_every_row_scoped_by_organization_id
+  iris_discovery:
+    must:
+      - fetch_on_demand_only_with_ttl_cache
+      - surface_parsed_fields_only
+      - show_explicit_error_when_fetch_fails
+      - keep_tests_offline_with_fixtures
+    forbidden:
+      - fabricated_notices_or_fields
+      - inferred_deadlines_or_amounts
+      - login_automation
+      - background_bulk_crawling
 
 api_boundaries:
   backend:
@@ -194,7 +205,7 @@ non_goals:
   - team_recruiting
   - social_profiles
   - speculative_notice_completion
-  - iris_live_crawling_or_login_automation_for_harness_v1
+  - iris_login_automation_and_bulk_background_crawling
   - native_hwpx_chart_objects_for_v1
   - live_publishing_platform_integration_for_v2
   - government_identity_provider_integration_for_v2

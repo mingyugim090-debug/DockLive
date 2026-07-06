@@ -1,5 +1,5 @@
-import { AgencyControlRoom } from '@/components/agency/AgencyControlRoom';
+import { AgencyStudio } from '@/components/agency/AgencyStudio';
 
 export default function AgencyPage() {
-  return <AgencyControlRoom />;
+  return <AgencyStudio />;
 }

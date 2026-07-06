@@ -482,6 +482,60 @@ export interface AgencyPriorNoticeRecallResponse {
   data: AgencyPriorNoticeRecallItem[];
 }
 
+export interface IrisNoticeItem {
+  ancm_id: string;
+  title: string;
+  ministry: string;
+  agency: string;
+  notice_number: string;
+  notice_date: string;
+  status: string;
+  competition_type: string;
+  receipt_start: string;
+  receipt_end: string;
+  d_day: string;
+  detail_url: string;
+}
+
+export interface IrisNoticeListResult {
+  items: IrisNoticeItem[];
+  page: number;
+  total_pages: number;
+  total_count: number;
+  has_more: boolean;
+}
+
+export interface IrisNoticeListResponse {
+  success: boolean;
+  data: IrisNoticeListResult;
+}
+
+export interface IrisNoticeAttachment {
+  filename: string;
+  download_url: string;
+  size_bytes: number;
+}
+
+export interface IrisNoticeDetail {
+  ancm_id: string;
+  title: string;
+  ministry: string;
+  agency: string;
+  notice_number: string;
+  notice_date: string;
+  receipt_period: string;
+  contact: string;
+  body_text: string;
+  attachments: IrisNoticeAttachment[];
+  detail_available: boolean;
+  detail_url: string;
+}
+
+export interface IrisNoticeDetailResponse {
+  success: boolean;
+  data: IrisNoticeDetail;
+}
+
 export interface HwpxPlaceholderMapResponse {
   success: boolean;
   export_job_id: string;

@@ -21,6 +21,8 @@ import type {
   HwpxPlaceholderMapResponse,
   HwpxStatusResponse,
   HwpxTemplateAnalysisResponse,
+  IrisNoticeDetailResponse,
+  IrisNoticeListResponse,
   WorkflowSession,
   WorkflowResponse,
   ScoreResponse,
@@ -552,6 +554,51 @@ export async function recallAgencyPriorNotices(brief: AgencyNoticeBrief): Promis
     body: JSON.stringify({ organization_id: brief.organization_id, brief, limit: 5 }),
   });
   if (!res.ok) throw await readError(res, `유사 과거 공고 검색 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function aiReviseAgencyNoticeSection(
+  draftId: string,
+  sectionId: string,
+  instruction = '',
+): Promise<AgencyNoticeDraftResponse> {
+  const res = await fetch(
+    `${API_URL}/api/agency/notices/drafts/${encodeURIComponent(draftId)}/sections/${encodeURIComponent(sectionId)}/ai-revise`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ instruction }),
+    },
+  );
+  if (!res.ok) throw await readError(res, `AI 다듬기 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function listIrisNotices(page = 1, keyword = '', progress = 'ancmIng'): Promise<IrisNoticeListResponse> {
+  const params = new URLSearchParams({ page: String(page), keyword, progress });
+  const res = await fetch(`${API_URL}/api/agency/iris/notices?${params.toString()}`);
+  if (!res.ok) throw await readError(res, `IRIS 공고 목록 조회 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function getIrisNoticeDetail(ancmId: string, progress = 'ancmIng'): Promise<IrisNoticeDetailResponse> {
+  const params = new URLSearchParams({ progress });
+  const res = await fetch(`${API_URL}/api/agency/iris/notices/${encodeURIComponent(ancmId)}?${params.toString()}`);
+  if (!res.ok) throw await readError(res, `IRIS 공고 상세 조회 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function saveIrisNoticeAsReference(
+  ancmId: string,
+  organizationId = '00000000-0000-4000-8000-000000000001',
+  progress = 'ancmIng',
+): Promise<AgencyPriorNoticeResponse> {
+  const res = await fetch(`${API_URL}/api/agency/iris/notices/${encodeURIComponent(ancmId)}/save-reference`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ organization_id: organizationId, progress }),
+  });
+  if (!res.ok) throw await readError(res, `참고자료 저장 실패: ${res.status}`);
   return res.json();
 }
 

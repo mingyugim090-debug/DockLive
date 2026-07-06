@@ -44,6 +44,19 @@ source-grounded, and useful for future Codex or Claude Code work.
   style are applied during drafting for business-plan-style submissions.
   Rubric-null notices must skip Score entirely with no UI/step regression
   to the existing 6-step happy path.
+- Ver2 Agency UX was rebuilt as a 5-stage "공고 스튜디오" (discover → brief →
+  edit → review → export) replacing the single-screen control room. IRIS
+  notice discovery is allowed as on-demand fetch only (`iris_ingestion.py`:
+  IRIS's own JSON list endpoint + server-rendered detail HTML, 15-min TTL
+  cache, no login automation, no background crawling — see
+  `contracts.iris_discovery` in state-spec). Parsed fields only; fetch
+  failures surface as explicit errors, tests stay offline with fixtures.
+- The document editor renders an A4 paper page driven by
+  `DocumentStyleProfile` CSS vars (pattern revived from the orphaned
+  `NoticeWebEditor.tsx`); sections are click-to-edit in place and every save
+  goes through the existing versioned `update_agency_notice_section`. AI
+  section revise (`agency_section_ai.py`) may only rephrase existing content
+  — mock mode is whitespace-normalization only, asserted by contract test.
 
 ## Harness Decisions
 
