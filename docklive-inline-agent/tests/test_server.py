@@ -64,6 +64,36 @@ def test_build_request_auto_routes_hwpx_from_target_extension():
     assert "Use export_hwpx_session" in built.request
 
 
+def test_build_request_prefers_target_file_for_auto_route():
+    built = server._build_request(
+        {
+            "mode": "auto",
+            "request": "Fill the target form from spreadsheet data",
+            "file": r"C:\work\data.xlsx",
+            "target_file": r"C:\work\form.hwpx",
+            "source_files": [r"C:\work\data.xlsx"],
+            "output_dir": r"C:\work\done",
+        }
+    )
+
+    assert built.mode == "hwpx"
+    assert built.target_file == r"C:\work\form.hwpx"
+
+
+def test_build_request_auto_routes_hwpx_from_source_files():
+    built = server._build_request(
+        {
+            "mode": "auto",
+            "request": "Prepare the workbook using the uploaded form",
+            "file": r"C:\work\data.xlsx",
+            "source_files": [r"C:\work\form.hwp"],
+            "output_dir": r"C:\work\done",
+        }
+    )
+
+    assert built.mode == "hwpx"
+
+
 def test_build_request_rejects_missing_output_dir():
     with pytest.raises(ValueError, match="output_dir"):
         server._build_request({"mode": "auto", "request": "make report", "file": "x.xlsx"})
@@ -117,3 +147,19 @@ def test_ws_agent_exception_becomes_error_event(monkeypatch, client):
         event = ws.receive_json()
     assert event["type"] == "error"
     assert "OPENAI_API_KEY" in event["message"]
+
+
+def test_ws_agent_value_error_streams_message_only(monkeypatch, client):
+    async def invalid_request(user_request, context=""):
+        raise ValueError("missing workbook path")
+        yield
+
+    monkeypatch.setattr(server, "run_agent", invalid_request)
+
+    with client.websocket_connect("/ws/agent") as ws:
+        ws.send_json({"request": "make workbook", "file": "x.xlsx", "output_dir": "C:/out"})
+        assert ws.receive_json()["type"] == "run_started"
+        assert ws.receive_json() == {"type": "mode_selected", "mode": "excel"}
+        event = ws.receive_json()
+
+    assert event == {"type": "error", "message": "missing workbook path"}

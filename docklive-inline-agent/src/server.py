@@ -63,7 +63,7 @@ def _select_mode(payload: dict) -> str:
     if requested != "auto":
         raise ValueError("mode must be auto, excel, or hwpx")
 
-    target = str(payload.get("file") or payload.get("target_file") or "")
+    target = str(payload.get("target_file") or payload.get("file") or "")
     suffixes = [_suffix(target)]
     suffixes.extend(_suffix(path) for path in payload.get("source_files") or [])
 
@@ -90,6 +90,12 @@ def _coerce_open_result(value: object) -> bool:
     if value is None:
         return True
     return str(value).strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _error_message(exc: Exception) -> str:
+    if isinstance(exc, ValueError):
+        return str(exc)
+    return f"{type(exc).__name__}: {exc}"
 
 
 def _build_context(
@@ -189,7 +195,7 @@ async def _stream_callback_agent(user_request: str, context: str):
         try:
             run_agent(user_request, context=context, on_event=on_event)
         except Exception as exc:  # 에이전트 실패도 이벤트로 전달 (연결은 유지)
-            on_event({"type": "error", "message": f"{type(exc).__name__}: {exc}"})
+            on_event({"type": "error", "message": _error_message(exc)})
         finally:
             finish()
 
@@ -258,7 +264,7 @@ async def agent_ws(websocket: WebSocket) -> None:
     except WebSocketDisconnect:
         disconnected = True
     except Exception as exc:
-        await websocket.send_json({"type": "error", "message": f"{type(exc).__name__}: {exc}"})
+        await websocket.send_json({"type": "error", "message": _error_message(exc)})
     else:
         await websocket.send_json({"type": "done"})
     finally:
