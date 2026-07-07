@@ -6,7 +6,9 @@ Inline AI 벤치마킹: 파일 업로드 → 자연어 요청 → 실제 Excel �
 1. 이 폴더를 열고 `claude` 실행 (Claude Code가 CLAUDE.md, hooks, skills를 자동 로드)
 2. 첫 프롬프트 예시: "TASKS.md Phase 1부터 시작해줘. excel-com-automation 스킬 규약을 따라서."
 3. `pip install -r requirements.txt`
-4. E2E: `set ANTHROPIC_API_KEY=...` 후 `python src/cli.py --file 양식.xlsx --request "..."`
+4. E2E: `OPENAI_API_KEY` 설정 (미설정 시 `backend/.env`에서 자동 탐색) 후
+   `python src/cli.py --file 양식.xlsx --request "..."`
+5. 트레이 상주: `python src/tray.py` — 로컬 서버(127.0.0.1:8765)를 백그라운드로 켠 채 트레이에 상주
 
 ## 구조
 - `CLAUDE.md` — 프로젝트 헌법 (아키텍처, 불변 규칙)

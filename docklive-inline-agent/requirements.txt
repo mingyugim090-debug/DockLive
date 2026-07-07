@@ -1,4 +1,6 @@
-anthropic>=0.40
+openai>=1.40
+pystray>=0.19
+pillow>=10
 xlwings>=0.31; sys_platform == "win32"
 pywin32>=306; sys_platform == "win32"
 pytest>=8

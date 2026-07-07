@@ -49,11 +49,11 @@ def test_ws_rejects_empty_request():
 
 def test_ws_agent_exception_becomes_error_event(monkeypatch):
     def boom(user_request, context="", on_event=None):
-        raise RuntimeError("ANTHROPIC_API_KEY 미설정")
+        raise RuntimeError("OPENAI_API_KEY 미설정")
 
     monkeypatch.setattr(server, "run_agent", boom)
     with client.websocket_connect("/ws") as ws:
         ws.send_json({"request": "아무거나"})
         event = ws.receive_json()
     assert event["type"] == "error"
-    assert "ANTHROPIC_API_KEY" in event["text"]
+    assert "OPENAI_API_KEY" in event["text"]

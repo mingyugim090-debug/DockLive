@@ -149,3 +149,16 @@ TOOLS: list[dict] = [
         },
     },
 ]
+
+# OpenAI Chat Completions tool 형식 (loop.py에서 사용). TOOLS가 원본 — 여기서 자동 변환만.
+OPENAI_TOOLS: list[dict] = [
+    {
+        "type": "function",
+        "function": {
+            "name": tool["name"],
+            "description": tool["description"],
+            "parameters": tool["input_schema"],
+        },
+    }
+    for tool in TOOLS
+]

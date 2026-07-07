@@ -19,6 +19,7 @@ import type { DocumentWorkspace, InlineTransformCommand, WorkspaceArtifact, Work
 import { BlueprintPanel } from './BlueprintPanel';
 import { DocumentCanvas } from './DocumentCanvas';
 import { ExportBar } from './ExportBar';
+import { LocalAgentPanel } from './LocalAgentPanel';
 import { WorkspaceUploader } from './WorkspaceUploader';
 
 const STEPS: { key: WorkspaceStatus[]; label: string }[] = [
@@ -419,6 +420,7 @@ export function ProjectWorkspace() {
 
         <aside className="w-[280px] shrink-0 space-y-4 overflow-y-auto border-l border-[#DDE7E2] bg-white px-4 py-4">
           <ArtifactPanel artifacts={artifacts} busy={busy} onOpen={handleOpenArtifact} onSync={handleSyncArtifact} />
+          <LocalAgentPanel />
           <WorkspaceLog logs={logs} />
           {workspace.analysis ? (
             <section data-testid="analysis-summary">

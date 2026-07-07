@@ -10,10 +10,10 @@
 
 ### 2. 에이전트 코어 (`src/agent/loop.py`)
 - 입력: 사용자 요청 + 파싱된 문서 컨텍스트 + tool schema
-- 처리: Claude API messages 루프
-  - `stop_reason == "tool_use"` → 각 tool_use 블록을 dispatcher에 전달
-  - 결과를 `tool_result` 블록(user 롤)으로 append 후 재호출
-  - `stop_reason == "end_turn"` → 최종 텍스트 반환
+- 처리: OpenAI Chat Completions tool 호출 루프
+  - `message.tool_calls`가 있으면 → 각 tool call을 dispatcher에 전달
+  - 결과를 `role="tool"` 메시지로 append 후 재호출 (실패는 `[TOOL ERROR]` 접두어)
+  - tool call이 없으면 → 최종 텍스트 반환
 - 가드: `MAX_ITERATIONS = 25`. 초과 시 중단하고 사용자에게 상황 보고.
 - 상태: 대화 히스토리는 이 프로세스의 메모리에만 존재 (매 호출 전체 전송)
 
@@ -32,7 +32,7 @@
 ## 메시지 흐름 (한 턴)
 
 ```
-user request ─→ loop.py ─→ Claude API
+user request ─→ loop.py ─→ OpenAI API
                               │ tool_use: write_range(sheet="견적", range="B5:D7", values=[...])
                               ▼
                         dispatcher.execute()
@@ -41,7 +41,7 @@ user request ─→ loop.py ─→ Claude API
                         Excel 창에 즉시 반영 (사용자가 봄)
                               │ {"ok": true, "data": "3x3 written"}
                               ▼
-                        tool_result ─→ Claude API ─→ (반복 또는 end_turn)
+                        tool 메시지 ─→ OpenAI API ─→ (반복 또는 최종 답변)
 ```
 
 ## 실패 처리 원칙

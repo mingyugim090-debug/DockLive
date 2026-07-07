@@ -1,20 +1,41 @@
-"""에이전트 코어: Claude API tool_use 루프. 규약은 anthropic-tool-use-loop 스킬 참조."""
+"""에이전트 코어: OpenAI Chat Completions tool 호출 루프."""
 from __future__ import annotations
 
+import json
 import os
+from pathlib import Path
 from typing import Callable
 
-import anthropic
+import openai
 
 from agent.prompts import SYSTEM_PROMPT
 from executor import dispatcher
-from tools.schemas import TOOLS
+from tools.schemas import OPENAI_TOOLS
 
-MODEL = os.environ.get("AGENT_MODEL", "claude-sonnet-4-6")
+MODEL = os.environ.get("AGENT_MODEL", "gpt-4o")
 MAX_ITERATIONS = 25
-MAX_TOKENS = 4096
 
 EventCallback = Callable[[dict], None]
+
+# OPENAI_API_KEY 탐색 순서: 환경변수 → 이 저장소 .env → DockLive 백엔드 .env (키 공유)
+_ENV_FILES = [
+    Path(__file__).resolve().parents[2] / ".env",
+    Path(__file__).resolve().parents[3] / "backend" / ".env",
+]
+
+
+def _ensure_api_key() -> None:
+    """OPENAI_API_KEY가 환경에 없으면 .env 파일에서 찾아 주입한다."""
+    if os.environ.get("OPENAI_API_KEY"):
+        return
+    for env_file in _ENV_FILES:
+        if not env_file.is_file():
+            continue
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            key, _, value = line.partition("=")
+            if key.strip() == "OPENAI_API_KEY" and value.strip():
+                os.environ["OPENAI_API_KEY"] = value.strip().strip('"').strip("'")
+                return
 
 
 def _print_event(event: dict) -> None:
@@ -31,40 +52,60 @@ def run_agent(user_request: str, context: str = "", on_event: EventCallback | No
     on_event로 도구 호출/결과 이벤트를 실시간 전달한다 (CLI 로그, WebSocket 스트리밍 공용).
     """
     emit = on_event or _print_event
-    client = anthropic.Anthropic()  # ANTHROPIC_API_KEY 환경변수 사용
+    _ensure_api_key()
+    client = openai.OpenAI()  # OPENAI_API_KEY 환경변수 사용
 
     initial = user_request if not context else f"<참고자료>\n{context}\n</참고자료>\n\n{user_request}"
-    messages: list[dict] = [{"role": "user", "content": initial}]
+    messages: list[dict] = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": initial},
+    ]
 
     for iteration in range(MAX_ITERATIONS):
-        resp = client.messages.create(
+        resp = client.chat.completions.create(
             model=MODEL,
-            system=SYSTEM_PROMPT,
-            tools=TOOLS,
-            max_tokens=MAX_TOKENS,
             messages=messages,
+            tools=OPENAI_TOOLS,
         )
-        messages.append({"role": "assistant", "content": resp.content})
+        msg = resp.choices[0].message
+        tool_calls = msg.tool_calls or []
 
-        if resp.stop_reason != "tool_use":
-            final = "".join(b.text for b in resp.content if b.type == "text")
+        if not tool_calls:
+            final = msg.content or ""
             emit({"type": "done", "text": final, "iterations": iteration + 1})
             return final
 
-        results = []
-        for block in resp.content:
-            if block.type != "tool_use":
-                continue
-            emit({"type": "tool_call", "name": block.name, "input": block.input})
-            out = dispatcher.execute(block.name, block.input)
-            emit({"type": "tool_result", "name": block.name, "ok": out.ok, "output": out.text})
-            results.append({
-                "type": "tool_result",
-                "tool_use_id": block.id,
-                "content": out.text,
-                "is_error": not out.ok,
-            })
-        messages.append({"role": "user", "content": results})
+        messages.append({
+            "role": "assistant",
+            "content": msg.content,
+            "tool_calls": [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+                }
+                for tc in tool_calls
+            ],
+        })
+
+        for tc in tool_calls:
+            name = tc.function.name
+            try:
+                tool_input = json.loads(tc.function.arguments or "{}")
+                parse_error = ""
+            except json.JSONDecodeError as e:
+                tool_input, parse_error = {}, f"도구 인자 JSON 파싱 실패: {e}"
+
+            emit({"type": "tool_call", "name": name, "input": tool_input})
+            if parse_error:
+                ok, text = False, parse_error
+            else:
+                out = dispatcher.execute(name, tool_input)
+                ok, text = out.ok, out.text
+            emit({"type": "tool_result", "name": name, "ok": ok, "output": text})
+            # OpenAI tool 메시지에는 is_error 플래그가 없어 접두어로 실패를 명시한다.
+            content = text if ok else f"[TOOL ERROR] {text}"
+            messages.append({"role": "tool", "tool_call_id": tc.id, "content": content})
 
     final = f"최대 반복({MAX_ITERATIONS})에 도달하여 중단. 지금까지의 도구 호출 로그를 확인하세요."
     emit({"type": "max_iterations", "text": final})
