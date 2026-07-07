@@ -25,6 +25,9 @@ This file captures stable preferences from the product owner.
 - Codex and Claude Code will be used together.
 - Codex should create tests, inspect context, run quality gates, and verify
   Claude Code's output.
+- After development work is verified, Codex should complete the branch by
+  committing, pushing, and deploying through InsForge when the project has a
+  valid deploy target and credentials.
 - Claude Code can perform broader implementation, but its work is not accepted
   until Codex runs the relevant harness profile.
 - Gemini-style QA or planning prompts should become tests, fixtures, contracts,
