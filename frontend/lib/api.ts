@@ -30,6 +30,8 @@ import type {
   GeneratedDocumentResponse,
   InlineTransformCommand,
   VisualBlockResponse,
+  WorkbookPlanResponse,
+  WorkspaceArtifactResponse,
 } from './types';
 
 function resolveApiUrl(): string {
@@ -797,6 +799,41 @@ export async function transformWorkspaceBlock(
     body: JSON.stringify({ command, instruction }),
   });
   if (!res.ok) throw await readError(res, `블록 변환 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function planWorkspaceExcelArtifact(workspaceId: string): Promise<WorkbookPlanResponse> {
+  const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/artifacts/excel/plan`, { method: 'POST' });
+  if (!res.ok) throw await readError(res, `Excel 계획 생성 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function generateWorkspaceExcelArtifact(workspaceId: string): Promise<WorkspaceArtifactResponse> {
+  const res = await fetchWithTimeout(
+    `${API_URL}/api/workspaces/${workspaceId}/artifacts/excel/generate`,
+    { method: 'POST' },
+    120000,
+    'Excel 파일 생성 응답이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.',
+  );
+  if (!res.ok) throw await readError(res, `Excel 파일 생성 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function openWorkspaceArtifact(
+  workspaceId: string,
+  artifactId: string,
+): Promise<WorkspaceArtifactResponse> {
+  const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/artifacts/${artifactId}/open`, { method: 'POST' });
+  if (!res.ok) throw await readError(res, `산출물 열기 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function syncWorkspaceArtifact(
+  workspaceId: string,
+  artifactId: string,
+): Promise<WorkspaceArtifactResponse> {
+  const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/artifacts/${artifactId}/sync`, { method: 'POST' });
+  if (!res.ok) throw await readError(res, `산출물 동기화 실패: ${res.status}`);
   return res.json();
 }
 

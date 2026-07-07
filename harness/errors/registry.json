@@ -207,6 +207,28 @@
         "C:\\Users\\alseh\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\Lib\\socket.py"
       ],
       "resolved_at": "2026-07-05T05:34:27+00:00"
+    },
+    {
+      "id": "ERR-20260707014447-4780183f",
+      "fingerprint": "4780183fb620c1f77c0e3034",
+      "symptom": "[Error: EBUSY: resource busy or locked, unlink 'C:\\Users\\alseh\\OneDrive\\바탕 화면\\LiveDock\\frontend\\.next\\server\\pages\\_document.js.nft.json'] {",
+      "root_cause": "Transient Windows/OneDrive file lock on a Next.js build artifact while clean-next attempted to remove frontend/.next before rebuild.",
+      "fix_summary": "Re-ran the full harness after the lock cleared; backend contracts, deterministic fixture E2E, frontend tests, and frontend build passed.",
+      "guard_test": "powershell -ExecutionPolicy Bypass -File .\\scripts\\harness.ps1 -Profile full -PythonPath C:\\Users\\alseh\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+      "first_seen": "2026-07-07T01:44:47+00:00",
+      "last_seen": "2026-07-07T01:44:47+00:00",
+      "occurrences": 1,
+      "status": "resolved",
+      "last_command": "npm.cmd run build",
+      "last_exit_code": 1,
+      "last_error_line": "[Error: EBUSY: resource busy or locked, unlink 'C:\\Users\\alseh\\OneDrive\\바탕 화면\\LiveDock\\frontend\\.next\\server\\pages\\_document.js.nft.json'] {",
+      "last_log_path": "harness\\runs\\20260707-104432-full\\05-frontend-build.log",
+      "related_paths": [
+        "scripts/clean-next.mjs",
+        "frontend\\.next\\server\\pages\\_document.js.nft.json",
+        "frontend\\\\.next\\\\server\\\\pages\\\\_document.js.nft.json"
+      ],
+      "resolved_at": "2026-07-07T01:45:36+00:00"
     }
   ]
 }

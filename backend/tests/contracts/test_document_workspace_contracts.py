@@ -25,6 +25,10 @@ try:
     from services.mock_data import get_mock_result  # noqa: E402
     from services.spreadsheet_ingestion import parse_spreadsheet  # noqa: E402
     from services.workspace_export import render_html, render_markdown  # noqa: E402
+    try:
+        from services import excel_artifacts  # noqa: E402
+    except (ImportError, ModuleNotFoundError):
+        excel_artifacts = None
 except ModuleNotFoundError as exc:  # pragma: no cover - local minimal Python fallback
     if exc.name not in {"pydantic", "httpx", "fitz"}:
         raise
@@ -291,6 +295,66 @@ class ExportContractTests(unittest.TestCase):
         self.assertIn("42000000", table_texts)
         # Chart blocks appear as fallback tables, so at least two tables exist.
         self.assertGreaterEqual(len(parsed.tables), 2)
+
+
+class ExcelArtifactContractTests(unittest.TestCase):
+    def setUp(self):
+        if workspace_service is None:
+            self.skipTest("backend dependencies are not installed in this Python environment")
+        if excel_artifacts is None:
+            self.fail("services.excel_artifacts module is required for Excel artifact generation")
+
+    def test_workbook_plan_uses_source_refs_and_marks_missing_fields(self):
+        workspace = _demo_workspace()
+        plan = excel_artifacts.build_workbook_plan(workspace)
+
+        self.assertEqual(plan.artifact_kind, "excel")
+        self.assertEqual(
+            [sheet.name for sheet in plan.sheets],
+            ["\ub300\uc2dc\ubcf4\ub4dc", "\uc81c\ucd9c\uc11c\ub958", "\ucc28\ud2b8", "\uc6d0\ubb38\uadfc\uac70"],
+        )
+        table_refs = [table.source_ref for sheet in plan.sheets for table in sheet.tables]
+        self.assertTrue(table_refs)
+        self.assertTrue(all(ref for ref in table_refs))
+        self.assertTrue(plan.confirmation_required)
+        self.assertTrue(any("source" in item.lower() or "\uadfc\uac70" in item for item in plan.confirmation_required))
+
+    def test_generate_excel_artifact_creates_xlsx_dashboard_with_chart(self):
+        try:
+            import openpyxl
+        except ImportError:
+            self.skipTest("openpyxl is not installed in this Python environment")
+
+        workspace = _demo_workspace()
+        artifact = excel_artifacts.generate_excel_artifact(workspace)
+        reloaded = workspace_service.get_workspace(workspace.id)
+
+        self.assertEqual(artifact.kind, "excel")
+        self.assertTrue(artifact.filename.endswith(".xlsx"))
+        self.assertTrue(artifact.storage_path)
+        self.assertEqual(reloaded.artifacts[0].id, artifact.id)
+
+        workbook = openpyxl.load_workbook(artifact.storage_path)
+        try:
+            self.assertEqual(
+                workbook.sheetnames,
+                ["\ub300\uc2dc\ubcf4\ub4dc", "\uc81c\ucd9c\uc11c\ub958", "\ucc28\ud2b8", "\uc6d0\ubb38\uadfc\uac70"],
+            )
+            dashboard = workbook["\ub300\uc2dc\ubcf4\ub4dc"]
+            self.assertEqual(dashboard["A1"].value, workspace.analysis.title)
+            self.assertTrue(workbook["\ucc28\ud2b8"]._charts)
+        finally:
+            workbook.close()
+
+    def test_sync_excel_artifact_records_user_edit_snapshot(self):
+        workspace = _demo_workspace()
+        artifact = excel_artifacts.generate_excel_artifact(workspace)
+
+        synced = excel_artifacts.sync_excel_artifact(workspace.id, artifact.id)
+
+        self.assertEqual(synced.sync_state.status, "synced")
+        self.assertTrue(synced.sync_state.snapshot)
+        self.assertEqual(synced.sync_state.snapshot["source"], "user_edit")
 
 
 if __name__ == "__main__":

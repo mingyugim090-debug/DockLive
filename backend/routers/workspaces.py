@@ -9,13 +9,22 @@ from models.schemas import (
     GeneratedDocumentResponse,
     InlineTransformRequest,
     VisualBlockResponse,
+    WorkbookPlanResponse,
     WorkspaceAnalyzeRequest,
+    WorkspaceArtifactResponse,
     WorkspaceCreateRequest,
 )
 from services import workspace_service
 from services.analyzer import build_analysis_result
 from services.block_transforms import apply_transform
 from services.blueprint_service import build_blueprint, generate_document
+from services.excel_artifacts import (
+    build_workbook_plan,
+    generate_excel_artifact,
+    get_artifact,
+    open_excel_artifact,
+    sync_excel_artifact,
+)
 from services.mock_data import get_mock_result
 from services.workspace_export import (
     export_docx,
@@ -109,6 +118,33 @@ async def build_workspace_blueprint(workspace_id: str):
 async def generate_workspace_document(workspace_id: str):
     workspace = workspace_service.get_workspace(workspace_id)
     return GeneratedDocumentResponse(data=generate_document(workspace))
+
+
+@router.post("/{workspace_id}/artifacts/excel/plan", response_model=WorkbookPlanResponse)
+async def plan_workspace_excel_artifact(workspace_id: str):
+    workspace = workspace_service.get_workspace(workspace_id)
+    return WorkbookPlanResponse(data=build_workbook_plan(workspace))
+
+
+@router.post("/{workspace_id}/artifacts/excel/generate", response_model=WorkspaceArtifactResponse)
+async def generate_workspace_excel_artifact(workspace_id: str):
+    workspace = workspace_service.get_workspace(workspace_id)
+    return WorkspaceArtifactResponse(data=generate_excel_artifact(workspace))
+
+
+@router.get("/{workspace_id}/artifacts/{artifact_id}", response_model=WorkspaceArtifactResponse)
+async def get_workspace_artifact(workspace_id: str, artifact_id: str):
+    return WorkspaceArtifactResponse(data=get_artifact(workspace_id, artifact_id))
+
+
+@router.post("/{workspace_id}/artifacts/{artifact_id}/open", response_model=WorkspaceArtifactResponse)
+async def open_workspace_artifact(workspace_id: str, artifact_id: str):
+    return WorkspaceArtifactResponse(data=open_excel_artifact(workspace_id, artifact_id))
+
+
+@router.post("/{workspace_id}/artifacts/{artifact_id}/sync", response_model=WorkspaceArtifactResponse)
+async def sync_workspace_artifact(workspace_id: str, artifact_id: str):
+    return WorkspaceArtifactResponse(data=sync_excel_artifact(workspace_id, artifact_id))
 
 
 @router.post("/{workspace_id}/blocks/{block_id}/transform", response_model=VisualBlockResponse)

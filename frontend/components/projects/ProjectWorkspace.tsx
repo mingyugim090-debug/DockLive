@@ -7,12 +7,15 @@ import {
   createDemoWorkspace,
   createWorkspace,
   exportWorkspace,
+  generateWorkspaceExcelArtifact,
   generateWorkspaceDocument,
+  openWorkspaceArtifact,
+  syncWorkspaceArtifact,
   transformWorkspaceBlock,
   uploadWorkspaceFile,
   type WorkspaceExportFormat,
 } from '@/lib/api';
-import type { DocumentWorkspace, InlineTransformCommand, WorkspaceStatus } from '@/lib/types';
+import type { DocumentWorkspace, InlineTransformCommand, WorkspaceArtifact, WorkspaceStatus } from '@/lib/types';
 import { BlueprintPanel } from './BlueprintPanel';
 import { DocumentCanvas } from './DocumentCanvas';
 import { ExportBar } from './ExportBar';
@@ -47,12 +50,94 @@ function downloadContent(filename: string, content: string, contentType: string,
   URL.revokeObjectURL(url);
 }
 
+function replaceArtifact(workspace: DocumentWorkspace, artifact: WorkspaceArtifact): DocumentWorkspace {
+  const artifacts = (workspace.artifacts ?? []).filter((item) => item.id !== artifact.id && item.kind !== artifact.kind);
+  return { ...workspace, artifacts: [...artifacts, artifact] };
+}
+
+function ArtifactPanel({
+  artifacts,
+  busy,
+  onOpen,
+  onSync,
+}: {
+  artifacts: WorkspaceArtifact[];
+  busy: boolean;
+  onOpen: (artifactId: string) => void;
+  onSync: (artifactId: string) => void;
+}) {
+  const excelArtifact = artifacts.find((artifact) => artifact.kind === 'excel');
+  if (!excelArtifact) return null;
+  const confirmation = excelArtifact.plan?.confirmation_required ?? [];
+  return (
+    <section data-testid="artifact-card-excel" className="rounded-xl border border-[#DDE7E2] bg-[#F8FBFA] px-3 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-xs font-extrabold text-[#24312D]">Excel artifact</h2>
+          <p className="mt-1 truncate text-[11px] font-semibold text-[#40504B]">{excelArtifact.filename}</p>
+          <p className="mt-1 text-[11px] text-[#65736E]">status: {excelArtifact.sync_state.status}</p>
+        </div>
+        <span className="rounded-full bg-[#EDF7F2] px-2 py-0.5 text-[10px] font-bold text-[#245D50]">XLSX</span>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          data-testid={`artifact-open-${excelArtifact.id}`}
+          disabled={busy}
+          onClick={() => onOpen(excelArtifact.id)}
+          className="rounded-full bg-[#245D50] px-3 py-1.5 text-[11px] font-bold text-white disabled:opacity-50"
+        >
+          Excel 열기
+        </button>
+        <button
+          type="button"
+          data-testid={`artifact-sync-${excelArtifact.id}`}
+          disabled={busy}
+          onClick={() => onSync(excelArtifact.id)}
+          className="rounded-full border border-[#245D50] px-3 py-1.5 text-[11px] font-bold text-[#245D50] disabled:opacity-50"
+        >
+          저장 동기화
+        </button>
+      </div>
+      {confirmation.length ? (
+        <div className="mt-3 space-y-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-2 text-[11px] leading-4 text-amber-800">
+          {confirmation.map((item) => (
+            <p key={item}>{item}</p>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function WorkspaceLog({ logs }: { logs: string[] }) {
+  return (
+    <section data-testid="workspace-log" className="rounded-xl border border-[#DDE7E2] bg-white px-3 py-3">
+      <h2 className="mb-2 text-xs font-extrabold text-[#24312D]">작업 로그</h2>
+      {logs.length ? (
+        <ol className="space-y-1 text-[11px] leading-4 text-[#40504B]">
+          {logs.map((log, index) => (
+            <li key={`${index}-${log}`}>{log}</li>
+          ))}
+        </ol>
+      ) : (
+        <p className="text-[11px] leading-4 text-[#65736E]">파일과 산출물 작업이 여기에 기록됩니다.</p>
+      )}
+    </section>
+  );
+}
+
 export function ProjectWorkspace() {
   const [workspace, setWorkspace] = useState<DocumentWorkspace | null>(null);
   const [busy, setBusy] = useState(false);
   const [transformBusy, setTransformBusy] = useState(false);
   const [error, setError] = useState('');
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [logs, setLogs] = useState<string[]>([]);
+
+  const pushLog = useCallback((message: string) => {
+    setLogs((current) => [message, ...current].slice(0, 8));
+  }, []);
 
   const run = useCallback(async (task: () => Promise<void>) => {
     setBusy(true);
@@ -70,12 +155,14 @@ export function ProjectWorkspace() {
     run(async () => {
       const res = await createDemoWorkspace();
       setWorkspace(res.data);
+      setLogs(['데모 프로젝트를 열었습니다.']);
     });
 
   const startEmpty = () =>
     run(async () => {
       const res = await createWorkspace('새 문서 프로젝트');
       setWorkspace(res.data);
+      setLogs(['새 프로젝트를 만들었습니다.']);
     });
 
   const handleUpload = (files: File[]) =>
@@ -109,6 +196,30 @@ export function ProjectWorkspace() {
       const res = await generateWorkspaceDocument(workspace.id);
       setWorkspace({ ...workspace, document: res.data, status: 'generated' });
       setSelectedBlockId(null);
+    });
+
+  const handleGenerateExcel = () =>
+    run(async () => {
+      if (!workspace) return;
+      const res = await generateWorkspaceExcelArtifact(workspace.id);
+      setWorkspace(replaceArtifact(workspace, res.data));
+      pushLog(`Excel artifact generated: ${res.data.filename}`);
+    });
+
+  const handleOpenArtifact = (artifactId: string) =>
+    run(async () => {
+      if (!workspace) return;
+      const res = await openWorkspaceArtifact(workspace.id, artifactId);
+      setWorkspace(replaceArtifact(workspace, res.data));
+      pushLog(`Excel artifact opened: ${res.data.filename}`);
+    });
+
+  const handleSyncArtifact = (artifactId: string) =>
+    run(async () => {
+      if (!workspace) return;
+      const res = await syncWorkspaceArtifact(workspace.id, artifactId);
+      setWorkspace(replaceArtifact(workspace, res.data));
+      pushLog(`Excel 동기화 완료: ${res.data.filename}`);
     });
 
   const handleCommand = async (blockId: string, command: InlineTransformCommand) => {
@@ -173,6 +284,7 @@ export function ProjectWorkspace() {
 
   const currentStep = stepIndex(workspace.status);
   const hasAnalyzableFile = workspace.files.some((file) => file.text);
+  const artifacts = workspace.artifacts ?? [];
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -236,6 +348,15 @@ export function ProjectWorkspace() {
             >
               {busy ? '작업 중…' : '문서 생성'}
             </button>
+            <button
+              type="button"
+              data-testid="action-excel-generate"
+              disabled={busy || !workspace.files.length}
+              onClick={handleGenerateExcel}
+              className="w-full rounded-xl border border-[#245D50] bg-white px-3 py-2 text-left text-xs font-bold text-[#245D50] transition hover:bg-[#EDF7F2] disabled:opacity-50"
+            >
+              Excel 대시보드 생성
+            </button>
           </section>
         </aside>
 
@@ -259,6 +380,8 @@ export function ProjectWorkspace() {
         )}
 
         <aside className="w-[280px] shrink-0 space-y-4 overflow-y-auto border-l border-[#DDE7E2] bg-white px-4 py-4">
+          <ArtifactPanel artifacts={artifacts} busy={busy} onOpen={handleOpenArtifact} onSync={handleSyncArtifact} />
+          <WorkspaceLog logs={logs} />
           {workspace.analysis ? (
             <section data-testid="analysis-summary">
               <h2 className="mb-2 text-xs font-extrabold text-[#24312D]">공고 핵심 정보</h2>

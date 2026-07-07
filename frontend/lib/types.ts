@@ -993,6 +993,8 @@ export interface QuestionField {
 export type ProjectFileKind = 'notice' | 'reference' | 'spreadsheet' | 'image' | 'unsupported';
 export type VisualBlockKind = 'heading' | 'paragraph' | 'table' | 'chart';
 export type ChartType = 'bar' | 'line' | 'pie';
+export type ArtifactKind = 'excel' | 'hwpx' | 'pptx' | 'docx' | 'pdf';
+export type WorkbookSyncStatus = 'not_opened' | 'opened' | 'synced' | 'error';
 export type WorkspaceStatus = 'empty' | 'files_added' | 'analyzed' | 'blueprint_ready' | 'generated';
 export type InlineTransformCommand = 'to_table' | 'to_chart' | 'rewrite';
 
@@ -1080,6 +1082,67 @@ export interface GeneratedDocument {
   warnings: string[];
 }
 
+export interface WorkbookTablePlan {
+  id: string;
+  title: string;
+  anchor: string;
+  headers: string[];
+  rows: string[][];
+  source_ref: string;
+}
+
+export interface WorkbookChartPlan {
+  id: string;
+  title: string;
+  chart_type: ChartType;
+  anchor: string;
+  labels: string[];
+  values: number[];
+  series_name: string;
+  source_ref: string;
+}
+
+export interface WorkbookSheetPlan {
+  id: string;
+  name: string;
+  title: string;
+  tables: WorkbookTablePlan[];
+  charts: WorkbookChartPlan[];
+  notes: string[];
+}
+
+export interface WorkbookPlan {
+  id: string;
+  artifact_kind: ArtifactKind;
+  title: string;
+  sheets: WorkbookSheetPlan[];
+  confirmation_required: string[];
+  warnings: string[];
+}
+
+export interface WorkbookSyncState {
+  status: WorkbookSyncStatus;
+  last_opened_at: string;
+  last_synced_at: string;
+  snapshot: Record<string, unknown>;
+  warnings: string[];
+  error_message: string;
+}
+
+export interface WorkspaceArtifact {
+  id: string;
+  workspace_id: string;
+  kind: ArtifactKind;
+  filename: string;
+  content_type: string;
+  storage_path: string;
+  plan?: WorkbookPlan | null;
+  sync_state: WorkbookSyncState;
+  warnings: string[];
+  created_at: string;
+  updated_at: string;
+}
+
 export interface DocumentWorkspace {
   id: string;
   title: string;
@@ -1087,6 +1150,7 @@ export interface DocumentWorkspace {
   analysis?: AnalysisResult | null;
   blueprint?: DocumentBlueprint | null;
   document?: GeneratedDocument | null;
+  artifacts: WorkspaceArtifact[];
   status: WorkspaceStatus;
   created_at: string;
   updated_at: string;
@@ -1105,4 +1169,14 @@ export interface GeneratedDocumentResponse {
 export interface VisualBlockResponse {
   success: boolean;
   data: VisualBlock;
+}
+
+export interface WorkbookPlanResponse {
+  success: boolean;
+  data: WorkbookPlan;
+}
+
+export interface WorkspaceArtifactResponse {
+  success: boolean;
+  data: WorkspaceArtifact;
 }

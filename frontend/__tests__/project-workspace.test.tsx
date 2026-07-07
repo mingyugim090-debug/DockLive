@@ -13,6 +13,10 @@ const apiMocks = vi.hoisted(() => ({
   generateWorkspaceDocument: vi.fn(),
   transformWorkspaceBlock: vi.fn(),
   exportWorkspace: vi.fn(),
+  planWorkspaceExcelArtifact: vi.fn(),
+  generateWorkspaceExcelArtifact: vi.fn(),
+  openWorkspaceArtifact: vi.fn(),
+  syncWorkspaceArtifact: vi.fn(),
 }));
 
 vi.mock('@/lib/api', () => apiMocks);
@@ -76,6 +80,39 @@ const DOCUMENT: GeneratedDocument = {
   warnings: [],
 };
 
+const EXCEL_ARTIFACT = {
+  id: 'artifact-1',
+  workspace_id: 'ws-1',
+  kind: 'excel',
+  filename: 'dashboard.xlsx',
+  content_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  storage_path: 'C:\\tmp\\dashboard.xlsx',
+  plan: {
+    id: 'wp-1',
+    artifact_kind: 'excel',
+    title: 'Excel dashboard',
+    sheets: [
+      { id: 'dashboard', name: '대시보드', title: '대시보드', tables: [], charts: [], notes: [] },
+      { id: 'documents', name: '제출서류', title: '제출서류', tables: [], charts: [], notes: [] },
+      { id: 'charts', name: '차트', title: '차트', tables: [], charts: [], notes: [] },
+      { id: 'evidence', name: '원문근거', title: '원문근거', tables: [], charts: [], notes: [] },
+    ],
+    confirmation_required: ['source confirmation: review exported cells before final submission'],
+    warnings: [],
+  },
+  sync_state: {
+    status: 'not_opened',
+    last_opened_at: '',
+    last_synced_at: '',
+    snapshot: {},
+    warnings: [],
+    error_message: '',
+  },
+  warnings: [],
+  created_at: '2026-07-07T00:00:00Z',
+  updated_at: '2026-07-07T00:00:00Z',
+};
+
 function workspaceFixture(overrides: Partial<DocumentWorkspace> = {}): DocumentWorkspace {
   return {
     id: 'ws-1',
@@ -117,6 +154,7 @@ function workspaceFixture(overrides: Partial<DocumentWorkspace> = {}): DocumentW
     },
     blueprint: null,
     document: null,
+    artifacts: [],
     status: 'analyzed',
     created_at: '2026-07-07T00:00:00Z',
     updated_at: '2026-07-07T00:00:00Z',
@@ -235,5 +273,57 @@ describe('ProjectWorkspace', () => {
     await waitFor(() =>
       expect(screen.getByTestId('workspace-error')).toHaveTextContent('표로 변환할 항목 구조'),
     );
+  });
+
+  it('generates an Excel artifact and shows workflow log plus artifact card', async () => {
+    apiMocks.createDemoWorkspace.mockResolvedValue({
+      success: true,
+      data: workspaceFixture({ status: 'generated', document: DOCUMENT }),
+    });
+    apiMocks.generateWorkspaceExcelArtifact.mockResolvedValue({ success: true, data: EXCEL_ARTIFACT });
+
+    render(<ProjectWorkspace />);
+    fireEvent.click(screen.getByTestId('start-demo'));
+    await waitFor(() => expect(screen.getByTestId('document-canvas')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId('action-excel-generate'));
+
+    await waitFor(() => expect(apiMocks.generateWorkspaceExcelArtifact).toHaveBeenCalledWith('ws-1'));
+    expect(screen.getByTestId('artifact-card-excel')).toHaveTextContent('dashboard.xlsx');
+    expect(screen.getByTestId('workspace-log')).toHaveTextContent('Excel');
+    expect(screen.getByText('source confirmation: review exported cells before final submission')).toBeInTheDocument();
+  });
+
+  it('syncs an existing Excel artifact and displays the synced status', async () => {
+    apiMocks.createDemoWorkspace.mockResolvedValue({
+      success: true,
+      data: workspaceFixture({
+        status: 'generated',
+        document: DOCUMENT,
+        artifacts: [EXCEL_ARTIFACT],
+      } as Partial<DocumentWorkspace>),
+    });
+    apiMocks.syncWorkspaceArtifact.mockResolvedValue({
+      success: true,
+      data: {
+        ...EXCEL_ARTIFACT,
+        sync_state: {
+          ...EXCEL_ARTIFACT.sync_state,
+          status: 'synced',
+          last_synced_at: '2026-07-07T01:00:00Z',
+          snapshot: { source: 'user_edit', sheets: { dashboard: [['notice title']] } },
+        },
+      },
+    });
+
+    render(<ProjectWorkspace />);
+    fireEvent.click(screen.getByTestId('start-demo'));
+    await waitFor(() => expect(screen.getByTestId('artifact-card-excel')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId('artifact-sync-artifact-1'));
+
+    await waitFor(() => expect(apiMocks.syncWorkspaceArtifact).toHaveBeenCalledWith('ws-1', 'artifact-1'));
+    expect(screen.getByTestId('artifact-card-excel')).toHaveTextContent('synced');
+    expect(screen.getByTestId('workspace-log')).toHaveTextContent('동기화');
   });
 });

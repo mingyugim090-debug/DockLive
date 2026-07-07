@@ -1055,6 +1055,8 @@ class DiscoverySaveReferenceRequest(BaseModel):
 ProjectFileKind = Literal["notice", "reference", "spreadsheet", "image", "unsupported"]
 VisualBlockKind = Literal["heading", "paragraph", "table", "chart"]
 ChartType = Literal["bar", "line", "pie"]
+ArtifactKind = Literal["excel", "hwpx", "pptx", "docx", "pdf"]
+WorkbookSyncStatus = Literal["not_opened", "opened", "synced", "error"]
 WorkspaceStatus = Literal["empty", "files_added", "analyzed", "blueprint_ready", "generated"]
 InlineTransformCommand = Literal["to_table", "to_chart", "rewrite"]
 
@@ -1137,6 +1139,67 @@ class GeneratedDocument(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class WorkbookTablePlan(BaseModel):
+    id: str
+    title: str = ""
+    anchor: str = "A1"
+    headers: list[str] = Field(default_factory=list)
+    rows: list[list[str]] = Field(default_factory=list)
+    source_ref: str = ""
+
+
+class WorkbookChartPlan(BaseModel):
+    id: str
+    title: str = ""
+    chart_type: ChartType = "bar"
+    anchor: str = "A1"
+    labels: list[str] = Field(default_factory=list)
+    values: list[float] = Field(default_factory=list)
+    series_name: str = ""
+    source_ref: str = ""
+
+
+class WorkbookSheetPlan(BaseModel):
+    id: str
+    name: str
+    title: str = ""
+    tables: list[WorkbookTablePlan] = Field(default_factory=list)
+    charts: list[WorkbookChartPlan] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
+class WorkbookPlan(BaseModel):
+    id: str
+    artifact_kind: ArtifactKind = "excel"
+    title: str = ""
+    sheets: list[WorkbookSheetPlan] = Field(default_factory=list)
+    confirmation_required: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class WorkbookSyncState(BaseModel):
+    status: WorkbookSyncStatus = "not_opened"
+    last_opened_at: str = ""
+    last_synced_at: str = ""
+    snapshot: dict[str, Any] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
+    error_message: str = ""
+
+
+class WorkspaceArtifact(BaseModel):
+    id: str
+    workspace_id: str = ""
+    kind: ArtifactKind = "excel"
+    filename: str = ""
+    content_type: str = ""
+    storage_path: str = ""
+    plan: Optional[WorkbookPlan] = None
+    sync_state: WorkbookSyncState = Field(default_factory=WorkbookSyncState)
+    warnings: list[str] = Field(default_factory=list)
+    created_at: str = Field(default_factory=_default_utc_now_iso)
+    updated_at: str = Field(default_factory=_default_utc_now_iso)
+
+
 class DocumentWorkspace(BaseModel):
     id: str
     title: str = ""
@@ -1144,6 +1207,7 @@ class DocumentWorkspace(BaseModel):
     analysis: Optional[AnalysisResult] = None
     blueprint: Optional[DocumentBlueprint] = None
     document: Optional[GeneratedDocument] = None
+    artifacts: list[WorkspaceArtifact] = Field(default_factory=list)
     status: WorkspaceStatus = "empty"
     created_at: str = Field(default_factory=_default_utc_now_iso)
     updated_at: str = Field(default_factory=_default_utc_now_iso)
@@ -1175,6 +1239,16 @@ class GeneratedDocumentResponse(BaseModel):
 class VisualBlockResponse(BaseModel):
     success: bool = True
     data: VisualBlock
+
+
+class WorkbookPlanResponse(BaseModel):
+    success: bool = True
+    data: WorkbookPlan
+
+
+class WorkspaceArtifactResponse(BaseModel):
+    success: bool = True
+    data: WorkspaceArtifact
 
 
 def utc_now_iso() -> str:
