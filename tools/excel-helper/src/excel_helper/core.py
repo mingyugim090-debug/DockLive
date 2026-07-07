@@ -64,6 +64,24 @@ def snapshot_workbook(path: str | Path, max_rows: int = 30, max_cols: int = 12) 
         workbook.close()
 
 
+def watch_once(path: str | Path, previous_mtime: float = 0.0) -> HelperState:
+    resolved = str(Path(path).resolve())
+    current_mtime = Path(resolved).stat().st_mtime
+    if previous_mtime and current_mtime <= previous_mtime:
+        return HelperState(
+            path=resolved,
+            status="unchanged",
+            last_mtime=current_mtime,
+        )
+    return HelperState(
+        path=resolved,
+        status="synced",
+        last_synced_at=_utc_now(),
+        last_mtime=current_mtime,
+        snapshot=snapshot_workbook(resolved),
+    )
+
+
 class ExcelDesktopHelper:
     def __init__(self, adapter: ExcelAdapter | None = None):
         self.adapter = adapter or ComExcelAdapter()

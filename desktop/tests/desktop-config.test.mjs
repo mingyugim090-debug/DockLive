@@ -28,6 +28,7 @@ test("main process starts managed frontend/backend runtime for /app/projects", a
   assert.match(main, /frontend/);
   assert.match(main, /backend/);
   assert.match(main, /excel-helper/);
+  assert.match(main, /LIVEDOCK_EXCEL_HELPER_PYTHON/);
 });
 
 test("preload exposes a small desktop capability surface", async () => {

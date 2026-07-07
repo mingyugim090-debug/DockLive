@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from .core import ExcelDesktopHelper, snapshot_workbook
+from .core import ExcelDesktopHelper, snapshot_workbook, watch_once
 
 
 def main() -> int:
@@ -18,6 +18,10 @@ def main() -> int:
     snapshot_command = subcommands.add_parser("snapshot", help="Read a compact workbook snapshot")
     snapshot_command.add_argument("path")
 
+    watch_command = subcommands.add_parser("watch-once", help="Read a snapshot if the workbook was saved")
+    watch_command.add_argument("path")
+    watch_command.add_argument("--previous-mtime", type=float, default=0.0)
+
     args = parser.parse_args()
     if args.command == "open":
         state = ExcelDesktopHelper().open_workbook(args.path)
@@ -25,6 +29,10 @@ def main() -> int:
         return 0
     if args.command == "snapshot":
         print(json.dumps(snapshot_workbook(args.path), ensure_ascii=False))
+        return 0
+    if args.command == "watch-once":
+        state = watch_once(args.path, previous_mtime=args.previous_mtime)
+        print(json.dumps(state.__dict__, ensure_ascii=False))
         return 0
     return 2
 

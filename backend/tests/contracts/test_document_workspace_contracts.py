@@ -356,6 +356,65 @@ class ExcelArtifactContractTests(unittest.TestCase):
         self.assertTrue(synced.sync_state.snapshot)
         self.assertEqual(synced.sync_state.snapshot["source"], "user_edit")
 
+    def test_desktop_helper_open_result_updates_artifact_state(self):
+        workspace = _demo_workspace()
+        artifact = excel_artifacts.generate_excel_artifact(workspace)
+
+        calls = []
+
+        def fake_helper(command, path, previous_mtime=0.0):
+            calls.append((command, path, previous_mtime))
+            return {
+                "status": "opened",
+                "path": path,
+                "last_opened_at": "2026-07-07T01:00:00Z",
+                "last_mtime": 123.5,
+            }
+
+        opened = excel_artifacts.open_excel_artifact(
+            workspace.id,
+            artifact.id,
+            helper_runner=fake_helper,
+        )
+
+        self.assertEqual(calls[0][0], "open")
+        self.assertEqual(calls[0][1], artifact.storage_path)
+        self.assertEqual(opened.sync_state.status, "opened")
+        self.assertEqual(opened.sync_state.last_opened_at, "2026-07-07T01:00:00Z")
+
+    def test_desktop_helper_sync_result_records_user_edit_snapshot(self):
+        workspace = _demo_workspace()
+        artifact = excel_artifacts.generate_excel_artifact(workspace)
+        artifact.sync_state.last_mtime = 100.0
+        workspace.artifacts = [artifact]
+        workspace_service.save_workspace(workspace)
+
+        calls = []
+
+        def fake_helper(command, path, previous_mtime=0.0):
+            calls.append((command, path, previous_mtime))
+            return {
+                "status": "synced",
+                "path": path,
+                "last_synced_at": "2026-07-07T01:05:00Z",
+                "last_mtime": 150.0,
+                "snapshot": {"source": "user_edit", "sheets": {"dashboard": [["edited"]]}},
+                "warnings": ["manual save detected"],
+            }
+
+        synced = excel_artifacts.sync_excel_artifact(
+            workspace.id,
+            artifact.id,
+            helper_runner=fake_helper,
+        )
+
+        self.assertEqual(calls[0], ("watch-once", artifact.storage_path, 100.0))
+        self.assertEqual(synced.sync_state.status, "synced")
+        self.assertEqual(synced.sync_state.last_synced_at, "2026-07-07T01:05:00Z")
+        self.assertEqual(synced.sync_state.last_mtime, 150.0)
+        self.assertEqual(synced.sync_state.snapshot["sheets"]["dashboard"][0][0], "edited")
+        self.assertEqual(synced.sync_state.warnings, ["manual save detected"])
+
 
 if __name__ == "__main__":
     unittest.main()

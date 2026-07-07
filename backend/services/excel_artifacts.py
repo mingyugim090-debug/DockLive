@@ -7,9 +7,13 @@ renderer turns that plan into an XLSX workbook deterministically with openpyxl.
 from __future__ import annotations
 
 import os
+import json
 import re
+import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
 from uuid import uuid4
 
 from core.errors import AnalysisError
@@ -33,6 +37,7 @@ EVIDENCE = "\uc6d0\ubb38\uadfc\uac70"
 
 EXCEL_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 _ARTIFACT_ROOT = Path(__file__).resolve().parents[1] / ".livedock_storage" / "artifacts"
+HelperRunner = Callable[[str, str, float], dict | None]
 
 
 def _utc_now() -> str:
@@ -318,6 +323,54 @@ def generate_excel_artifact(workspace: DocumentWorkspace) -> WorkspaceArtifact:
     return artifact
 
 
+def _run_excel_helper(command: str, path: str, previous_mtime: float = 0.0) -> dict | None:
+    helper_dir = os.environ.get("LIVEDOCK_EXCEL_HELPER_DIR", "").strip()
+    if not helper_dir:
+        return None
+    helper_src = Path(helper_dir) / "src"
+    if not helper_src.exists():
+        raise AnalysisError("Excel helper source directory was not found.")
+
+    python_executable = os.environ.get("LIVEDOCK_EXCEL_HELPER_PYTHON") or sys.executable
+    args = [python_executable, "-m", "excel_helper.cli", command, path]
+    if command == "watch-once":
+        args.extend(["--previous-mtime", str(previous_mtime or 0.0)])
+
+    env = dict(os.environ)
+    existing_pythonpath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = str(helper_src) + (os.pathsep + existing_pythonpath if existing_pythonpath else "")
+
+    completed = subprocess.run(
+        args,
+        capture_output=True,
+        text=True,
+        timeout=45,
+        check=False,
+        env=env,
+    )
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "Excel helper failed.").strip()
+        raise AnalysisError(detail)
+    try:
+        return json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        raise AnalysisError("Excel helper returned invalid JSON.") from exc
+
+
+def _apply_helper_state(artifact: WorkspaceArtifact, state: dict) -> None:
+    status = state.get("status") or artifact.sync_state.status
+    if status != "unchanged":
+        artifact.sync_state.status = status
+    artifact.sync_state.last_opened_at = state.get("last_opened_at") or artifact.sync_state.last_opened_at
+    artifact.sync_state.last_synced_at = state.get("last_synced_at") or artifact.sync_state.last_synced_at
+    artifact.sync_state.last_mtime = float(state.get("last_mtime") or artifact.sync_state.last_mtime or 0.0)
+    artifact.sync_state.error_message = state.get("error_message") or ""
+    if state.get("snapshot"):
+        artifact.sync_state.snapshot = state["snapshot"]
+    if state.get("warnings") is not None:
+        artifact.sync_state.warnings = list(state.get("warnings") or [])
+
+
 def get_artifact(workspace_id: str, artifact_id: str) -> WorkspaceArtifact:
     from services import workspace_service
 
@@ -328,7 +381,11 @@ def get_artifact(workspace_id: str, artifact_id: str) -> WorkspaceArtifact:
     return artifact
 
 
-def open_excel_artifact(workspace_id: str, artifact_id: str) -> WorkspaceArtifact:
+def open_excel_artifact(
+    workspace_id: str,
+    artifact_id: str,
+    helper_runner: HelperRunner | None = None,
+) -> WorkspaceArtifact:
     from services import workspace_service
 
     workspace = workspace_service.get_workspace(workspace_id)
@@ -337,10 +394,25 @@ def open_excel_artifact(workspace_id: str, artifact_id: str) -> WorkspaceArtifac
         raise AnalysisError("Workspace artifact was not found.")
     if artifact.kind != "excel" or not artifact.storage_path:
         raise AnalysisError("Only generated Excel artifacts can be opened.")
+    runner = helper_runner or _run_excel_helper
+    try:
+        helper_state = runner("open", artifact.storage_path, artifact.sync_state.last_mtime)
+    except AnalysisError as exc:
+        artifact.sync_state.status = "error"
+        artifact.sync_state.error_message = str(exc)
+        artifact.updated_at = _utc_now()
+        workspace_service.save_workspace(workspace)
+        return artifact
+    if helper_state:
+        _apply_helper_state(artifact, helper_state)
+        artifact.updated_at = _utc_now()
+        workspace_service.save_workspace(workspace)
+        return artifact
     if os.name == "nt":
         os.startfile(artifact.storage_path)  # type: ignore[attr-defined]
         artifact.sync_state.status = "opened"
         artifact.sync_state.last_opened_at = _utc_now()
+        artifact.sync_state.last_mtime = Path(artifact.storage_path).stat().st_mtime
         artifact.updated_at = _utc_now()
         workspace_service.save_workspace(workspace)
         return artifact
@@ -372,7 +444,11 @@ def _snapshot_workbook(path: str) -> dict:
         workbook.close()
 
 
-def sync_excel_artifact(workspace_id: str, artifact_id: str) -> WorkspaceArtifact:
+def sync_excel_artifact(
+    workspace_id: str,
+    artifact_id: str,
+    helper_runner: HelperRunner | None = None,
+) -> WorkspaceArtifact:
     from services import workspace_service
 
     workspace = workspace_service.get_workspace(workspace_id)
@@ -381,10 +457,25 @@ def sync_excel_artifact(workspace_id: str, artifact_id: str) -> WorkspaceArtifac
         raise AnalysisError("Workspace artifact was not found.")
     if artifact.kind != "excel" or not artifact.storage_path:
         raise AnalysisError("Only generated Excel artifacts can be synced.")
+    runner = helper_runner or _run_excel_helper
+    try:
+        helper_state = runner("watch-once", artifact.storage_path, artifact.sync_state.last_mtime)
+    except AnalysisError as exc:
+        artifact.sync_state.status = "error"
+        artifact.sync_state.error_message = str(exc)
+        artifact.updated_at = _utc_now()
+        workspace_service.save_workspace(workspace)
+        return artifact
+    if helper_state:
+        _apply_helper_state(artifact, helper_state)
+        artifact.updated_at = _utc_now()
+        workspace_service.save_workspace(workspace)
+        return artifact
     artifact.sync_state = WorkbookSyncState(
         status="synced",
         last_opened_at=artifact.sync_state.last_opened_at,
         last_synced_at=_utc_now(),
+        last_mtime=Path(artifact.storage_path).stat().st_mtime,
         snapshot=_snapshot_workbook(artifact.storage_path),
         warnings=list(artifact.sync_state.warnings),
     )

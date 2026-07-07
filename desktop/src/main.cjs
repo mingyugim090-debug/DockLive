@@ -87,16 +87,18 @@ async function startLocalRuntime() {
   );
   const backendUrl = `http://127.0.0.1:${backendPort}`;
   const frontendUrl = `http://127.0.0.1:${frontendPort}/app/projects`;
+  const pythonCommand = process.env.LIVEDOCK_PYTHON || "python";
   const runtimeEnv = {
     LIVEDOCK_DESKTOP: "1",
     LIVEDOCK_WORKSPACE_DIR: workspaceDir,
     LIVEDOCK_EXCEL_HELPER_DIR: excelHelperDir,
+    LIVEDOCK_EXCEL_HELPER_PYTHON: process.env.LIVEDOCK_EXCEL_HELPER_PYTHON || pythonCommand,
     NEXT_PUBLIC_API_URL: backendUrl,
   };
 
   spawnManagedProcess(
     "backend",
-    process.env.LIVEDOCK_PYTHON || "python",
+    pythonCommand,
     ["-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", String(backendPort)],
     {
       cwd: backendDir,

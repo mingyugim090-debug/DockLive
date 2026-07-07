@@ -1124,6 +1124,7 @@ export interface WorkbookSyncState {
   status: WorkbookSyncStatus;
   last_opened_at: string;
   last_synced_at: string;
+  last_mtime: number;
   snapshot: Record<string, unknown>;
   warnings: string[];
   error_message: string;

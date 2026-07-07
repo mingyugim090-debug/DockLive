@@ -68,6 +68,35 @@ class ExcelHelperTests(unittest.TestCase):
             self.assertIn("dashboard", state.snapshot["sheets"])
             self.assertEqual(state.snapshot["sheets"]["dashboard"][0][0], "notice title")
 
+    def test_watch_once_reports_unchanged_without_snapshot(self):
+        from excel_helper.core import watch_once
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "dashboard.xlsx"
+            path.write_bytes(_xlsx_bytes())
+            previous_mtime = path.stat().st_mtime
+
+            state = watch_once(path, previous_mtime=previous_mtime)
+
+            self.assertEqual(state.status, "unchanged")
+            self.assertEqual(state.snapshot, {})
+            self.assertEqual(state.last_mtime, previous_mtime)
+
+    def test_watch_once_reads_snapshot_when_file_changed(self):
+        from excel_helper.core import watch_once
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "dashboard.xlsx"
+            path.write_bytes(_xlsx_bytes())
+            previous_mtime = path.stat().st_mtime - 10
+
+            state = watch_once(path, previous_mtime=previous_mtime)
+
+            self.assertEqual(state.status, "synced")
+            self.assertEqual(state.snapshot["source"], "user_edit")
+            self.assertIn("dashboard", state.snapshot["sheets"])
+            self.assertGreater(state.last_mtime, previous_mtime)
+
 
 if __name__ == "__main__":
     unittest.main()

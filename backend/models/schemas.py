@@ -1181,6 +1181,7 @@ class WorkbookSyncState(BaseModel):
     status: WorkbookSyncStatus = "not_opened"
     last_opened_at: str = ""
     last_synced_at: str = ""
+    last_mtime: float = 0.0
     snapshot: dict[str, Any] = Field(default_factory=dict)
     warnings: list[str] = Field(default_factory=list)
     error_message: str = ""

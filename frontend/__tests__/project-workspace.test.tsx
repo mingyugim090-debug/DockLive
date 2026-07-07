@@ -104,6 +104,7 @@ const EXCEL_ARTIFACT = {
     status: 'not_opened',
     last_opened_at: '',
     last_synced_at: '',
+    last_mtime: 0,
     snapshot: {},
     warnings: [],
     error_message: '',
