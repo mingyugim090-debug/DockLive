@@ -283,6 +283,7 @@ async def agent_ws(websocket: WebSocket) -> None:
             await websocket.send_json(event)
             if event.get("type") in _TERMINAL_EVENTS:
                 terminal_forwarded = True
+                break
     except WebSocketDisconnect:
         disconnected = True
     except Exception as exc:

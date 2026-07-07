@@ -254,6 +254,22 @@ def test_ws_agent_value_error_streams_message_only(monkeypatch, client):
     assert event == {"type": "error", "message": "missing workbook path"}
 
 
+def test_ws_async_generator_error_stops_later_done(monkeypatch, client):
+    async def error_then_done(user_request, context=""):
+        yield {"type": "error", "message": "tool failed"}
+        yield {"type": "done", "text": "should not be sent", "iterations": 1}
+
+    monkeypatch.setattr(server, "run_agent", error_then_done)
+
+    with client.websocket_connect("/ws/agent") as ws:
+        ws.send_json({"request": "make workbook", "file": "x.xlsx", "output_dir": "C:/out"})
+        assert ws.receive_json()["type"] == "run_started"
+        assert ws.receive_json() == {"type": "mode_selected", "mode": "excel"}
+        assert ws.receive_json() == {"type": "error", "message": "tool failed"}
+        with pytest.raises(WebSocketDisconnect):
+            ws.receive_json()
+
+
 def test_ws_compat_forwards_callback_done_without_generic_done(monkeypatch, client):
     def callback_agent(user_request, context="", on_event=None):
         on_event({"type": "tool_call", "name": "open_workbook", "input": {"path": "x.xlsx"}})
