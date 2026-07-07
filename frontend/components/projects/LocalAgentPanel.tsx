@@ -44,17 +44,31 @@ const MODE_COPY: Record<LocalAgentMode, { label: string; hint: string }> = {
   },
 };
 
-function savedPathFromEvent(event: LocalAgentRunEvent): string {
-  if (event.type !== 'tool_result') return '';
-  const direct = event.result?.saved_path;
-  if (typeof direct === 'string') return direct;
-  if (!event.output) return '';
+function payloadFromEvent(event: LocalAgentRunEvent): Record<string, unknown> {
+  if (event.type !== 'tool_result') return {};
+  if (event.result) return event.result;
+  if (!event.output) return {};
   try {
-    const parsed = JSON.parse(event.output) as { saved_path?: unknown; saved?: unknown };
-    return typeof parsed.saved_path === 'string' ? parsed.saved_path : typeof parsed.saved === 'string' ? parsed.saved : '';
+    const parsed = JSON.parse(event.output) as unknown;
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
   } catch {
-    return '';
+    return {};
   }
+}
+
+function savedPathFromEvent(event: LocalAgentRunEvent): string {
+  const payload = payloadFromEvent(event);
+  const direct = payload.saved_path;
+  if (typeof direct === 'string') return direct;
+  return typeof payload.saved === 'string' ? payload.saved : '';
+}
+
+function validationPassedFromEvent(event: LocalAgentRunEvent): boolean | null {
+  const payload = payloadFromEvent(event);
+  const summary = payload.validation_summary;
+  if (!summary || typeof summary !== 'object') return null;
+  const passed = (summary as { validation_passed?: unknown }).validation_passed;
+  return typeof passed === 'boolean' ? passed : null;
 }
 
 function describeEvent(event: LocalAgentRunEvent): string {
@@ -63,7 +77,12 @@ function describeEvent(event: LocalAgentRunEvent): string {
   if (event.type === 'tool_call') return `${event.name ?? event.tool ?? '도구'} 실행 중`;
   if (event.type === 'tool_result') {
     const savedPath = savedPathFromEvent(event);
-    if (savedPath) return `완성본 저장됨: ${savedPath}`;
+    if (savedPath) {
+      const validationPassed = validationPassedFromEvent(event);
+      if (validationPassed === false) return `검증 필요: ${savedPath}`;
+      if (validationPassed === true) return `검증 완료: ${savedPath}`;
+      return `완성본 저장됨: ${savedPath}`;
+    }
     const toolName = event.name ?? event.tool ?? '도구';
     return event.ok === false ? `${toolName} 실패: ${event.output ?? ''}` : `${toolName} 완료`;
   }

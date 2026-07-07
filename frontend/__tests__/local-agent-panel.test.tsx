@@ -105,6 +105,32 @@ describe('LocalAgentPanel', () => {
     expect(ws.closed).toBe(true);
   });
 
+  it('surfaces failed local validation from saved document events', async () => {
+    render(<LocalAgentPanel />);
+    await waitFor(() => expect(screen.getByTestId('local-agent-status')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByTestId('local-agent-file'), { target: { value: 'C:\\work\\report.hwpx' } });
+    fireEvent.change(screen.getByTestId('local-agent-output-dir'), { target: { value: 'C:\\done' } });
+    fireEvent.change(screen.getByTestId('local-agent-request'), { target: { value: 'Write report' } });
+    fireEvent.click(screen.getByTestId('local-agent-run'));
+
+    const ws = FakeWebSocket.instances[0];
+    ws.onopen?.();
+    ws.emit({
+      type: 'tool_result',
+      tool: 'export_hwpx_session',
+      result: {
+        saved_path: 'C:\\done\\report.hwpx',
+        validation_summary: { validation_passed: false },
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/검증 필요/).length).toBeGreaterThan(0);
+      expect(screen.getByText('C:\\done\\report.hwpx')).toBeInTheDocument();
+    });
+  });
+
   it('fills the output folder from the desktop picker', async () => {
     vi.stubGlobal('livedockDesktop', {
       isDesktop: true,
