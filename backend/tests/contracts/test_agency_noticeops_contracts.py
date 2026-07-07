@@ -23,6 +23,7 @@ try:
     from services.agency_clause_library import create_clause_library_entry  # noqa: E402
     from services.agency_noticeops import (  # noqa: E402
         add_agency_notice_comment,
+        agency_notice_to_notice_document,
         create_agency_notice_draft,
         list_agency_notice_drafts,
         transition_agency_notice,
@@ -38,6 +39,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover
     AgencyPriorNoticeRecallRequest = None
     ClauseLibraryEntryRequest = None
     add_agency_notice_comment = None
+    agency_notice_to_notice_document = None
     create_clause_library_entry = None
     create_agency_notice_draft = None
     create_prior_notice = None
@@ -239,6 +241,61 @@ class AgencyNoticeOpsContractTests(unittest.TestCase):
         self.assertNotIn("brief:eligibility_rules", overview.source_evidence_ids)
         self.assertEqual(eligibility.source_evidence_ids, ["brief:eligibility_rules"])
         self.assertTrue(overview.source_traces)
+
+    def test_lab_recruitment_recipe_creates_focused_blocks_without_support_program_fields(self):
+        if AgencyNoticeBrief is None:
+            self.skipTest("backend dependencies are not installed in this Python environment")
+
+        brief = AgencyNoticeBrief(
+            recipe_id="lab_recruitment",
+            direction_id="friendly_recruitment",
+            organization_id=str(uuid4()),
+            author_id="cvr-student",
+            author_name="CVR lab",
+            title="CVR 연구실 학부연구생 모집공고",
+            agency_name="CVR 연구실",
+            lab_name="CVR 연구실",
+            lab_intro="컴퓨터 비전과 로보틱스 지능을 연구합니다.",
+            research_topics="3D vision, robot perception",
+            target_applicants="컴퓨터공학 전공 학부생",
+            openings="2명 내외",
+            activities="논문 리뷰, 데이터셋 정리, 실험 보조",
+            required_qualifications="Python 기초",
+            preferred_qualifications="PyTorch 경험",
+            activity_period="2026년 9월부터 6개월",
+            weekly_commitment="주 8시간",
+            submission_method="이메일 접수",
+            required_documents=["자기소개서", "성적표"],
+            contact="cvr@example.edu",
+        )
+
+        draft = create_agency_notice_draft(brief)
+
+        self.assertEqual(draft.recipe_id, "lab_recruitment")
+        self.assertEqual(draft.direction_id, "friendly_recruitment")
+        self.assertEqual(draft.mandatory_clause_checks, [])
+        self.assertFalse(any("예산" in item or "법적" in item or "이의" in item for item in draft.confirmation_required))
+        self.assertTrue(any(block.type == "infoTable" for block in draft.blocks))
+        self.assertTrue(any(block.type == "noticeBox" for block in draft.blocks))
+        self.assertIn("CVR 연구실", "\n".join(section.content_markdown for section in draft.sections))
+
+    def test_lab_recruitment_export_document_uses_document_model_tables(self):
+        if AgencyNoticeBrief is None or agency_notice_to_notice_document is None:
+            self.skipTest("backend dependencies are not installed in this Python environment")
+
+        brief = AgencyNoticeBrief(
+            recipe_id="lab_recruitment",
+            title="CVR 연구실 학부연구생 모집공고",
+            lab_name="CVR 연구실",
+            submission_method="이메일 접수",
+            contact="cvr@example.edu",
+        )
+        draft = create_agency_notice_draft(brief)
+        document = agency_notice_to_notice_document(draft)
+        blocks = document.documentModel["pages"][0]["blocks"]
+
+        self.assertEqual(document.title, "CVR 연구실 학부연구생 모집공고")
+        self.assertTrue(any(block["type"] == "table" for block in blocks))
 
 
 if __name__ == "__main__":

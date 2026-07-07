@@ -58,6 +58,29 @@ source-grounded, and useful for future Codex or Claude Code work.
   section revise (`agency_section_ai.py`) may only rephrase existing content
   — mock mode is whitespace-normalization only, asserted by contract test.
 
+- Notice discovery is now multi-source behind `notice_sources.py` (registry of
+  IRIS + 기업마당 bizinfo + K-Startup adapters returning normalized
+  `DiscoveredNotice`). bizinfo/K-Startup need API keys (`BIZINFO_API_KEY`,
+  `KSTARTUP_API_KEY`); keyless sources report unavailable with a reason and
+  never block IRIS. Unified endpoints live under `/api/agency/discovery/*`;
+  the old `/iris/*` routes are thin delegates. Tests stay offline with
+  fixtures (`bizinfo-list-sample.json`, `kstartup-list-sample.json`).
+- 2026-07 direction pivot (user decision): DockLive is being reshaped into an
+  Inline-AI-style document automation agent. v1 "document workspace" shipped:
+  multi-file project (`/api/workspaces`, `workspace_service.py`), CSV parsed
+  via stdlib (XLSX/image are warning-only stubs), deterministic rule-based
+  blueprint→generate (`blueprint_service.py`), inline block transforms
+  paragraph→table→chart (`block_transforms.py`, values only from source
+  cells), Markdown/HTML export with chart→table fallback
+  (`workspace_export.py`), DOCX/HWPX/PDF export stubs naming their
+  integration points. Frontend at `/app/projects`
+  (`components/projects/ProjectWorkspace.tsx`, pure-SVG `ChartBlock`).
+  LLM synthesis, XLSX/OCR parsing, and InsForge persistence for workspaces
+  are phase-2 work; see `contracts.document_workspace` in state-spec.
+- Agency redesign Phases 2-4 (content library, agency LLM drafting, studio
+  frontend rebuild) are ON HOLD after the pivot; the approved plan for them
+  is in the 2026-07-06 session plan file if resumed.
+
 ## Harness Decisions
 
 - `harness/state-spec.yaml` is the machine-readable product contract.

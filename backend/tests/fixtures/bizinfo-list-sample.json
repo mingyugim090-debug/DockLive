@@ -1,0 +1,31 @@
+{
+  "jsonArray": [
+    {
+      "pblancId": "PBLN_000000000119700",
+      "pblancNm": "2026년 마이데이터 서비스 지원사업 모집 공고",
+      "jrsdInsttNm": "과학기술정보통신부",
+      "excInsttNm": "한국데이터산업진흥원",
+      "pldirSportRealmLclasCodeNm": "기술",
+      "reqstBeginEndDe": "2026-07-01 ~ 2026-07-31",
+      "pblancUrl": "/sii/siia/selectSIIA200Detail.do?pblancId=PBLN_000000000119700",
+      "bsnsSumryCn": "<p>마이데이터 기반 혁신 서비스 개발을 지원하는 사업입니다.</p>",
+      "creatPnttm": "2026-06-30",
+      "hashtags": "데이터,플랫폼"
+    },
+    {
+      "pblancId": "PBLN_000000000119800",
+      "pblancNm": "2026년 지역 중소기업 AI 전환 바우처 지원 공고",
+      "jrsdInsttNm": "중소벤처기업부",
+      "excInsttNm": "중소벤처기업진흥공단",
+      "pldirSportRealmLclasCodeNm": "경영",
+      "reqstBeginEndDe": "2026-07-15 ~ 2026-08-14",
+      "pblancUrl": "https://www.bizinfo.go.kr/sii/siia/selectSIIA200Detail.do?pblancId=PBLN_000000000119800",
+      "bsnsSumryCn": "지역 중소기업의 AI 도입 컨설팅과 솔루션 구축 비용을 지원합니다.",
+      "creatPnttm": "2026-07-10"
+    },
+    {
+      "pblancId": "",
+      "pblancNm": "id 없는 행은 버려져야 함"
+    }
+  ]
+}

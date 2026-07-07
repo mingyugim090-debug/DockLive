@@ -2,45 +2,31 @@
 
 import { useState } from 'react';
 import { createAgencyNoticeDraft, exportAgencyNoticeDraft, transitionAgencyNoticeDraft } from '@/lib/api';
-import type { AgencyNoticeBrief, AgencyNoticeDraft, AgencyPriorNotice, ExportResponse } from '@/lib/types';
+import type { AgencyNoticeBrief, AgencyNoticeDraft, AgencyPriorNotice, ExportResponse, NoticeRecipeId } from '@/lib/types';
+import {
+  NOTICE_RECIPES,
+  applyRecipeDefaults,
+  getNoticeRecipe,
+  makeDefaultAgencyNoticeBrief,
+  referenceKeywordFor,
+} from '@/lib/noticeRecipes';
 import { Button } from '@/components/ui/Button';
 import { IrisNoticeFeed } from '@/components/agency/IrisNoticeFeed';
 import { NoticeBriefForm } from '@/components/agency/NoticeBriefForm';
 import { NoticeDocumentEditor } from '@/components/agency/NoticeDocumentEditor';
 import { ApprovalDrawer } from '@/components/agency/ApprovalDrawer';
 
-export type StudioStage = 'discover' | 'brief' | 'edit' | 'review' | 'export';
+export type StudioStage = 'type' | 'direction' | 'inputs' | 'references' | 'edit' | 'review' | 'export';
 
 const STAGES: Array<{ id: StudioStage; label: string; hint: string }> = [
-  { id: 'discover', label: '공고 탐색', hint: 'IRIS 공고를 참고자료로 담기' },
-  { id: 'brief', label: '사업 브리프', hint: '우리 사업 정보 입력' },
-  { id: 'edit', label: '문서 편집', hint: '공고문 초안을 직접 다듬기' },
-  { id: 'review', label: '검토·승인', hint: '승인 단계와 필수 조항 확인' },
+  { id: 'type', label: '유형 선택', hint: '어떤 공고문을 만들지 먼저 고릅니다' },
+  { id: 'direction', label: '방향 선택', hint: '문서의 말투와 구조를 정합니다' },
+  { id: 'inputs', label: '필수 입력', hint: '이 유형에 필요한 항목만 채웁니다' },
+  { id: 'references', label: '참고자료', hint: 'IRIS와 과거 공고에서 구조를 고릅니다' },
+  { id: 'edit', label: '문서 편집', hint: '표와 안내 박스를 보며 초안을 다듬습니다' },
+  { id: 'review', label: '검토·승인', hint: '승인 단계와 확인 필요 항목을 점검합니다' },
   { id: 'export', label: 'Export', hint: 'HWPX · PDF · DOCX' },
 ];
-
-const defaultBrief: AgencyNoticeBrief = {
-  organization_id: '00000000-0000-4000-8000-000000000001',
-  author_id: 'demo-user',
-  author_name: '사업 담당자',
-  agency_name: '',
-  title: '',
-  program_type: 'support_program',
-  program_purpose: '',
-  budget: '',
-  program_period: '',
-  eligibility_rules: '',
-  support_details: '',
-  evaluation_criteria: '',
-  submission_method: '',
-  required_documents: [],
-  contact: '',
-  legal_basis: '',
-  privacy_policy: '',
-  fair_competition_clause: '',
-  appeal_process: '',
-  references: [],
-};
 
 function downloadExport(exported: ExportResponse) {
   const bytes = Uint8Array.from(atob(exported.content), (char) => char.charCodeAt(0));
@@ -66,13 +52,16 @@ export function statusLabel(status: AgencyNoticeDraft['status']) {
 }
 
 export function AgencyStudio({ initialDraft = null }: { initialDraft?: AgencyNoticeDraft | null }) {
-  const [stage, setStage] = useState<StudioStage>(initialDraft ? 'edit' : 'discover');
-  const [brief, setBrief] = useState<AgencyNoticeBrief>(defaultBrief);
+  const [stage, setStage] = useState<StudioStage>(initialDraft ? 'edit' : 'type');
+  const [brief, setBrief] = useState<AgencyNoticeBrief>(() => initialDraft?.brief ?? makeDefaultAgencyNoticeBrief());
   const [draft, setDraft] = useState<AgencyNoticeDraft | null>(initialDraft);
   const [savedReferences, setSavedReferences] = useState<AgencyPriorNotice[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const selectedRecipe = getNoticeRecipe(brief.recipe_id);
+  const selectedDirection = selectedRecipe.directions.find((item) => item.id === brief.direction_id) ?? selectedRecipe.directions[0];
 
   async function run<T>(label: string, task: () => Promise<T>, onDone: (value: T) => void | Promise<void>) {
     setBusy(label);
@@ -86,6 +75,16 @@ export function AgencyStudio({ initialDraft = null }: { initialDraft?: AgencyNot
     } finally {
       setBusy(null);
     }
+  }
+
+  function selectRecipe(recipeId: NoticeRecipeId) {
+    setBrief((current) => applyRecipeDefaults(current, recipeId));
+    setStage('direction');
+  }
+
+  function selectDirection(directionId: string) {
+    setBrief((current) => ({ ...current, direction_id: directionId }));
+    setStage('inputs');
   }
 
   function handleReferenceSaved(reference: AgencyPriorNotice) {
@@ -107,7 +106,7 @@ export function AgencyStudio({ initialDraft = null }: { initialDraft?: AgencyNot
         ],
       };
     });
-    setNotice(`"${reference.title}"을(를) 참고자료로 담았습니다. 사업 브리프 단계에서 확인할 수 있습니다.`);
+    setNotice(`"${reference.title}"을 참고자료로 담았습니다. 입력 단계에서도 확인할 수 있습니다.`);
   }
 
   async function generateDraft() {
@@ -117,7 +116,7 @@ export function AgencyStudio({ initialDraft = null }: { initialDraft?: AgencyNot
       (res) => {
         setDraft(res.data);
         setStage('edit');
-        setNotice('공고문 초안을 생성했습니다. 문서에서 섹션을 클릭해 바로 수정할 수 있습니다.');
+        setNotice('공고문 초안이 생성되었습니다. 문서에서 섹션이나 블록을 클릭해 바로 수정할 수 있습니다.');
       },
     );
   }
@@ -147,19 +146,23 @@ export function AgencyStudio({ initialDraft = null }: { initialDraft?: AgencyNot
   }
 
   const stageIndex = STAGES.findIndex((item) => item.id === stage);
-  const stageEnabled = (target: StudioStage) =>
-    target === 'discover' || target === 'brief' || Boolean(draft);
+  const stageEnabled = (target: StudioStage) => {
+    if (target === 'type') return true;
+    if (target === 'direction') return Boolean(brief.recipe_id);
+    if (target === 'inputs' || target === 'references') return Boolean(brief.recipe_id && brief.direction_id);
+    return Boolean(draft);
+  };
 
   return (
     <div className="space-y-5">
       <section className="border-b border-[#DDE7E2] pb-4">
         <div className="flex flex-col gap-1">
           <p className="text-sm font-bold text-[#3A7A68]">공고 스튜디오</p>
-          <h1 className="text-3xl font-bold text-[#24312D]">IRIS 공고를 참고해 우리 기관 공고문을 만듭니다</h1>
+          <h1 className="text-3xl font-bold text-[#24312D]">원하는 공고 유형부터 차근차근 만들어요</h1>
           <p className="text-sm leading-6 text-[#65736E]">
             {draft
               ? `${draft.title} · ${statusLabel(draft.status)} · 확인 필요 ${draft.confirmation_required.length}건`
-              : '접수 중인 공고를 둘러보고, 참고자료를 담고, 브리프만 채우면 초안이 만들어집니다.'}
+              : '유형과 방향을 고르면, 필요한 질문과 참고자료가 그에 맞게 정리됩니다.'}
           </p>
         </div>
 
@@ -186,10 +189,11 @@ export function AgencyStudio({ initialDraft = null }: { initialDraft?: AgencyNot
                         : 'border-[#DDE7E2] bg-[#F8FBFA] text-[#65736E] opacity-60',
                 ].join(' ')}
               >
-                <span className={[
-                  'flex h-5 w-5 items-center justify-center rounded-full text-[11px]',
-                  isActive ? 'bg-white text-[#245D50]' : 'bg-[#EDF7F2] text-[#245D50]',
-                ].join(' ')}
+                <span
+                  className={[
+                    'flex h-5 w-5 items-center justify-center rounded-full text-[11px]',
+                    isActive ? 'bg-white text-[#245D50]' : 'bg-[#EDF7F2] text-[#245D50]',
+                  ].join(' ')}
                 >
                   {index + 1}
                 </span>
@@ -204,25 +208,85 @@ export function AgencyStudio({ initialDraft = null }: { initialDraft?: AgencyNot
         {error ? <p className="mt-3 rounded-md bg-[#FEF2F2] px-3 py-2 text-sm text-[#B42318]" data-testid="studio-error">{error}</p> : null}
       </section>
 
-      {stage === 'discover' && (
-        <div className="space-y-4">
-          <IrisNoticeFeed organizationId={brief.organization_id} onReferenceSaved={handleReferenceSaved} />
-          <div className="flex justify-end">
-            <Button onClick={() => setStage('brief')} data-testid="studio-next-brief">
-              {savedReferences.length ? `참고자료 ${savedReferences.length}건과 함께 브리프 작성` : '참고자료 없이 브리프 작성'}
-            </Button>
-          </div>
-        </div>
+      {stage === 'type' && (
+        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {NOTICE_RECIPES.map((recipe) => (
+            <button
+              key={recipe.id}
+              type="button"
+              onClick={() => selectRecipe(recipe.id)}
+              data-testid={`studio-recipe-${recipe.id}`}
+              className={[
+                'min-h-[150px] rounded-xl border bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#6A9C89]',
+                brief.recipe_id === recipe.id ? 'border-[#245D50] ring-2 ring-[#D7EBE3]' : 'border-[#DDE7E2]',
+              ].join(' ')}
+            >
+              <span className="rounded-full bg-[#EDF7F2] px-3 py-1 text-[11px] font-bold text-[#245D50]">
+                {recipe.fields.length}개 입력
+              </span>
+              <h2 className="mt-4 text-lg font-bold text-[#24312D]">{recipe.label}</h2>
+              <p className="mt-2 text-sm leading-6 text-[#65736E]">{recipe.description}</p>
+            </button>
+          ))}
+        </section>
       )}
 
-      {stage === 'brief' && (
+      {stage === 'direction' && (
+        <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="space-y-3">
+            {selectedRecipe.directions.map((direction) => (
+              <button
+                key={direction.id}
+                type="button"
+                data-testid={`studio-direction-${direction.id}`}
+                onClick={() => selectDirection(direction.id)}
+                className={[
+                  'w-full rounded-xl border bg-white p-5 text-left shadow-sm transition hover:border-[#6A9C89]',
+                  selectedDirection?.id === direction.id ? 'border-[#245D50] ring-2 ring-[#D7EBE3]' : 'border-[#DDE7E2]',
+                ].join(' ')}
+              >
+                <h2 className="text-base font-bold text-[#24312D]">{direction.label}</h2>
+                <p className="mt-1 text-sm leading-6 text-[#65736E]">{direction.description}</p>
+              </button>
+            ))}
+          </div>
+          <aside className="rounded-xl border border-[#DDE7E2] bg-[#F8FBFA] p-5">
+            <p className="text-xs font-bold text-[#3A7A68]">선택한 유형</p>
+            <h3 className="mt-2 text-lg font-bold text-[#24312D]">{selectedRecipe.label}</h3>
+            <p className="mt-2 text-sm leading-6 text-[#65736E]">{selectedRecipe.description}</p>
+          </aside>
+        </section>
+      )}
+
+      {stage === 'inputs' && (
         <NoticeBriefForm
           brief={brief}
+          recipe={selectedRecipe}
           onBriefChange={setBrief}
           busy={busy}
           onGenerate={generateDraft}
-          onBack={() => setStage('discover')}
+          onBack={() => setStage('direction')}
+          onNextReferences={() => setStage('references')}
         />
+      )}
+
+      {stage === 'references' && (
+        <div className="space-y-4">
+          <IrisNoticeFeed
+            organizationId={brief.organization_id}
+            onReferenceSaved={handleReferenceSaved}
+            recommendedKeyword={referenceKeywordFor(selectedRecipe)}
+            structureChips={selectedRecipe.structureChips}
+          />
+          <div className="flex flex-wrap justify-between gap-3 rounded-xl border border-[#DDE7E2] bg-white p-4 shadow-sm">
+            <Button variant="secondary" onClick={() => setStage('inputs')}>
+              입력으로 돌아가기
+            </Button>
+            <Button onClick={() => void generateDraft()} disabled={busy !== null || !brief.title.trim()}>
+              {busy === 'generate' ? '초안 생성 중...' : savedReferences.length ? `참고자료 ${savedReferences.length}건으로 초안 생성` : '참고자료 없이 초안 생성'}
+            </Button>
+          </div>
+        </div>
       )}
 
       {stage === 'edit' && draft && (
@@ -250,7 +314,7 @@ export function AgencyStudio({ initialDraft = null }: { initialDraft?: AgencyNot
       )}
 
       {stage === 'export' && draft && (
-        <section className="rounded-2xl border border-[#DDE7E2] bg-white p-8 text-center shadow-sm">
+        <section className="rounded-xl border border-[#DDE7E2] bg-white p-8 text-center shadow-sm">
           <p className="text-sm font-bold text-[#3A7A68]">Export</p>
           <h2 className="mt-2 text-2xl font-bold text-[#24312D]">{draft.title}</h2>
           <p className="mt-2 text-sm text-[#65736E]">
@@ -278,8 +342,8 @@ export function AgencyStudio({ initialDraft = null }: { initialDraft?: AgencyNot
       )}
 
       {(stage === 'edit' || stage === 'review' || stage === 'export') && !draft && (
-        <section className="rounded-2xl border border-dashed border-[#DDE7E2] bg-[#F8FBFA] p-10 text-center">
-          <p className="text-sm text-[#65736E]">아직 초안이 없습니다. 사업 브리프 단계에서 초안을 먼저 생성해 주세요.</p>
+        <section className="rounded-xl border border-dashed border-[#DDE7E2] bg-[#F8FBFA] p-10 text-center">
+          <p className="text-sm text-[#65736E]">아직 초안이 없습니다. 입력 단계에서 초안을 먼저 생성해 주세요.</p>
         </section>
       )}
     </div>

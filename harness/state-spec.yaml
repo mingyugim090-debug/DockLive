@@ -154,17 +154,31 @@ contracts:
       - keep_comments_tied_to_specific_version
       - keep_audit_events_append_only
       - keep_every_row_scoped_by_organization_id
-  iris_discovery:
+  notice_discovery:
     must:
       - fetch_on_demand_only_with_ttl_cache
       - surface_parsed_fields_only
       - show_explicit_error_when_fetch_fails
       - keep_tests_offline_with_fixtures
+      - support_sources_iris_bizinfo_kstartup
+      - degrade_gracefully_when_source_api_key_missing
+      - never_block_iris_when_other_sources_unavailable
     forbidden:
       - fabricated_notices_or_fields
       - inferred_deadlines_or_amounts
       - login_automation
       - background_bulk_crawling
+  document_workspace:
+    must:
+      - blocks_use_only_uploaded_source_data
+      - unsupported_files_yield_warnings_not_content
+      - chart_values_derived_only_from_existing_tables
+      - exports_fall_back_charts_to_tables
+      - deterministic_rule_based_generation_in_v1
+    forbidden:
+      - invented_numbers_or_facts
+      - native_hwpx_chart_objects_v1
+      - silent_parse_failures
 
 api_boundaries:
   backend:

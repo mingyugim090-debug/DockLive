@@ -421,6 +421,14 @@ def load_workflow(workflow_id: str) -> Optional[dict]:
     return _load_json(f"workflow:{workflow_id}")
 
 
+def save_document_workspace(workspace_id: str, data: dict) -> None:
+    _save_json(f"document_workspace:{workspace_id}", data, settings.WORKFLOW_TTL_SECONDS)
+
+
+def load_document_workspace(workspace_id: str) -> Optional[dict]:
+    return _load_json(f"document_workspace:{workspace_id}")
+
+
 def save_agency_notice_draft(draft_id: str, data: dict) -> None:
     _save_json(f"agency_notice:{draft_id}", data, settings.WORKFLOW_TTL_SECONDS)
     organization_id = str(data.get("organization_id") or "00000000-0000-4000-8000-000000000001")

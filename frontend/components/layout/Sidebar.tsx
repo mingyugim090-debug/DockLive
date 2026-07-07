@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 
 const items = [
   { href: '/app', label: 'Workspace', icon: 'W' },
+  { href: '/app/projects', label: '문서 프로젝트', icon: 'P' },
   { href: '/app/agency', label: '공고 스튜디오', icon: 'A' },
   { href: '/app/templates', label: 'Templates', icon: 'T' },
   { href: '/app/documents', label: 'Document', icon: 'D' },

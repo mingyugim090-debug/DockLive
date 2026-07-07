@@ -266,13 +266,23 @@ def _export_notice_document_to_hwpx(
             text_result = _run_hwpx_command([python_bin, str(scripts["text_extract.py"]), str(output_path), "--include-tables"])
             extracted = text_result.stdout or ""
             summary["text_extract_passed"] = True
+            summary["text_extract_method"] = "text_extract.py"
             summary["text_chars"] = len(extracted)
             summary["title_found"] = bool(document.title and document.title[:20] in extracted)
             summary["extracted_text_excerpt"] = extracted[:1000]
         except Exception as exc:
-            summary["text_extract_passed"] = False
-            summary["text_chars"] = 0
-            summary["warnings"].append(f"text_extract.py 확인을 완료하지 못했습니다: {str(exc)[:300]}")
+            extracted = _extract_hwpx_text_from_zip(output_path)
+            if extracted:
+                summary["text_extract_passed"] = True
+                summary["text_extract_method"] = "zip-xml-fallback"
+                summary["text_chars"] = len(extracted)
+                summary["title_found"] = bool(document.title and document.title[:20] in extracted)
+                summary["extracted_text_excerpt"] = extracted[:1000]
+                summary["warnings"].append(f"text_extract.py 확인을 완료하지 못해 ZIP/XML fallback을 사용했습니다: {str(exc)[:300]}")
+            else:
+                summary["text_extract_passed"] = False
+                summary["text_chars"] = 0
+                summary["warnings"].append(f"text_extract.py 확인을 완료하지 못했습니다: {str(exc)[:300]}")
 
         if not output_path.exists() or output_path.stat().st_size < 1000:
             raise AnalysisError("공고문 HWPX 파일이 정상적으로 생성되지 않았습니다.")
@@ -632,13 +642,23 @@ def _export_notice_markdown_to_hwpx(markdown: str, title: str) -> tuple[str, byt
             text_result = _run_hwpx_command([python_bin, str(scripts["text_extract.py"]), str(output_path), "--include-tables"])
             extracted = text_result.stdout or ""
             summary["text_extract_passed"] = True
+            summary["text_extract_method"] = "text_extract.py"
             summary["text_chars"] = len(extracted)
             summary["title_found"] = bool(title and title[:20] in extracted)
             summary["extracted_text_excerpt"] = extracted[:1000]
         except Exception as exc:
-            summary["text_extract_passed"] = False
-            summary["text_chars"] = 0
-            summary["warnings"].append(f"text_extract.py 확인을 완료하지 못했습니다: {str(exc)[:300]}")
+            extracted = _extract_hwpx_text_from_zip(output_path)
+            if extracted:
+                summary["text_extract_passed"] = True
+                summary["text_extract_method"] = "zip-xml-fallback"
+                summary["text_chars"] = len(extracted)
+                summary["title_found"] = bool(title and title[:20] in extracted)
+                summary["extracted_text_excerpt"] = extracted[:1000]
+                summary["warnings"].append(f"text_extract.py 확인을 완료하지 못해 ZIP/XML fallback을 사용했습니다: {str(exc)[:300]}")
+            else:
+                summary["text_extract_passed"] = False
+                summary["text_chars"] = 0
+                summary["warnings"].append(f"text_extract.py 확인을 완료하지 못했습니다: {str(exc)[:300]}")
 
         if not output_path.exists() or output_path.stat().st_size < 1000:
             raise AnalysisError("공고문 HWPX 파일이 정상적으로 생성되지 않았습니다.")
@@ -1023,6 +1043,23 @@ def _split_attachments(value: str | None) -> list[str]:
     if not value:
         return []
     return [item.strip(" -\t") for item in re.split(r"[\n,]+", value) if item.strip(" -\t")]
+
+
+def _extract_hwpx_text_from_zip(path: Path) -> str:
+    try:
+        parts: list[str] = []
+        with zipfile.ZipFile(path, "r") as zf:
+            for name in zf.namelist():
+                if not name.startswith("Contents/") or not name.endswith(".xml"):
+                    continue
+                xml = zf.read(name).decode("utf-8", errors="replace")
+                for raw in re.findall(r"<hp:t[^>]*>(.*?)</hp:t>", xml, flags=re.DOTALL):
+                    text = html.unescape(re.sub(r"<[^>]+>", "", raw)).strip()
+                    if text:
+                        parts.append(text)
+        return "\n".join(parts)
+    except Exception:
+        return ""
 
 
 def _safe_filename(title: str) -> str:

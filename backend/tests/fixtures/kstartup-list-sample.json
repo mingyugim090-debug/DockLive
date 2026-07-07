@@ -1,0 +1,44 @@
+{
+  "currentCount": 2,
+  "matchCount": 42,
+  "page": 1,
+  "perPage": 20,
+  "totalCount": 42,
+  "data": [
+    {
+      "pbanc_sn": "174001",
+      "biz_pbanc_nm": "2026년 예비창업패키지 (일반) 예비창업자 모집 공고",
+      "intg_pbanc_biz_nm": "예비창업패키지",
+      "pbanc_ntrp_nm": "창업진흥원",
+      "sprv_inst": "중소벤처기업부",
+      "supt_biz_clsfc": "사업화",
+      "pbanc_rcpt_bgng_dt": "20260701",
+      "pbanc_rcpt_end_dt": "20260731",
+      "rcrt_prgs_yn": "Y",
+      "detl_pg_url": "https://www.k-startup.go.kr/web/contents/bizpbanc-ongoing.do?schM=view&pbancSn=174001",
+      "pbanc_ctnt": "혁신적인 기술 창업 아이디어를 보유한 예비창업자의 사업화를 지원합니다.",
+      "aply_trgt": "예비창업자",
+      "supt_regin": "전국",
+      "biz_enyy": "예비창업자",
+      "biz_trgt_age": "만 20세 이상"
+    },
+    {
+      "pbanc_sn": "174002",
+      "biz_pbanc_nm": "2026년 창업도약패키지 지원기업 모집 공고",
+      "pbanc_ntrp_nm": "창업진흥원",
+      "sprv_inst": "중소벤처기업부",
+      "supt_biz_clsfc": "사업화",
+      "pbanc_rcpt_bgng_dt": "20260710",
+      "pbanc_rcpt_end_dt": "20260810",
+      "rcrt_prgs_yn": "N",
+      "detl_pg_url": "https://www.k-startup.go.kr/web/contents/bizpbanc-ongoing.do?schM=view&pbancSn=174002",
+      "pbanc_ctnt": "업력 3~7년 창업기업의 스케일업을 지원합니다.",
+      "aply_trgt": "창업기업",
+      "supt_regin": "전국"
+    },
+    {
+      "pbanc_sn": "",
+      "biz_pbanc_nm": "id 없는 행은 버려져야 함"
+    }
+  ]
+}

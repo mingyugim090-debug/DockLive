@@ -2,24 +2,28 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { getIrisNoticeDetail, listIrisNotices, saveIrisNoticeAsReference } from '@/lib/api';
-import type { AgencyPriorNotice, IrisNoticeDetail, IrisNoticeItem } from '@/lib/types';
+import type { AgencyPriorNotice, IrisNoticeDetail, IrisNoticeItem, NoticeBlockType } from '@/lib/types';
 import { Button } from '@/components/ui/Button';
 
 interface IrisNoticeFeedProps {
   organizationId?: string;
   onReferenceSaved?: (reference: AgencyPriorNotice) => void;
+  recommendedKeyword?: string;
+  structureChips?: NoticeBlockType[];
 }
 
 export function IrisNoticeFeed({
   organizationId = '00000000-0000-4000-8000-000000000001',
   onReferenceSaved,
+  recommendedKeyword = '',
+  structureChips = [],
 }: IrisNoticeFeedProps) {
   const [items, setItems] = useState<IrisNoticeItem[]>([]);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
-  const [keywordInput, setKeywordInput] = useState('');
-  const [activeKeyword, setActiveKeyword] = useState('');
+  const [keywordInput, setKeywordInput] = useState(recommendedKeyword);
+  const [activeKeyword, setActiveKeyword] = useState(recommendedKeyword);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<IrisNoticeDetail | null>(null);
@@ -31,7 +35,7 @@ export function IrisNoticeFeed({
     setLoading(true);
     setError(null);
     try {
-      const res = await listIrisNotices(nextPage, keyword);
+      const res = await listIrisNotices(nextPage, keyword, 'ancmIng');
       setItems((prev) => (append ? [...prev, ...res.data.items] : res.data.items));
       setPage(res.data.page);
       setHasMore(res.data.has_more);
@@ -44,8 +48,10 @@ export function IrisNoticeFeed({
   }, []);
 
   useEffect(() => {
-    void loadPage(1, '', false);
-  }, [loadPage]);
+    setKeywordInput(recommendedKeyword);
+    setActiveKeyword(recommendedKeyword);
+    void loadPage(1, recommendedKeyword, false);
+  }, [loadPage, recommendedKeyword]);
 
   function handleSearch() {
     const keyword = keywordInput.trim();
@@ -106,6 +112,19 @@ export function IrisNoticeFeed({
               검색
             </Button>
           </div>
+          {structureChips.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {structureChips.map((chip) => (
+                <span
+                  key={chip}
+                  data-testid={`iris-structure-chip-${chip}`}
+                  className="rounded-full border border-[#CFE2DA] bg-[#F8FBFA] px-3 py-1 text-[11px] font-bold text-[#245D50]"
+                >
+                  {structureChipLabel(chip)}
+                </span>
+              ))}
+            </div>
+          )}
           {totalCount > 0 && (
             <p className="mt-2 text-xs text-[#65736E]">
               {activeKeyword ? `"${activeKeyword}" 검색 결과 ` : '접수 중 공고 '}
@@ -255,4 +274,19 @@ export function IrisNoticeFeed({
       </aside>
     </div>
   );
+}
+
+function structureChipLabel(chip: NoticeBlockType): string {
+  const labels: Record<NoticeBlockType, string> = {
+    titleBox: '제목 박스',
+    infoTable: '개요 표',
+    scheduleTable: '일정 표',
+    eligibilityTable: '자격 표',
+    procedureTable: '절차 표',
+    documentListTable: '제출서류 표',
+    noticeBox: '안내 박스',
+    paragraphSection: '본문 섹션',
+    contactBox: '문의처 표',
+  };
+  return labels[chip];
 }

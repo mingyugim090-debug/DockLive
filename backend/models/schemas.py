@@ -27,6 +27,18 @@ AgencyClauseStatus = Literal["satisfied", "missing", "needs_confirmation"]
 AgencyApprovalStepStatus = Literal["pending", "active", "approved", "changes_requested", "skipped"]
 AgencyReferenceSourceType = Literal["brief", "guideline", "prior_notice", "template", "manual"]
 AgencyClauseSource = Literal["org_default", "agency_supplied"]
+NoticeRecipeId = Literal["lab_recruitment", "rnd_support", "event_program", "education_camp", "custom"]
+NoticeBlockType = Literal[
+    "titleBox",
+    "infoTable",
+    "scheduleTable",
+    "eligibilityTable",
+    "procedureTable",
+    "documentListTable",
+    "noticeBox",
+    "paragraphSection",
+    "contactBox",
+]
 PsstAxis = Literal["problem", "solution", "scaleup", "team", "none"]
 
 
@@ -628,6 +640,8 @@ class AgencyNoticeReference(BaseModel):
 
 
 class AgencyNoticeBrief(BaseModel):
+    recipe_id: NoticeRecipeId = "rnd_support"
+    direction_id: str = "iris_official"
     organization_id: str = "00000000-0000-4000-8000-000000000001"
     author_id: str = "demo-user"
     author_name: str = "담당자"
@@ -647,6 +661,18 @@ class AgencyNoticeBrief(BaseModel):
     privacy_policy: str = ""
     fair_competition_clause: str = ""
     appeal_process: str = ""
+    lab_name: str = ""
+    lab_intro: str = ""
+    research_topics: str = ""
+    target_applicants: str = ""
+    openings: str = ""
+    activities: str = ""
+    required_qualifications: str = ""
+    preferred_qualifications: str = ""
+    activity_period: str = ""
+    weekly_commitment: str = ""
+    application_deadline: str = ""
+    notes: str = ""
     references: list[AgencyNoticeReference] = Field(default_factory=list)
 
 
@@ -666,6 +692,18 @@ class AgencySourceTrace(BaseModel):
     field_name: Optional[str] = None
     reference_id: Optional[str] = None
     confidence: float = Field(default=0.8, ge=0, le=1)
+
+
+class AgencyNoticeBlock(BaseModel):
+    id: str
+    type: NoticeBlockType
+    title: str = ""
+    role: str = ""
+    body: str = ""
+    rows: list[list[str]] = Field(default_factory=list)
+    source_evidence_ids: list[str] = Field(default_factory=list)
+    source_traces: list[AgencySourceTrace] = Field(default_factory=list)
+    confirmation_required: list[str] = Field(default_factory=list)
 
 
 class AgencyNoticeSection(BaseModel):
@@ -744,7 +782,10 @@ class AgencyNoticeDraft(BaseModel):
     organization_id: str
     title: str
     status: AgencyNoticeStatus = "draft"
+    recipe_id: NoticeRecipeId = "rnd_support"
+    direction_id: str = "iris_official"
     brief: AgencyNoticeBrief
+    blocks: list[AgencyNoticeBlock] = Field(default_factory=list)
     sections: list[AgencyNoticeSection] = Field(default_factory=list)
     mandatory_clause_checks: list[MandatoryClauseCheck] = Field(default_factory=list)
     source_evidence: list[AgencySourceEvidence] = Field(default_factory=list)
@@ -952,6 +993,196 @@ class IrisNoticeDetailResponse(BaseModel):
 class IrisSaveReferenceRequest(BaseModel):
     organization_id: str = "00000000-0000-4000-8000-000000000001"
     progress: str = "ancmIng"
+
+
+NoticeSourceId = Literal["iris", "bizinfo", "kstartup"]
+
+
+class DiscoveredNotice(BaseModel):
+    """Source-normalized public notice. Only parsed values — never inferred."""
+
+    source_id: NoticeSourceId
+    id: str
+    title: str = ""
+    organization: str = ""
+    ministry: str = ""
+    category: str = ""
+    receipt_start: str = ""
+    receipt_end: str = ""
+    d_day: str = ""
+    status: str = ""
+    detail_url: str = ""
+    summary: str = ""
+    region: str = ""
+    extras: dict[str, str] = Field(default_factory=dict)
+    match_score: float = Field(default=0, ge=0, le=1)
+
+
+class DiscoveredNoticeListResult(BaseModel):
+    source_id: str
+    items: list[DiscoveredNotice] = Field(default_factory=list)
+    page: int = 1
+    total_pages: int = 0
+    total_count: int = 0
+    has_more: bool = False
+
+
+class DiscoveredNoticeListResponse(BaseModel):
+    success: bool = True
+    data: DiscoveredNoticeListResult
+
+
+class NoticeSourceStatus(BaseModel):
+    source_id: str
+    label: str
+    available: bool = True
+    supports_detail: bool = False
+    unavailable_reason: str = ""
+
+
+class NoticeSourceStatusListResponse(BaseModel):
+    success: bool = True
+    data: list[NoticeSourceStatus] = Field(default_factory=list)
+
+
+class DiscoverySaveReferenceRequest(BaseModel):
+    organization_id: str = "00000000-0000-4000-8000-000000000001"
+    progress: str = "ancmIng"
+
+
+# --- Document workspace (Inline-AI style multi-file project) ---
+
+ProjectFileKind = Literal["notice", "reference", "spreadsheet", "image", "unsupported"]
+VisualBlockKind = Literal["heading", "paragraph", "table", "chart"]
+ChartType = Literal["bar", "line", "pie"]
+WorkspaceStatus = Literal["empty", "files_added", "analyzed", "blueprint_ready", "generated"]
+InlineTransformCommand = Literal["to_table", "to_chart", "rewrite"]
+
+
+class SheetTable(BaseModel):
+    name: str = ""
+    headers: list[str] = Field(default_factory=list)
+    rows: list[list[str]] = Field(default_factory=list)
+    source_ref: dict[str, Any] = Field(default_factory=dict)
+
+
+class SheetData(BaseModel):
+    sheets: list[SheetTable] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ProjectFile(BaseModel):
+    id: str
+    workspace_id: str = ""
+    filename: str = ""
+    file_kind: ProjectFileKind = "reference"
+    source_type: str = ""
+    text: str = ""
+    parsed: Optional[ParsedDocument] = None
+    sheet_data: Optional[SheetData] = None
+    warnings: list[str] = Field(default_factory=list)
+    created_at: str = Field(default_factory=_default_utc_now_iso)
+
+
+class VisualPlan(BaseModel):
+    kind: VisualBlockKind = "table"
+    title: str = ""
+    source_ref: str = ""
+
+
+class BlueprintSection(BaseModel):
+    id: str
+    title: str
+    intent: str = ""
+    planned_visuals: list[VisualPlan] = Field(default_factory=list)
+    source_file_ids: list[str] = Field(default_factory=list)
+
+
+class DocumentBlueprint(BaseModel):
+    id: str
+    sections: list[BlueprintSection] = Field(default_factory=list)
+    rationale: str = ""
+    confirmation_required: list[str] = Field(default_factory=list)
+
+
+class ChartSeries(BaseModel):
+    name: str = ""
+    values: list[float] = Field(default_factory=list)
+
+
+class ChartSpec(BaseModel):
+    chart_type: ChartType = "bar"
+    title: str = ""
+    labels: list[str] = Field(default_factory=list)
+    series: list[ChartSeries] = Field(default_factory=list)
+    source_table_id: str = ""
+
+
+class VisualBlock(BaseModel):
+    id: str
+    section_id: str = ""
+    kind: VisualBlockKind = "paragraph"
+    markdown: str = ""
+    rows: list[list[ParsedTableCell]] = Field(default_factory=list)
+    chart: Optional[ChartSpec] = None
+    source_refs: list[str] = Field(default_factory=list)
+    status: str = "drafted"
+
+
+class GeneratedDocument(BaseModel):
+    id: str
+    title: str = ""
+    style_profile_id: str = "submission"
+    blocks: list[VisualBlock] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class DocumentWorkspace(BaseModel):
+    id: str
+    title: str = ""
+    files: list[ProjectFile] = Field(default_factory=list)
+    analysis: Optional[AnalysisResult] = None
+    blueprint: Optional[DocumentBlueprint] = None
+    document: Optional[GeneratedDocument] = None
+    status: WorkspaceStatus = "empty"
+    created_at: str = Field(default_factory=_default_utc_now_iso)
+    updated_at: str = Field(default_factory=_default_utc_now_iso)
+
+
+class WorkspaceCreateRequest(BaseModel):
+    title: str = ""
+
+
+class WorkspaceAnalyzeRequest(BaseModel):
+    file_id: str = ""
+
+
+class InlineTransformRequest(BaseModel):
+    command: InlineTransformCommand
+    instruction: str = ""
+
+
+class DocumentWorkspaceResponse(BaseModel):
+    success: bool = True
+    data: DocumentWorkspace
+
+
+class GeneratedDocumentResponse(BaseModel):
+    success: bool = True
+    data: GeneratedDocument
+
+
+class VisualBlockResponse(BaseModel):
+    success: bool = True
+    data: VisualBlock
+
+
+class ExportStubResponse(BaseModel):
+    success: bool = False
+    implemented: bool = False
+    format: str = ""
+    integration_point: str = ""
+    message: str = ""
 
 
 def utc_now_iso() -> str:

@@ -13,6 +13,18 @@ export type AgencyClauseStatus = 'satisfied' | 'missing' | 'needs_confirmation';
 export type AgencyApprovalStepStatus = 'pending' | 'active' | 'approved' | 'changes_requested' | 'skipped';
 export type AgencyReferenceSourceType = 'brief' | 'guideline' | 'prior_notice' | 'template' | 'manual';
 export type AgencyClauseSource = 'org_default' | 'agency_supplied';
+export type NoticeRecipeId = 'lab_recruitment' | 'rnd_support' | 'event_program' | 'education_camp' | 'custom';
+export type NoticeBlockType =
+  | 'titleBox'
+  | 'infoTable'
+  | 'scheduleTable'
+  | 'eligibilityTable'
+  | 'procedureTable'
+  | 'documentListTable'
+  | 'noticeBox'
+  | 'paragraphSection'
+  | 'contactBox';
+export type NoticeFieldType = 'text' | 'textarea';
 export type WorkflowStatus =
   | 'analyzed'
   | 'collecting_inputs'
@@ -278,6 +290,8 @@ export interface AgencyNoticeReference {
 }
 
 export interface AgencyNoticeBrief {
+  recipe_id?: NoticeRecipeId;
+  direction_id?: string;
   organization_id: string;
   author_id: string;
   author_name: string;
@@ -297,6 +311,18 @@ export interface AgencyNoticeBrief {
   privacy_policy: string;
   fair_competition_clause: string;
   appeal_process: string;
+  lab_name?: string;
+  lab_intro?: string;
+  research_topics?: string;
+  target_applicants?: string;
+  openings?: string;
+  activities?: string;
+  required_qualifications?: string;
+  preferred_qualifications?: string;
+  activity_period?: string;
+  weekly_commitment?: string;
+  application_deadline?: string;
+  notes?: string;
   references: AgencyNoticeReference[];
 }
 
@@ -327,6 +353,43 @@ export interface AgencyNoticeSection {
   source_traces: AgencySourceTrace[];
   confirmation_required: string[];
   updated_at: string;
+}
+
+export interface AgencyNoticeBlock {
+  id: string;
+  type: NoticeBlockType;
+  title: string;
+  role: string;
+  body: string;
+  rows: string[][];
+  source_evidence_ids: string[];
+  source_traces: AgencySourceTrace[];
+  confirmation_required: string[];
+}
+
+export interface NoticeRecipeField {
+  id: keyof AgencyNoticeBrief;
+  label: string;
+  type?: NoticeFieldType;
+  placeholder?: string;
+  required?: boolean;
+}
+
+export interface NoticeDirectionOption {
+  id: string;
+  label: string;
+  description: string;
+}
+
+export interface NoticeRecipe {
+  id: NoticeRecipeId;
+  label: string;
+  description: string;
+  fields: NoticeRecipeField[];
+  directions: NoticeDirectionOption[];
+  recommendedReferenceKeywords: string[];
+  structureChips: NoticeBlockType[];
+  exportStyle: 'iris_official' | 'friendly_lab' | 'campus_notice';
 }
 
 export interface MandatoryClauseCheck {
@@ -394,7 +457,10 @@ export interface AgencyNoticeDraft {
   organization_id: string;
   title: string;
   status: AgencyNoticeStatus;
+  recipe_id?: NoticeRecipeId;
+  direction_id?: string;
   brief: AgencyNoticeBrief;
+  blocks?: AgencyNoticeBlock[];
   sections: AgencyNoticeSection[];
   mandatory_clause_checks: MandatoryClauseCheck[];
   source_evidence: AgencySourceEvidence[];
@@ -920,4 +986,123 @@ export interface QuestionField {
   placeholder: string;
   required: boolean;
   type: 'text' | 'textarea' | 'tel' | 'email';
+}
+
+// --- Document workspace (Inline-AI style multi-file project) ---
+
+export type ProjectFileKind = 'notice' | 'reference' | 'spreadsheet' | 'image' | 'unsupported';
+export type VisualBlockKind = 'heading' | 'paragraph' | 'table' | 'chart';
+export type ChartType = 'bar' | 'line' | 'pie';
+export type WorkspaceStatus = 'empty' | 'files_added' | 'analyzed' | 'blueprint_ready' | 'generated';
+export type InlineTransformCommand = 'to_table' | 'to_chart' | 'rewrite';
+
+export interface WorkspaceTableCell {
+  text: string;
+  row_index: number;
+  col_index: number;
+  row_span: number;
+  col_span: number;
+}
+
+export interface SheetTable {
+  name: string;
+  headers: string[];
+  rows: string[][];
+}
+
+export interface SheetData {
+  sheets: SheetTable[];
+  warnings: string[];
+}
+
+export interface ProjectFile {
+  id: string;
+  workspace_id: string;
+  filename: string;
+  file_kind: ProjectFileKind;
+  source_type: string;
+  text: string;
+  sheet_data?: SheetData | null;
+  warnings: string[];
+  created_at: string;
+}
+
+export interface VisualPlan {
+  kind: VisualBlockKind;
+  title: string;
+  source_ref: string;
+}
+
+export interface BlueprintSection {
+  id: string;
+  title: string;
+  intent: string;
+  planned_visuals: VisualPlan[];
+  source_file_ids: string[];
+}
+
+export interface DocumentBlueprint {
+  id: string;
+  sections: BlueprintSection[];
+  rationale: string;
+  confirmation_required: string[];
+}
+
+export interface ChartSeries {
+  name: string;
+  values: number[];
+}
+
+export interface ChartSpec {
+  chart_type: ChartType;
+  title: string;
+  labels: string[];
+  series: ChartSeries[];
+  source_table_id: string;
+}
+
+export interface VisualBlock {
+  id: string;
+  section_id: string;
+  kind: VisualBlockKind;
+  markdown: string;
+  rows: WorkspaceTableCell[][];
+  chart?: ChartSpec | null;
+  source_refs: string[];
+  status: string;
+}
+
+export interface GeneratedDocument {
+  id: string;
+  title: string;
+  style_profile_id: string;
+  blocks: VisualBlock[];
+  warnings: string[];
+}
+
+export interface DocumentWorkspace {
+  id: string;
+  title: string;
+  files: ProjectFile[];
+  analysis?: AnalysisResult | null;
+  blueprint?: DocumentBlueprint | null;
+  document?: GeneratedDocument | null;
+  status: WorkspaceStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DocumentWorkspaceResponse {
+  success: boolean;
+  data: DocumentWorkspace;
+}
+
+export interface GeneratedDocumentResponse {
+  success: boolean;
+  data: GeneratedDocument;
+}
+
+export interface VisualBlockResponse {
+  success: boolean;
+  data: VisualBlock;
 }

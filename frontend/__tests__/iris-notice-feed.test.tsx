@@ -62,7 +62,7 @@ describe('IrisNoticeFeed', () => {
       expect(screen.getByText(/휴먼프론티어과학프로그램/)).toBeInTheDocument();
     });
     expect(screen.getByText('공고접수중')).toBeInTheDocument();
-    expect(apiMocks.listIrisNotices).toHaveBeenCalledWith(1, '');
+    expect(apiMocks.listIrisNotices).toHaveBeenCalledWith(1, '', 'ancmIng');
   });
 
   it('searches with the entered keyword', async () => {
@@ -74,7 +74,7 @@ describe('IrisNoticeFeed', () => {
     fireEvent.click(screen.getByTestId('iris-search-button'));
 
     await waitFor(() => {
-      expect(apiMocks.listIrisNotices).toHaveBeenCalledWith(1, '바이오');
+      expect(apiMocks.listIrisNotices).toHaveBeenCalledWith(1, '바이오', 'ancmIng');
     });
   });
 

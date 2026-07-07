@@ -35,6 +35,8 @@ if BaseSettings:
         HWPX_PDF_TIMEOUT_SECONDS: int = 90
         MAX_DRAFT_INPUT_LENGTH: int = 60_000
         WORKFLOW_TTL_SECONDS: int = 7 * 24 * 3600
+        BIZINFO_API_KEY: str = ""
+        KSTARTUP_API_KEY: str = ""
 
         class Config:
             env_file = ".env"
@@ -69,6 +71,8 @@ else:
         HWPX_PDF_TIMEOUT_SECONDS: int = int(os.getenv("HWPX_PDF_TIMEOUT_SECONDS", "90"))
         MAX_DRAFT_INPUT_LENGTH: int = int(os.getenv("MAX_DRAFT_INPUT_LENGTH", "60000"))
         WORKFLOW_TTL_SECONDS: int = int(os.getenv("WORKFLOW_TTL_SECONDS", str(7 * 24 * 3600)))
+        BIZINFO_API_KEY: str = os.getenv("BIZINFO_API_KEY", "")
+        KSTARTUP_API_KEY: str = os.getenv("KSTARTUP_API_KEY", "")
 
 
 settings = Settings()

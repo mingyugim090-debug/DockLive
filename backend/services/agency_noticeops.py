@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from core.errors import AnalysisError
 from models.schemas import (
+    AgencyNoticeBlock,
     AgencyNoticeBrief,
     AgencyNoticeDraft,
     AgencyNoticeSection,
@@ -58,9 +59,16 @@ ALLOWED_TRANSITIONS = {
 def create_agency_notice_draft(brief: AgencyNoticeBrief) -> AgencyNoticeDraft:
     draft_id = f"agency-{uuid4()}"
     evidence = _build_source_evidence(brief)
-    clause_checks = _build_clause_checks(brief, evidence)
-    confirmation_required = _confirmation_items(brief, clause_checks)
-    sections = _build_sections(brief, evidence, confirmation_required, clause_checks)
+    if brief.recipe_id == "lab_recruitment":
+        clause_checks: list[MandatoryClauseCheck] = []
+        confirmation_required = _lab_confirmation_items(brief)
+        sections = _build_lab_recruitment_sections(brief, evidence, confirmation_required)
+        blocks = _build_lab_recruitment_blocks(brief, evidence, confirmation_required)
+    else:
+        clause_checks = _build_clause_checks(brief, evidence)
+        confirmation_required = _confirmation_items(brief, clause_checks)
+        sections = _build_sections(brief, evidence, confirmation_required, clause_checks)
+        blocks: list[AgencyNoticeBlock] = []
     approval = _default_approval_workflow(draft_id)
     version = NoticeVersion(
         id=f"version-{uuid4()}",
@@ -76,7 +84,10 @@ def create_agency_notice_draft(brief: AgencyNoticeBrief) -> AgencyNoticeDraft:
         organization_id=brief.organization_id,
         title=brief.title,
         status="draft",
+        recipe_id=brief.recipe_id,
+        direction_id=brief.direction_id,
         brief=brief,
+        blocks=blocks,
         sections=sections,
         mandatory_clause_checks=clause_checks,
         source_evidence=evidence,
@@ -204,19 +215,361 @@ def transition_agency_notice(
 
 
 def agency_notice_to_notice_document(draft: AgencyNoticeDraft) -> NoticeDocument:
+    document_model = _blocks_to_document_model(draft) if draft.blocks else None
     return NoticeDocument(
-        documentType="agency_notice",
+        documentType=f"agency_notice:{draft.recipe_id}",
         title=draft.title,
-        organization=draft.brief.agency_name or "기관명 확인 필요",
-        purpose=draft.brief.program_purpose or "사업 목적 확인 필요",
+        organization=draft.brief.agency_name or draft.brief.lab_name or "기관명 확인 필요",
+        purpose=draft.brief.program_purpose or draft.brief.lab_intro or "사업 목적 확인 필요",
         applicationMethod=draft.brief.submission_method or "신청 방법 확인 필요",
         sections=[
             NoticeSection(heading=f"{index}. {section.title}", body=section.content_markdown)
             for index, section in enumerate(draft.sections, start=1)
         ],
+        schedule={
+            "applicationPeriod": draft.brief.application_deadline or draft.brief.program_period,
+            "eventPeriod": draft.brief.activity_period or draft.brief.program_period,
+        },
         contact={"department": draft.brief.contact or "문의처 확인 필요", "phone": "", "email": ""},
         attachments=draft.brief.required_documents or ["제출서류 확인 필요"],
+        documentModel=document_model,
     )
+
+
+def _clean_value(value: object, fallback: str = "확인 필요") -> str:
+    text = str(value or "").strip()
+    return text if text else fallback
+
+
+def _field_evidence_id(field_name: str) -> str:
+    return f"brief:{field_name}"
+
+
+def _existing_evidence_ids(field_names: list[str], evidence: list[AgencySourceEvidence]) -> list[str]:
+    available = {item.id for item in evidence}
+    return [_field_evidence_id(field_name) for field_name in field_names if _field_evidence_id(field_name) in available]
+
+
+def _lab_confirmation_items(brief: AgencyNoticeBrief) -> list[str]:
+    required_fields = [
+        ("lab_name", "연구실/팀 이름"),
+        ("target_applicants", "모집 대상"),
+        ("activities", "활동 내용"),
+        ("submission_method", "지원 방법"),
+        ("contact", "문의처"),
+    ]
+    items = [
+        f"{label}을(를) 확인해 주세요."
+        for field_name, label in required_fields
+        if not str(getattr(brief, field_name, "") or "").strip()
+    ]
+    return list(dict.fromkeys(items))
+
+
+def _build_lab_recruitment_sections(
+    brief: AgencyNoticeBrief,
+    evidence: list[AgencySourceEvidence],
+    confirmation_required: list[str],
+) -> list[AgencyNoticeSection]:
+    section_specs = [
+        (
+            "overview",
+            "모집 개요",
+            [
+                ("연구실/팀", brief.lab_name or brief.agency_name),
+                ("연구 주제", brief.research_topics),
+                ("모집 대상", brief.target_applicants),
+                ("모집 인원", brief.openings),
+            ],
+            ["lab_name", "agency_name", "research_topics", "target_applicants", "openings"],
+        ),
+        (
+            "lab_intro",
+            "연구실 소개",
+            [("소개", brief.lab_intro), ("참고 사항", brief.notes)],
+            ["lab_intro", "notes"],
+        ),
+        (
+            "activities",
+            "활동 내용",
+            [
+                ("주요 활동", brief.activities),
+                ("활동 기간", brief.activity_period),
+                ("예상 참여 시간", brief.weekly_commitment),
+            ],
+            ["activities", "activity_period", "weekly_commitment"],
+        ),
+        (
+            "eligibility",
+            "지원 자격",
+            [
+                ("필수 자격", brief.required_qualifications),
+                ("우대 사항", brief.preferred_qualifications),
+            ],
+            ["required_qualifications", "preferred_qualifications"],
+        ),
+        (
+            "application",
+            "지원 방법 및 제출서류",
+            [
+                ("지원 방법", brief.submission_method),
+                ("제출서류", "\n".join(f"- {item}" for item in brief.required_documents)),
+                ("마감일", brief.application_deadline),
+            ],
+            ["submission_method", "required_documents", "application_deadline"],
+        ),
+        (
+            "contact",
+            "문의처",
+            [("문의처", brief.contact)],
+            ["contact"],
+        ),
+    ]
+    sections: list[AgencyNoticeSection] = []
+    for order, (section_id, title, pairs, fields) in enumerate(section_specs, start=1):
+        lines = [f"### {title}"]
+        section_confirmations: list[str] = []
+        for label, value in pairs:
+            cleaned = str(value or "").strip()
+            if cleaned:
+                lines.append(f"- {label}: {cleaned}")
+            else:
+                lines.append(f"- {label}: 확인 필요")
+                section_confirmations.append(f"{title}의 {label}을(를) 확인해 주세요.")
+        source_ids = _existing_evidence_ids(fields, evidence)
+        sections.append(
+            AgencyNoticeSection(
+                id=section_id,
+                title=title,
+                content_markdown="\n".join(lines),
+                order=order,
+                source_evidence_ids=source_ids,
+                source_traces=_source_traces(source_ids, evidence),
+                confirmation_required=list(dict.fromkeys(section_confirmations)),
+            )
+        )
+    if confirmation_required:
+        sections[0].confirmation_required = list(dict.fromkeys(sections[0].confirmation_required + confirmation_required))
+    return sections
+
+
+def _block(
+    block_id: str,
+    block_type: str,
+    title: str,
+    fields: list[str],
+    evidence: list[AgencySourceEvidence],
+    body: str = "",
+    rows: list[list[str]] | None = None,
+    confirmations: list[str] | None = None,
+) -> AgencyNoticeBlock:
+    source_ids = _existing_evidence_ids(fields, evidence)
+    return AgencyNoticeBlock(
+        id=block_id,
+        type=block_type,  # type: ignore[arg-type]
+        title=title,
+        role=block_type,
+        body=body,
+        rows=rows or [],
+        source_evidence_ids=source_ids,
+        source_traces=_source_traces(source_ids, evidence),
+        confirmation_required=confirmations or [],
+    )
+
+
+def _build_lab_recruitment_blocks(
+    brief: AgencyNoticeBrief,
+    evidence: list[AgencySourceEvidence],
+    confirmation_required: list[str],
+) -> list[AgencyNoticeBlock]:
+    documents = brief.required_documents or ["제출서류 확인 필요"]
+    blocks = [
+        _block(
+            "title",
+            "titleBox",
+            brief.title,
+            ["title"],
+            evidence,
+            body=f"{_clean_value(brief.lab_name or brief.agency_name)}에서 함께 연구할 학부연구생을 모집합니다.",
+        ),
+        _block(
+            "overview",
+            "infoTable",
+            "모집 개요",
+            ["lab_name", "agency_name", "research_topics", "target_applicants", "openings"],
+            evidence,
+            rows=[
+                ["항목", "내용"],
+                ["연구실/팀", _clean_value(brief.lab_name or brief.agency_name)],
+                ["연구 주제", _clean_value(brief.research_topics)],
+                ["모집 대상", _clean_value(brief.target_applicants)],
+                ["모집 인원", _clean_value(brief.openings)],
+            ],
+        ),
+        _block(
+            "lab-intro",
+            "noticeBox",
+            "연구실 소개",
+            ["lab_intro", "notes"],
+            evidence,
+            body=_clean_value(brief.lab_intro, "연구실 소개 확인 필요"),
+        ),
+        _block(
+            "activities",
+            "infoTable",
+            "활동 내용",
+            ["activities", "activity_period", "weekly_commitment"],
+            evidence,
+            rows=[
+                ["항목", "내용"],
+                ["주요 활동", _clean_value(brief.activities)],
+                ["활동 기간", _clean_value(brief.activity_period)],
+                ["예상 참여 시간", _clean_value(brief.weekly_commitment)],
+            ],
+        ),
+        _block(
+            "eligibility",
+            "eligibilityTable",
+            "지원 자격",
+            ["required_qualifications", "preferred_qualifications"],
+            evidence,
+            rows=[
+                ["구분", "내용"],
+                ["필수", _clean_value(brief.required_qualifications)],
+                ["우대", _clean_value(brief.preferred_qualifications)],
+            ],
+        ),
+        _block(
+            "application",
+            "documentListTable",
+            "지원 방법 및 제출서류",
+            ["submission_method", "required_documents", "application_deadline"],
+            evidence,
+            rows=[
+                ["구분", "내용"],
+                ["지원 방법", _clean_value(brief.submission_method)],
+                ["마감일", _clean_value(brief.application_deadline)],
+                *[[str(index), item] for index, item in enumerate(documents, start=1)],
+            ],
+        ),
+        _block(
+            "contact",
+            "contactBox",
+            "문의처",
+            ["contact"],
+            evidence,
+            rows=[["항목", "내용"], ["문의처", _clean_value(brief.contact)]],
+        ),
+    ]
+    if confirmation_required:
+        blocks[0].confirmation_required = confirmation_required
+    return blocks
+
+
+def _blocks_to_document_model(draft: AgencyNoticeDraft) -> dict[str, object]:
+    now = utc_now_iso()
+    model_blocks: list[dict[str, object]] = []
+    for block in draft.blocks:
+        if block.type == "titleBox":
+            model_blocks.append(
+                {
+                    "id": f"{block.id}-heading",
+                    "type": "heading",
+                    "text": block.title or draft.title,
+                    "level": 1,
+                    "style": {"align": "center", "fontSize": 22, "bold": True},
+                    "editable": True,
+                }
+            )
+            if block.body:
+                model_blocks.append(
+                    {
+                        "id": f"{block.id}-body",
+                        "type": "paragraph",
+                        "text": block.body,
+                        "style": {"align": "center", "fontSize": 12, "lineHeight": 1.6},
+                        "editable": True,
+                    }
+                )
+            continue
+        if block.type in {"infoTable", "scheduleTable", "eligibilityTable", "procedureTable", "documentListTable", "contactBox"}:
+            if block.title:
+                model_blocks.append(
+                    {
+                        "id": f"{block.id}-heading",
+                        "type": "heading",
+                        "text": block.title,
+                        "level": 2,
+                        "style": {"align": "left", "fontSize": 15, "bold": True},
+                        "editable": True,
+                    }
+                )
+            model_blocks.append(_table_model_block(block))
+            continue
+        if block.type == "noticeBox":
+            model_blocks.append(
+                {
+                    "id": f"{block.id}-heading",
+                    "type": "heading",
+                    "text": block.title,
+                    "level": 2,
+                    "style": {"align": "left", "fontSize": 15, "bold": True},
+                    "editable": True,
+                }
+            )
+            model_blocks.append(
+                {
+                    "id": f"{block.id}-body",
+                    "type": "paragraph",
+                    "text": block.body or "확인 필요",
+                    "style": {"align": "left", "fontSize": 12, "lineHeight": 1.7, "marginTop": 8},
+                    "editable": True,
+                }
+            )
+            continue
+        model_blocks.append(
+            {
+                "id": block.id,
+                "type": "paragraph",
+                "text": block.body or block.title or "확인 필요",
+                "editable": True,
+            }
+        )
+    return {
+        "id": f"{draft.id}-document-model",
+        "title": draft.title,
+        "pages": [{"id": "agency-page-1", "blocks": model_blocks}],
+        "metadata": {
+            "documentType": f"agency_notice:{draft.recipe_id}",
+            "createdAt": draft.created_at or now,
+            "updatedAt": draft.updated_at or now,
+        },
+    }
+
+
+def _table_model_block(block: AgencyNoticeBlock) -> dict[str, object]:
+    rows = block.rows or [["항목", "내용"], [block.title, block.body or "확인 필요"]]
+    return {
+        "id": block.id,
+        "type": "table",
+        "style": {"borderCollapse": True, "width": "100%"},
+        "rows": [
+            {
+                "cells": [
+                    {
+                        "id": f"{block.id}-r{row_index}-c{cell_index}",
+                        "text": cell,
+                        "align": "center" if row_index == 0 or cell_index == 0 else "left",
+                        "verticalAlign": "middle",
+                        "background": "#f1f5f2" if row_index == 0 or cell_index == 0 else None,
+                        "editable": True,
+                    }
+                    for cell_index, cell in enumerate(row)
+                ]
+            }
+            for row_index, row in enumerate(rows)
+        ],
+    }
 
 
 def _save(draft: AgencyNoticeDraft) -> None:
@@ -226,6 +579,8 @@ def _save(draft: AgencyNoticeDraft) -> None:
 def _build_source_evidence(brief: AgencyNoticeBrief) -> list[AgencySourceEvidence]:
     evidence: list[AgencySourceEvidence] = []
     field_labels = {
+        "title": "공고명",
+        "agency_name": "기관명",
         "program_purpose": "사업 목적",
         "budget": "예산",
         "program_period": "사업 기간",
@@ -239,6 +594,18 @@ def _build_source_evidence(brief: AgencyNoticeBrief) -> list[AgencySourceEvidenc
         "privacy_policy": "개인정보 처리방침",
         "fair_competition_clause": "공정경쟁 문구",
         "appeal_process": "이의신청 절차",
+        "lab_name": "연구실/팀 이름",
+        "lab_intro": "연구실 소개",
+        "research_topics": "연구 주제",
+        "target_applicants": "모집 대상",
+        "openings": "모집 인원",
+        "activities": "활동 내용",
+        "required_qualifications": "필수 자격",
+        "preferred_qualifications": "우대 사항",
+        "activity_period": "활동 기간",
+        "weekly_commitment": "예상 참여 시간",
+        "application_deadline": "지원 마감일",
+        "notes": "참고 사항",
     }
     for field_name, label in field_labels.items():
         raw_value = getattr(brief, field_name, "")

@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { aiReviseAgencyNoticeSection, updateAgencyNoticeSection } from '@/lib/api';
-import type { AgencyNoticeDraft, AgencyNoticeSection, DocumentStyleProfile } from '@/lib/types';
+import type { AgencyNoticeBlock, AgencyNoticeDraft, AgencyNoticeSection, DocumentStyleProfile } from '@/lib/types';
 import { DEFAULT_DOCUMENT_STYLE_PROFILE_ID, documentStyleProfiles, getDocumentStyleProfile } from '@/lib/documentStyleProfiles';
 import { Button } from '@/components/ui/Button';
 
@@ -108,6 +108,62 @@ function DocumentMarkdown({ content }: { content: string }) {
   }, [content]);
 
   return <>{nodes}</>;
+}
+
+function NoticeBlockPreview({ block }: { block: AgencyNoticeBlock }) {
+  if (['infoTable', 'scheduleTable', 'eligibilityTable', 'procedureTable', 'documentListTable', 'contactBox'].includes(block.type)) {
+    const [header, ...rows] = block.rows;
+    return (
+      <section className="my-4" data-testid={`editor-block-${block.id}`}>
+        {block.title && <h4 className="doc-heading mb-2 text-[1.1em] font-extrabold">{block.title}</h4>}
+        <table className="doc-table w-full border-collapse text-[0.95em]">
+          {header ? (
+            <thead>
+              <tr>
+                {header.map((cell, index) => (
+                  <th key={`${index}-${cell}`} className="border px-3 py-1.5 text-left font-bold">{cell}</th>
+                ))}
+              </tr>
+            </thead>
+          ) : null}
+          <tbody>
+            {rows.map((row, rowIndex) => (
+              <tr key={`row-${rowIndex}`}>
+                {row.map((cell, cellIndex) => (
+                  <td key={`${cellIndex}-${cell}`} className="border px-3 py-1.5 align-top">{cell}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+    );
+  }
+  if (block.type === 'noticeBox') {
+    return (
+      <section
+        className="my-4 rounded-lg border border-[#CFE2DA] bg-[#F8FBFA] px-4 py-3"
+        data-testid={`editor-block-${block.id}`}
+      >
+        {block.title && <h4 className="text-[1.05em] font-extrabold text-[#245D50]">{block.title}</h4>}
+        <p className="mt-1 leading-7">{block.body || '확인 필요'}</p>
+      </section>
+    );
+  }
+  if (block.type === 'titleBox') {
+    return (
+      <section className="my-4 border-y py-4 text-center" data-testid={`editor-block-${block.id}`}>
+        <h3 className="text-xl font-extrabold text-[#245D50]">{block.title}</h3>
+        {block.body && <p className="mt-2 text-sm leading-7">{block.body}</p>}
+      </section>
+    );
+  }
+  return (
+    <section className="my-4" data-testid={`editor-block-${block.id}`}>
+      {block.title && <h4 className="doc-heading mb-2 text-[1.1em] font-extrabold">{block.title}</h4>}
+      <p className="leading-7">{block.body || '확인 필요'}</p>
+    </section>
+  );
 }
 
 interface NoticeDocumentEditorProps {
@@ -273,7 +329,10 @@ export function NoticeDocumentEditor({
             </header>
 
             <div className="mt-6 space-y-2">
-              {draft.sections.map((section) => {
+              {draft.blocks?.length ? (
+                draft.blocks.map((block) => <NoticeBlockPreview key={block.id} block={block} />)
+              ) : (
+                draft.sections.map((section) => {
                 const isEditing = editingSectionId === section.id;
                 const isSelected = selectedSectionId === section.id;
                 const needsConfirmation = section.confirmation_required.length > 0;
@@ -342,7 +401,8 @@ export function NoticeDocumentEditor({
                     <DocumentMarkdown content={section.content_markdown} />
                   </div>
                 );
-              })}
+                })
+              )}
             </div>
           </article>
         </div>

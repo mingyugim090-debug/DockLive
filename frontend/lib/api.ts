@@ -26,6 +26,10 @@ import type {
   WorkflowSession,
   WorkflowResponse,
   ScoreResponse,
+  DocumentWorkspaceResponse,
+  GeneratedDocumentResponse,
+  InlineTransformCommand,
+  VisualBlockResponse,
 } from './types';
 
 function resolveApiUrl(): string {
@@ -707,4 +711,100 @@ export async function checkHealth(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// --- Document workspace (Inline-AI style multi-file project) ---
+
+export async function createWorkspace(title = ''): Promise<DocumentWorkspaceResponse> {
+  const res = await fetch(`${API_URL}/api/workspaces`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title }),
+  });
+  if (!res.ok) throw await readError(res, `워크스페이스 생성 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function createDemoWorkspace(): Promise<DocumentWorkspaceResponse> {
+  const res = await fetch(`${API_URL}/api/workspaces/demo`, { method: 'POST' });
+  if (!res.ok) throw await readError(res, `데모 워크스페이스 생성 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function getWorkspace(workspaceId: string): Promise<DocumentWorkspaceResponse> {
+  const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}`);
+  if (!res.ok) throw await readError(res, `워크스페이스 조회 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function uploadWorkspaceFile(
+  workspaceId: string,
+  file: File,
+  fileKind = '',
+): Promise<DocumentWorkspaceResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (fileKind) formData.append('file_kind', fileKind);
+  const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/files`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!res.ok) throw await readError(res, `파일 업로드 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function analyzeWorkspace(
+  workspaceId: string,
+  fileId = '',
+): Promise<DocumentWorkspaceResponse> {
+  const res = await fetchWithTimeout(
+    `${API_URL}/api/workspaces/${workspaceId}/analyze`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_id: fileId }),
+    },
+    90000,
+    '공고 분석 응답이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.',
+  );
+  if (!res.ok) throw await readError(res, `공고 분석 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function buildWorkspaceBlueprint(workspaceId: string): Promise<DocumentWorkspaceResponse> {
+  const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/blueprint`, { method: 'POST' });
+  if (!res.ok) throw await readError(res, `문서 구조 설계 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function generateWorkspaceDocument(
+  workspaceId: string,
+): Promise<GeneratedDocumentResponse> {
+  const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/generate`, { method: 'POST' });
+  if (!res.ok) throw await readError(res, `문서 생성 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function transformWorkspaceBlock(
+  workspaceId: string,
+  blockId: string,
+  command: InlineTransformCommand,
+  instruction = '',
+): Promise<VisualBlockResponse> {
+  const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/blocks/${blockId}/transform`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ command, instruction }),
+  });
+  if (!res.ok) throw await readError(res, `블록 변환 실패: ${res.status}`);
+  return res.json();
+}
+
+export async function exportWorkspace(
+  workspaceId: string,
+  format: 'markdown' | 'html',
+): Promise<ExportResponse> {
+  const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/export/${format}`);
+  if (!res.ok) throw await readError(res, `내보내기 실패: ${res.status}`);
+  return res.json();
 }
