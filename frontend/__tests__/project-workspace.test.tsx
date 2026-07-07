@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProjectWorkspace } from '@/components/projects/ProjectWorkspace';
 import type { DocumentWorkspace, GeneratedDocument, VisualBlock } from '@/lib/types';
 
@@ -167,6 +167,10 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe('ProjectWorkspace', () => {
   it('starts a demo workspace and shows files with analysis summary', async () => {
     apiMocks.createDemoWorkspace.mockResolvedValue({ success: true, data: workspaceFixture() });
@@ -326,5 +330,56 @@ describe('ProjectWorkspace', () => {
     await waitFor(() => expect(apiMocks.syncWorkspaceArtifact).toHaveBeenCalledWith('ws-1', 'artifact-1'));
     expect(screen.getByTestId('artifact-card-excel')).toHaveTextContent('synced');
     expect(screen.getByTestId('workspace-log')).toHaveTextContent('동기화');
+  });
+
+  it('automatically syncs an opened Excel artifact while the workspace stays active', async () => {
+    vi.useFakeTimers();
+    const openedArtifact = {
+      ...EXCEL_ARTIFACT,
+      sync_state: {
+        ...EXCEL_ARTIFACT.sync_state,
+        status: 'opened',
+        last_opened_at: '2026-07-07T01:00:00Z',
+      },
+    };
+    apiMocks.createDemoWorkspace.mockResolvedValue({
+      success: true,
+      data: workspaceFixture({
+        status: 'generated',
+        document: DOCUMENT,
+        artifacts: [openedArtifact],
+      } as Partial<DocumentWorkspace>),
+    });
+    apiMocks.syncWorkspaceArtifact.mockResolvedValue({
+      success: true,
+      data: {
+        ...openedArtifact,
+        sync_state: {
+          ...openedArtifact.sync_state,
+          status: 'synced',
+          last_synced_at: '2026-07-07T01:05:00Z',
+          snapshot: { source: 'user_edit', sheets: { dashboard: [['auto synced']] } },
+        },
+      },
+    });
+
+    render(<ProjectWorkspace />);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('start-demo'));
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId('artifact-card-excel')).toHaveTextContent('opened');
+    expect(apiMocks.syncWorkspaceArtifact).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(apiMocks.syncWorkspaceArtifact).toHaveBeenCalledWith('ws-1', 'artifact-1');
+    expect(screen.getByTestId('artifact-card-excel')).toHaveTextContent('synced');
+    expect(screen.getByTestId('workspace-log')).toHaveTextContent('Excel auto sync');
   });
 });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   analyzeWorkspace,
   buildWorkspaceBlueprint,
@@ -27,6 +27,7 @@ const STEPS: { key: WorkspaceStatus[]; label: string }[] = [
   { key: ['blueprint_ready'], label: '③ 구조 설계' },
   { key: ['generated'], label: '④ 문서 완성' },
 ];
+const EXCEL_SYNC_POLL_MS = 5000;
 
 function stepIndex(status: WorkspaceStatus): number {
   return STEPS.findIndex((step) => step.key.includes(status));
@@ -138,6 +139,43 @@ export function ProjectWorkspace() {
   const pushLog = useCallback((message: string) => {
     setLogs((current) => [message, ...current].slice(0, 8));
   }, []);
+
+  const pollingExcelArtifact = workspace?.artifacts?.find(
+    (artifact) =>
+      artifact.kind === 'excel' &&
+      Boolean(artifact.sync_state.last_opened_at) &&
+      ['opened', 'synced'].includes(artifact.sync_state.status),
+  );
+
+  useEffect(() => {
+    if (!workspace?.id || !pollingExcelArtifact) return undefined;
+    let cancelled = false;
+    const interval = window.setInterval(async () => {
+      try {
+        const res = await syncWorkspaceArtifact(workspace.id, pollingExcelArtifact.id);
+        if (cancelled) return;
+        setWorkspace((current) => (current ? replaceArtifact(current, res.data) : current));
+        if (res.data.sync_state.last_synced_at !== pollingExcelArtifact.sync_state.last_synced_at) {
+          pushLog(`Excel auto sync: ${res.data.filename}`);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          pushLog(`Excel sync warning: ${e instanceof Error ? e.message : 'sync failed'}`);
+        }
+      }
+    }, EXCEL_SYNC_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [
+    pollingExcelArtifact?.id,
+    pollingExcelArtifact?.sync_state.last_opened_at,
+    pollingExcelArtifact?.sync_state.last_synced_at,
+    pollingExcelArtifact?.sync_state.status,
+    pushLog,
+    workspace?.id,
+  ]);
 
   const run = useCallback(async (task: () => Promise<void>) => {
     setBusy(true);
