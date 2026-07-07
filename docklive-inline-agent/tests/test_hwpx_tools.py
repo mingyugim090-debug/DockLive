@@ -64,8 +64,15 @@ def test_compose_hwpx_form_open_result_uses_launcher(tmp_path, monkeypatch):
     source = tmp_path / "form.hwpx"
     source.write_bytes(b"PK\x03\x04source")
     opened = []
+
+    class FakeIntegrityTools:
+        @staticmethod
+        def validate_document(path, original_path="", authored_ranges=None):
+            return {"ok": True, "data": {"validation_passed": True, "checks": []}}
+
     monkeypatch.setattr(hwpx_tools, "_post_compose_request", fake_compose_response)
     monkeypatch.setattr(hwpx_tools, "_open_path", lambda path: opened.append(path))
+    monkeypatch.setattr(hwpx_tools, "integrity_tools", FakeIntegrityTools, raising=False)
 
     out = hwpx_tools.compose_hwpx_form(
         path=str(source),
@@ -76,6 +83,33 @@ def test_compose_hwpx_form_open_result_uses_launcher(tmp_path, monkeypatch):
 
     assert out["ok"] is True
     assert opened == [out["data"]["saved_path"]]
+    assert out["data"]["opened"] is True
+
+
+def test_compose_hwpx_form_does_not_open_when_local_validation_fails(tmp_path, monkeypatch):
+    source = tmp_path / "form.hwpx"
+    source.write_bytes(b"PK\x03\x04source")
+    opened = []
+
+    class FakeIntegrityTools:
+        @staticmethod
+        def validate_document(path, original_path="", authored_ranges=None):
+            return {"ok": True, "data": {"validation_passed": False, "checks": [{"id": "bad", "passed": False}]}}
+
+    monkeypatch.setattr(hwpx_tools, "_post_compose_request", fake_compose_response)
+    monkeypatch.setattr(hwpx_tools, "_open_path", lambda path: opened.append(path))
+    monkeypatch.setattr(hwpx_tools, "integrity_tools", FakeIntegrityTools, raising=False)
+
+    out = hwpx_tools.compose_hwpx_form(
+        path=str(source),
+        request="Fill",
+        output_dir=str(tmp_path),
+        open_result=True,
+    )
+
+    assert out["ok"] is True
+    assert opened == []
+    assert out["data"]["opened"] is False
 
 
 def test_hwpx_session_flow_posts_expected_endpoints(tmp_path, monkeypatch):
@@ -159,3 +193,62 @@ def test_compose_hwpx_form_posts_to_backend_and_writes_output(tmp_path, monkeypa
             "title": "",
         }
     ]
+
+
+def test_compose_hwpx_form_attaches_local_validation_summary(tmp_path, monkeypatch):
+    source = tmp_path / "form.hwpx"
+    source.write_bytes(b"PK\x03\x04source")
+    validation_calls = []
+
+    class FakeIntegrityTools:
+        @staticmethod
+        def validate_document(path, original_path="", authored_ranges=None):
+            validation_calls.append((path, original_path, authored_ranges))
+            return {"ok": True, "data": {"validation_passed": True, "checks": []}}
+
+    monkeypatch.setattr(hwpx_tools, "_post_compose_request", fake_compose_response)
+    monkeypatch.setattr(hwpx_tools, "integrity_tools", FakeIntegrityTools, raising=False)
+
+    out = hwpx_tools.compose_hwpx_form(path=str(source), request="Fill", output_dir=str(tmp_path))
+
+    assert out["ok"] is True
+    assert out["data"]["validation_summary"]["validation_passed"] is True
+    assert validation_calls == [(out["data"]["saved_path"], str(source), [])]
+
+
+def test_export_hwpx_session_attaches_local_validation_summary(tmp_path, monkeypatch):
+    validation_calls = []
+
+    class FakeIntegrityTools:
+        @staticmethod
+        def validate_document(path, original_path="", authored_ranges=None):
+            validation_calls.append((path, original_path, authored_ranges))
+            return {"ok": True, "data": {"validation_passed": True, "checks": []}}
+
+    monkeypatch.setattr(hwpx_tools, "_post_export_session_request", lambda *args, **kwargs: fake_export_response())
+    monkeypatch.setattr(hwpx_tools, "integrity_tools", FakeIntegrityTools, raising=False)
+
+    out = hwpx_tools.export_hwpx_session(session_id="s1", output_dir=str(tmp_path))
+
+    assert out["ok"] is True
+    assert out["data"]["validation_summary"]["validation_passed"] is True
+    assert validation_calls == [(out["data"]["saved_path"], "", [])]
+
+
+def test_export_hwpx_session_does_not_open_when_local_validation_fails(tmp_path, monkeypatch):
+    opened = []
+
+    class FakeIntegrityTools:
+        @staticmethod
+        def validate_document(path, original_path="", authored_ranges=None):
+            return {"ok": True, "data": {"validation_passed": False, "checks": [{"id": "bad", "passed": False}]}}
+
+    monkeypatch.setattr(hwpx_tools, "_post_export_session_request", lambda *args, **kwargs: fake_export_response())
+    monkeypatch.setattr(hwpx_tools, "_open_path", lambda path: opened.append(path))
+    monkeypatch.setattr(hwpx_tools, "integrity_tools", FakeIntegrityTools, raising=False)
+
+    out = hwpx_tools.export_hwpx_session(session_id="s1", output_dir=str(tmp_path), open_result=True)
+
+    assert out["ok"] is True
+    assert opened == []
+    assert out["data"]["opened"] is False

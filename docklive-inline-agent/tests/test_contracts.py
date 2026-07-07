@@ -39,3 +39,13 @@ def test_excel_chart_tool_fails_gracefully_without_open_workbook():
 def test_list_files_contract():
     out = dispatcher.execute("list_files", {"dir_path": "/definitely/not/here"})
     assert out.ok is False
+
+
+def test_validate_document_contract_reports_missing_file():
+    schema_names = {tool["name"] for tool in TOOLS}
+    assert "validate_document" in schema_names
+
+    out = dispatcher.execute("validate_document", {"path": "/definitely/not/here.xlsx"})
+
+    assert out.ok is False
+    assert "file does not exist" in out.text

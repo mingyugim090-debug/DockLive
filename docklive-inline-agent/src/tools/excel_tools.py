@@ -10,6 +10,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from executor import backup
+from tools import integrity_tools
 
 try:
     import xlwings as xw
@@ -27,6 +28,7 @@ class ExcelSession:
         self.book = None
         self.original_path: str | None = None
         self.backup_path: str | None = None
+        self.authored_ranges: list[str] = []
 
     @classmethod
     def get(cls) -> "ExcelSession":
@@ -46,6 +48,7 @@ class ExcelSession:
         finally:
             self.book = None
             self.app = None
+            self.authored_ranges = []
 
 
 def _err(msg: str) -> dict:
@@ -117,6 +120,20 @@ def _resolve_save_path(path: str | None, output_dir: str, filename: str, default
     return str(output / safe_name)
 
 
+def _validation_summary(path: str, original_path: str | None, authored_ranges: list[str] | None = None) -> dict:
+    try:
+        result = integrity_tools.validate_document(
+            path,
+            original_path=original_path or "",
+            authored_ranges=authored_ranges or [],
+        )
+    except Exception as exc:
+        return {"validation_passed": False, "checks": [], "warnings": [f"validation failed: {exc}"]}
+    if result.get("ok"):
+        return result.get("data", {})
+    return {"validation_passed": False, "checks": [], "warnings": [result.get("error", "validation failed")]}
+
+
 def open_workbook(path: str, visible: bool = True) -> dict:
     if xw is None:
         return _err("xlwings 미설치 또는 비Windows 환경. 이 도구는 Windows + Excel 필요.")
@@ -131,6 +148,7 @@ def open_workbook(path: str, visible: bool = True) -> dict:
         s.app = xw.App(visible=visible, add_book=False)
         s.book = s.app.books.open(str(p))
         s.original_path = str(p)
+        s.authored_ranges = []
         return _ok({"opened": p.name, "backup": s.backup_path,
                     "sheets": [sh.name for sh in s.book.sheets]})
     except Exception as e:
@@ -148,6 +166,7 @@ def create_workbook(path: str = "", visible: bool = True) -> dict:
         s.app = xw.App(visible=visible, add_book=False)
         s.book = s.app.books.add()
         s.original_path = ""
+        s.authored_ranges = []
         if path:
             target = Path(path).expanduser()
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -220,6 +239,7 @@ def write_range(sheet: str, range: str, values: list[list]) -> dict:  # noqa: A0
                 f"{len(values)}x{len(values[0])}. 정확히 맞춰서 재시도."
             )
         rng.value = values
+        s.authored_ranges.append(f"{sheet}!{range}")
         return _ok(f"{rows}x{cols} 쓰기 완료 ({sheet}!{range})")
     except Exception as ex:
         return _err(f"쓰기 실패: {ex}")
@@ -236,6 +256,7 @@ def apply_formula(sheet: str, range: str, formula: str) -> dict:  # noqa: A002
         return _err("formula는 '='로 시작해야 함.")
     try:
         sh.range(range).formula = formula
+        s.authored_ranges.append(f"{sheet}!{range}")
         return _ok(f"수식 적용 완료 ({sheet}!{range} = {formula})")
     except Exception as ex:
         return _err(f"수식 적용 실패: {ex}")
@@ -335,7 +356,13 @@ def save_workbook(path: str | None = None, output_dir: str = "", filename: str =
         else:
             path = _resolve_save_path(path, "", filename, _default_save_name(s.original_path))
         s.book.save(path)
-        return _ok({"saved": path, "saved_path": path})
+        return _ok(
+            {
+                "saved": path,
+                "saved_path": path,
+                "validation_summary": _validation_summary(path, s.original_path, list(s.authored_ranges)),
+            }
+        )
     except Exception as ex:
         return _err(f"저장 실패: {ex}")
 

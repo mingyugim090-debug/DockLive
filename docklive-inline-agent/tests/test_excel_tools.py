@@ -288,6 +288,23 @@ class TestSaveClose:
         assert out["data"]["saved"] == out["data"]["saved_path"]
         assert str(output_dir) in out["data"]["saved_path"]
 
+    def test_save_workbook_attaches_validation_summary(self, monkeypatch, opened, tmp_path):
+        validation_calls = []
+
+        class FakeIntegrityTools:
+            @staticmethod
+            def validate_document(path, original_path="", authored_ranges=None):
+                validation_calls.append((path, original_path, authored_ranges))
+                return {"ok": True, "data": {"validation_passed": True, "checks": []}}
+
+        monkeypatch.setattr(excel_tools, "integrity_tools", FakeIntegrityTools, raising=False)
+
+        out = excel_tools.save_workbook(output_dir=str(tmp_path), filename="validated.xlsx")
+
+        assert out["ok"] is True
+        assert out["data"]["validation_summary"]["validation_passed"] is True
+        assert validation_calls == [(out["data"]["saved_path"], ExcelSession.get().original_path, [])]
+
     def test_close_when_nothing_open_is_ok(self):
         out = excel_tools.close_workbook()
         assert out["ok"] is True and "이미" in out["data"]

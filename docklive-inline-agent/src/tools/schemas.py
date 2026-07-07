@@ -250,6 +250,26 @@ TOOLS: list[dict] = [
         },
     },
     {
+        "name": "validate_document",
+        "description": (
+            "Saved Excel/HWPX output files are checked without modifying them. "
+            "Use after save/export when reporting whether the completed file preserved structure, formulas, XML, and placeholders."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Saved output file path"},
+                "original_path": {"type": "string", "description": "Optional source file path for preservation checks"},
+                "authored_ranges": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Excel ranges intentionally written by the agent, e.g. Data!A1:B3",
+                },
+            },
+            "required": ["path"],
+        },
+    },
+    {
         "name": "list_files",
         "description": "폴더의 파일 목록을 반환한다. 사용자가 파일명을 정확히 모를 때 탐색용.",
         "input_schema": {

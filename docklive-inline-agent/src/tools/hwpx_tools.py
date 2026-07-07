@@ -16,6 +16,8 @@ import urllib.request
 import uuid
 from pathlib import Path
 
+from tools import integrity_tools
+
 
 def _ok(data) -> dict:
     return {"ok": True, "data": data}
@@ -23,6 +25,31 @@ def _ok(data) -> dict:
 
 def _err(msg: str) -> dict:
     return {"ok": False, "error": msg}
+
+
+def _validation_summary(path: str, original_path: str = "") -> dict:
+    try:
+        result = integrity_tools.validate_document(path, original_path=original_path, authored_ranges=[])
+    except Exception as exc:
+        return {"validation_passed": False, "checks": [], "warnings": [f"validation failed: {exc}"]}
+    if result.get("ok"):
+        return result.get("data", {})
+    return {"validation_passed": False, "checks": [], "warnings": [result.get("error", "validation failed")]}
+
+
+def _open_after_validation(path: str, open_result: bool, validation_summary: dict) -> bool:
+    if not open_result:
+        return False
+    warnings = validation_summary.setdefault("warnings", [])
+    if not validation_summary.get("validation_passed"):
+        warnings.append("Result was not opened because local validation failed.")
+        return False
+    try:
+        _open_path(path)
+        return True
+    except Exception as exc:
+        warnings.append(f"Result was saved but could not be opened: {exc}")
+        return False
 
 
 def _api_url(explicit: str = "") -> str:
@@ -225,10 +252,11 @@ def compose_hwpx_form(
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(content)
-        if open_result:
-            _open_path(str(target))
     except Exception as exc:
         return _err(f"HWPX 완성본 저장 실패: {exc}")
+
+    validation_summary = _validation_summary(str(target), str(source))
+    opened = _open_after_validation(str(target), open_result, validation_summary)
 
     return _ok(
         {
@@ -236,6 +264,8 @@ def compose_hwpx_form(
             "filename": result.get("filename") or target.name,
             "warnings": result.get("warnings", []),
             "verification": result.get("verification") or result.get("validation_summary", {}),
+            "validation_summary": validation_summary,
+            "opened": opened,
             "generated_fields": result.get("generated_fields", {}),
             "confirmation_required": result.get("confirmation_required", []),
         }
@@ -307,10 +337,11 @@ def export_hwpx_session(
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(content)
-        if open_result:
-            _open_path(str(target))
     except Exception as exc:
         return _err(f"HWPX export 저장 실패: {exc}")
+
+    validation_summary = _validation_summary(str(target))
+    opened = _open_after_validation(str(target), open_result, validation_summary)
 
     return _ok(
         {
@@ -318,6 +349,8 @@ def export_hwpx_session(
             "filename": target.name,
             "warnings": result.get("warnings", []),
             "verification": result.get("validation_summary") or result.get("verification", {}),
+            "validation_summary": validation_summary,
+            "opened": opened,
             "confirmation_required": result.get("confirmation_required", []),
         }
     )

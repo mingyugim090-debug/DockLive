@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from tools import excel_tools, file_tools, hwpx_tools
+from tools import excel_tools, file_tools, hwpx_tools, integrity_tools
 
 
 @dataclass
@@ -32,6 +32,7 @@ TOOL_REGISTRY = {
     "create_hwpx_session": hwpx_tools.create_hwpx_session,
     "draft_hwpx_session": hwpx_tools.draft_hwpx_session,
     "export_hwpx_session": hwpx_tools.export_hwpx_session,
+    "validate_document": integrity_tools.validate_document,
 }
 
 
