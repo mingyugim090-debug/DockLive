@@ -19,6 +19,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
 from agent.loop import run_agent  # noqa: E402
+from tools.file_tools import read_document, relevant_excerpt  # noqa: E402
 
 HOST = "127.0.0.1"
 PORT = 8765
@@ -56,8 +57,8 @@ def _suffix(path: str) -> str:
     return Path(str(path)).suffix.lower()
 
 
-def _select_mode(payload: dict) -> str:
-    requested = str(payload.get("mode") or "auto").lower()
+def _select_mode(payload: dict, source_files: list[str] | None = None) -> str:
+    requested = str(payload.get("mode") or "auto").strip().lower()
     if requested in {"excel", "hwpx"}:
         return requested
     if requested != "auto":
@@ -65,16 +66,21 @@ def _select_mode(payload: dict) -> str:
 
     target = str(payload.get("target_file") or payload.get("file") or "")
     suffixes = [_suffix(target)]
-    suffixes.extend(_suffix(path) for path in payload.get("source_files") or [])
+    selected_sources = source_files if source_files is not None else _source_files(payload)
+    suffixes.extend(_suffix(path) for path in selected_sources)
 
     if any(suffix in _HWPX_SUFFIXES for suffix in suffixes):
         return "hwpx"
+    if any(suffix in _EXCEL_SUFFIXES for suffix in suffixes):
+        return "excel"
     return "excel"
 
 
 def _source_files(payload: dict) -> list[str]:
-    raw_source_files = payload.get("source_files") or []
-    if isinstance(raw_source_files, (str, bytes)):
+    raw_source_files = payload.get("source_files")
+    if raw_source_files is None:
+        raw_source_files = []
+    if not isinstance(raw_source_files, list):
         raise ValueError("source_files must be a list of paths")
 
     source_files = [str(path).strip() for path in raw_source_files if str(path).strip()]
@@ -100,6 +106,7 @@ def _error_message(exc: Exception) -> str:
 
 def _build_context(
     *,
+    request: str,
     mode: str,
     target_file: str,
     output_dir: str,
@@ -116,6 +123,19 @@ def _build_context(
         lines.extend(f"  - {path}" for path in source_files)
     else:
         lines.append("- Source files: (none)")
+    excerpts: list[str] = []
+    for path in source_files:
+        parsed = read_document(path)
+        if not parsed.get("ok"):
+            continue
+        paragraphs = parsed.get("data", {}).get("paragraphs", [])
+        excerpt = relevant_excerpt(paragraphs, request).strip()
+        if excerpt:
+            excerpts.append(f"[Source: {path}]\n{excerpt}")
+    if excerpts:
+        lines.append("")
+        lines.append("Relevant source excerpts:")
+        lines.extend(excerpts)
     return "\n".join(lines)
 
 
@@ -130,10 +150,11 @@ def _build_request(payload: dict) -> BuiltAgentRequest:
 
     target_file = str(payload.get("target_file") or payload.get("file") or "").strip()
     source_files = _source_files(payload)
-    mode = _select_mode(payload)
+    mode = _select_mode(payload, source_files)
     open_result = _coerce_open_result(payload.get("open_result", True))
 
     context = _build_context(
+        request=request,
         mode=mode,
         target_file=target_file,
         output_dir=output_dir,
@@ -206,8 +227,6 @@ async def _stream_callback_agent(user_request: str, context: str):
             if event is sentinel:
                 break
             event_type = event.get("type")
-            if event_type == "done":
-                break
             yield event
             if event_type in _TERMINAL_EVENTS:
                 break
@@ -258,15 +277,19 @@ async def agent_ws(websocket: WebSocket) -> None:
     await websocket.send_json({"type": "mode_selected", "mode": built.mode})
 
     disconnected = False
+    terminal_forwarded = False
     try:
         async for event in _stream_agent_events(built.request, built.context):
             await websocket.send_json(event)
+            if event.get("type") in _TERMINAL_EVENTS:
+                terminal_forwarded = True
     except WebSocketDisconnect:
         disconnected = True
     except Exception as exc:
         await websocket.send_json({"type": "error", "message": _error_message(exc)})
     else:
-        await websocket.send_json({"type": "done"})
+        if not terminal_forwarded:
+            await websocket.send_json({"type": "done"})
     finally:
         if not disconnected:
             try:

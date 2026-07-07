@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 fastapi_testclient = pytest.importorskip("fastapi.testclient")
 
 import server  # noqa: E402
+from starlette.websockets import WebSocketDisconnect  # noqa: E402
 
 @pytest.fixture()
 def client():
@@ -94,6 +95,94 @@ def test_build_request_auto_routes_hwpx_from_source_files():
     assert built.mode == "hwpx"
 
 
+def test_build_request_auto_routes_hwpx_from_legacy_source():
+    built = server._build_request(
+        {
+            "mode": "auto",
+            "request": "Fill the form",
+            "file": r"C:\work\data.xlsx",
+            "source": r"C:\work\form.hwpx",
+            "output_dir": r"C:\work\done",
+        }
+    )
+
+    assert built.mode == "hwpx"
+    assert r"C:\work\form.hwpx" in built.source_files
+
+
+def test_build_request_includes_source_excerpt(monkeypatch):
+    def fake_read_document(path):
+        assert path == r"C:\work\brief.pdf"
+        return {
+            "ok": True,
+            "data": {
+                "paragraphs": [
+                    "Ignore this unrelated note.",
+                    "Revenue increased 25 percent in Q4.",
+                ]
+            },
+        }
+
+    def fake_relevant_excerpt(paragraphs, request):
+        assert "sales summary" in request
+        return paragraphs[1]
+
+    monkeypatch.setattr(server, "read_document", fake_read_document)
+    monkeypatch.setattr(server, "relevant_excerpt", fake_relevant_excerpt)
+
+    built = server._build_request(
+        {
+            "mode": "auto",
+            "request": "Create a sales summary",
+            "file": r"C:\work\sales.xlsx",
+            "source": r"C:\work\brief.pdf",
+            "output_dir": r"C:\work\done",
+        }
+    )
+
+    assert r"C:\work\brief.pdf" in built.context
+    assert "Revenue increased 25 percent in Q4." in built.context
+
+
+def test_build_request_rejects_dict_source_files():
+    with pytest.raises(ValueError, match="source_files"):
+        server._build_request(
+            {
+                "mode": "auto",
+                "request": "make report",
+                "file": "x.xlsx",
+                "source_files": {"path": "form.hwpx"},
+                "output_dir": "C:/out",
+            }
+        )
+
+
+def test_build_request_rejects_non_list_source_files_iterable():
+    with pytest.raises(ValueError, match="source_files"):
+        server._build_request(
+            {
+                "mode": "auto",
+                "request": "make report",
+                "file": "x.xlsx",
+                "source_files": ("form.hwpx",),
+                "output_dir": "C:/out",
+            }
+        )
+
+
+def test_build_request_strips_mode_before_lowering():
+    built = server._build_request(
+        {
+            "mode": " HWPX ",
+            "request": "Fill the form",
+            "file": r"C:\work\form.xlsx",
+            "output_dir": r"C:\work\done",
+        }
+    )
+
+    assert built.mode == "hwpx"
+
+
 def test_build_request_rejects_missing_output_dir():
     with pytest.raises(ValueError, match="output_dir"):
         server._build_request({"mode": "auto", "request": "make report", "file": "x.xlsx"})
@@ -163,3 +252,53 @@ def test_ws_agent_value_error_streams_message_only(monkeypatch, client):
         event = ws.receive_json()
 
     assert event == {"type": "error", "message": "missing workbook path"}
+
+
+def test_ws_compat_forwards_callback_done_without_generic_done(monkeypatch, client):
+    def callback_agent(user_request, context="", on_event=None):
+        on_event({"type": "tool_call", "name": "open_workbook", "input": {"path": "x.xlsx"}})
+        on_event({"type": "done", "text": "callback complete", "iterations": 3})
+        return "callback complete"
+
+    monkeypatch.setattr(server, "run_agent", callback_agent)
+
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"request": "make workbook", "file": "x.xlsx", "output_dir": "C:/out"})
+        assert ws.receive_json()["type"] == "run_started"
+        assert ws.receive_json() == {"type": "mode_selected", "mode": "excel"}
+        assert ws.receive_json()["type"] == "tool_call"
+        assert ws.receive_json() == {"type": "done", "text": "callback complete", "iterations": 3}
+        with pytest.raises(WebSocketDisconnect):
+            ws.receive_json()
+
+
+def test_ws_callback_error_does_not_emit_generic_done(monkeypatch, client):
+    def callback_agent(user_request, context="", on_event=None):
+        on_event({"type": "error", "message": "tool failed"})
+        return "failed"
+
+    monkeypatch.setattr(server, "run_agent", callback_agent)
+
+    with client.websocket_connect("/ws/agent") as ws:
+        ws.send_json({"request": "make workbook", "file": "x.xlsx", "output_dir": "C:/out"})
+        assert ws.receive_json()["type"] == "run_started"
+        assert ws.receive_json() == {"type": "mode_selected", "mode": "excel"}
+        assert ws.receive_json() == {"type": "error", "message": "tool failed"}
+        with pytest.raises(WebSocketDisconnect):
+            ws.receive_json()
+
+
+def test_ws_callback_max_iterations_does_not_emit_generic_done(monkeypatch, client):
+    def callback_agent(user_request, context="", on_event=None):
+        on_event({"type": "max_iterations", "text": "stopped", "iterations": 25})
+        return "stopped"
+
+    monkeypatch.setattr(server, "run_agent", callback_agent)
+
+    with client.websocket_connect("/ws/agent") as ws:
+        ws.send_json({"request": "make workbook", "file": "x.xlsx", "output_dir": "C:/out"})
+        assert ws.receive_json()["type"] == "run_started"
+        assert ws.receive_json() == {"type": "mode_selected", "mode": "excel"}
+        assert ws.receive_json() == {"type": "max_iterations", "text": "stopped", "iterations": 25}
+        with pytest.raises(WebSocketDisconnect):
+            ws.receive_json()
