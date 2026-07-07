@@ -24,7 +24,7 @@ try:
     from services.blueprint_service import build_blueprint, generate_document  # noqa: E402
     from services.mock_data import get_mock_result  # noqa: E402
     from services.spreadsheet_ingestion import parse_spreadsheet  # noqa: E402
-    from services.workspace_export import render_html, render_markdown  # noqa: E402
+    from services.workspace_export import export_hwpx, render_html, render_markdown  # noqa: E402
     try:
         from services import excel_artifacts  # noqa: E402
     except (ImportError, ModuleNotFoundError):
@@ -295,6 +295,36 @@ class ExportContractTests(unittest.TestCase):
         self.assertIn("42000000", table_texts)
         # Chart blocks appear as fallback tables, so at least two tables exist.
         self.assertGreaterEqual(len(parsed.tables), 2)
+
+    def test_hwpx_export_summary_marks_chart_fallback(self):
+        from services import drafting_service
+
+        original_export = drafting_service.export_markdown_to_hwpx_with_validation
+        drafting_service.export_markdown_to_hwpx_with_validation = lambda markdown, title: (
+            f"{title}.hwpx",
+            b"PK\x03\x04hwpx",
+            {"warnings": [], "validation_passed": True},
+        )
+        try:
+            workspace = _demo_workspace()
+            build_blueprint(workspace)
+            generate_document(workspace_service.get_workspace(workspace.id))
+            reloaded = workspace_service.get_workspace(workspace.id)
+
+            chart_blocks = [block for block in reloaded.document.blocks if block.kind == "chart"]
+            self.assertTrue(chart_blocks)
+
+            filename, content, summary = export_hwpx(reloaded.document)
+        finally:
+            drafting_service.export_markdown_to_hwpx_with_validation = original_export
+
+        self.assertTrue(filename.endswith(".hwpx"))
+        self.assertTrue(content.startswith(b"PK"))
+        warnings = " ".join(summary.get("warnings", []))
+        self.assertIn("chart", warnings.lower())
+        self.assertIn("source table", warnings.lower())
+        self.assertTrue(summary.get("chart_fallback_used"))
+        self.assertGreaterEqual(summary.get("chart_fallback_count", 0), 1)
 
 
 class ExcelArtifactContractTests(unittest.TestCase):

@@ -57,6 +57,33 @@ def render_markdown(document: GeneratedDocument) -> str:
     return "\n\n".join(parts).strip() + "\n"
 
 
+def _chart_blocks(document: GeneratedDocument) -> list[VisualBlock]:
+    return [block for block in document.blocks if block.kind == "chart" and block.chart]
+
+
+def _chart_fallback_warning(document: GeneratedDocument) -> list[str]:
+    if not _chart_blocks(document):
+        return []
+    return [
+        "Chart requests are exported with the source table because native HWPX chart objects are not enabled in this version."
+    ]
+
+
+def _chart_fallback_metadata(document: GeneratedDocument) -> dict[str, Any]:
+    blocks = _chart_blocks(document)
+    if not blocks:
+        return {"chart_fallback_used": False, "chart_fallback_count": 0, "chart_fallback_labels": []}
+    labels: list[str] = []
+    for block in blocks:
+        if block.chart:
+            labels.extend(block.chart.labels)
+    return {
+        "chart_fallback_used": True,
+        "chart_fallback_count": len(blocks),
+        "chart_fallback_labels": list(dict.fromkeys(labels)),
+    }
+
+
 def _html_table(rows: list[list[str]]) -> str:
     if not rows:
         return ""
@@ -155,7 +182,12 @@ def export_docx(document: GeneratedDocument) -> tuple[str, bytes]:
 def export_hwpx(document: GeneratedDocument) -> tuple[str, bytes, dict[str, Any]]:
     from services.drafting_service import export_markdown_to_hwpx_with_validation
 
-    return export_markdown_to_hwpx_with_validation(render_markdown(document), document.title or "문서")
+    filename, content, summary = export_markdown_to_hwpx_with_validation(render_markdown(document), document.title or "문서")
+    chart_warnings = _chart_fallback_warning(document)
+    if chart_warnings:
+        summary["warnings"] = list(dict.fromkeys([*summary.get("warnings", []), *chart_warnings]))
+    summary.update(_chart_fallback_metadata(document))
+    return filename, content, summary
 
 
 def export_pdf(document: GeneratedDocument) -> tuple[str, bytes, dict[str, Any]]:
