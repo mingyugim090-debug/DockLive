@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain } = require("electron");
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const net = require("node:net");
@@ -72,10 +72,21 @@ function npmCommand() {
   return process.platform === "win32" ? "npm.cmd" : "npm";
 }
 
+ipcMain.handle("livedock:select-output-folder", async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ["openDirectory", "createDirectory"],
+  });
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+  return result.filePaths[0];
+});
+
 async function startLocalRuntime() {
   const repoRoot = resolveRepoRoot();
   const frontendDir = path.join(repoRoot, "frontend");
   const backendDir = path.join(repoRoot, "backend");
+  const inlineAgentDir = path.join(repoRoot, "docklive-inline-agent");
   const excelHelperDir = path.join(repoRoot, "tools", "excel-helper");
   const workspaceDir = ensureDirectory(path.join(app.getPath("userData"), "workspaces"));
 
@@ -91,6 +102,7 @@ async function startLocalRuntime() {
   const runtimeEnv = {
     LIVEDOCK_DESKTOP: "1",
     LIVEDOCK_WORKSPACE_DIR: workspaceDir,
+    LIVEDOCK_API_URL: backendUrl,
     LIVEDOCK_EXCEL_HELPER_DIR: excelHelperDir,
     LIVEDOCK_EXCEL_HELPER_PYTHON: process.env.LIVEDOCK_EXCEL_HELPER_PYTHON || pythonCommand,
     NEXT_PUBLIC_API_URL: backendUrl,
@@ -105,6 +117,11 @@ async function startLocalRuntime() {
       env: runtimeEnv,
     },
   );
+
+  spawnManagedProcess("inline-agent", pythonCommand, ["src/server.py"], {
+    cwd: inlineAgentDir,
+    env: runtimeEnv,
+  });
 
   spawnManagedProcess("frontend", npmCommand(), ["run", "dev", "--", "-p", String(frontendPort)], {
     cwd: frontendDir,

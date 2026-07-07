@@ -27,8 +27,20 @@ test("main process starts managed frontend/backend runtime for /app/projects", a
   assert.match(main, /LIVEDOCK_WORKSPACE_DIR/);
   assert.match(main, /frontend/);
   assert.match(main, /backend/);
+  assert.match(main, /inline-agent/);
+  assert.match(main, /docklive-inline-agent/);
+  assert.match(main, /LIVEDOCK_API_URL/);
   assert.match(main, /excel-helper/);
   assert.match(main, /LIVEDOCK_EXCEL_HELPER_PYTHON/);
+});
+
+test("main process registers output folder picker ipc", async () => {
+  const main = await readFile(path.join(desktopRoot, "src", "main.cjs"), "utf8");
+
+  assert.match(main, /ipcMain\.handle\(["']livedock:select-output-folder["']/);
+  assert.match(main, /dialog\.showOpenDialog/);
+  assert.match(main, /openDirectory/);
+  assert.match(main, /createDirectory/);
 });
 
 test("preload exposes a small desktop capability surface", async () => {
@@ -40,4 +52,6 @@ test("preload exposes a small desktop capability surface", async () => {
   assert.match(preload, /contextBridge/);
   assert.match(preload, /livedockDesktop/);
   assert.match(preload, /isDesktop/);
+  assert.match(preload, /selectOutputFolder/);
+  assert.match(preload, /ipcRenderer\.invoke\(["']livedock:select-output-folder["']\)/);
 });

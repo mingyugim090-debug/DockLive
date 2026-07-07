@@ -18,7 +18,6 @@ import {
 import type { DocumentWorkspace, InlineTransformCommand, WorkspaceArtifact, WorkspaceStatus } from '@/lib/types';
 import { DocumentCanvas } from './DocumentCanvas';
 import { ExportBar } from './ExportBar';
-import { WorkspaceNextAction, type WorkspaceAction } from './WorkspaceNextAction';
 import { WorkspaceContextPanel } from './WorkspacePanels';
 import { WorkspaceUploader } from './WorkspaceUploader';
 
@@ -29,6 +28,15 @@ const STEPS: { key: WorkspaceStatus[]; label: string }[] = [
   { key: ['generated'], label: '④ 문서 완성' },
 ];
 const EXCEL_SYNC_POLL_MS = 5000;
+
+type WorkspaceAction = {
+  id: 'analyze' | 'blueprint' | 'generate' | 'excel';
+  label: string;
+  description: string;
+  disabled: boolean;
+  testId: string;
+  onClick: () => void;
+};
 
 function stepIndex(status: WorkspaceStatus): number {
   return STEPS.findIndex((step) => step.key.includes(status));
@@ -336,6 +344,12 @@ export function ProjectWorkspace() {
   });
   const primaryAction = visibleActions.find((action) => action.id === primaryActionId) ?? null;
   const secondaryActions = visibleActions.filter((action) => action.id !== primaryActionId);
+  const orderedActions = primaryAction ? [primaryAction, ...secondaryActions] : visibleActions;
+  const localAgentFiles = workspace.files.map((file) => ({
+    id: file.id,
+    name: file.originalName ?? file.filename,
+    path: file.localPath ?? file.local_path ?? file.path,
+  }));
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -354,7 +368,28 @@ export function ProjectWorkspace() {
             </li>
           ))}
         </ol>
-        <div className="ml-auto">
+        {orderedActions.length ? (
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+            {orderedActions.map((action, index) => (
+              <button
+                key={action.id}
+                type="button"
+                data-testid={action.testId}
+                disabled={action.disabled}
+                onClick={action.onClick}
+                className={[
+                  'rounded-full px-3 py-2 text-xs font-extrabold transition disabled:cursor-not-allowed disabled:opacity-50',
+                  index === 0
+                    ? 'bg-[#245D50] text-white hover:bg-[#3A7A68]'
+                    : 'border border-[#245D50] bg-white text-[#245D50] hover:bg-[#EDF7F2]',
+                ].join(' ')}
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <div className={orderedActions.length ? '' : 'ml-auto'}>
           {workspace.document ? <ExportBar busy={busy} onExport={handleExport} /> : null}
         </div>
       </header>
@@ -371,12 +406,6 @@ export function ProjectWorkspace() {
             <h2 className="mb-2 text-xs font-extrabold text-[#24312D]">프로젝트 자료</h2>
             <WorkspaceUploader files={workspace.files} busy={busy} onUpload={handleUpload} />
           </section>
-          <WorkspaceNextAction
-            title={stageCopy.title}
-            description={stageCopy.description}
-            primaryAction={primaryAction}
-            secondaryActions={secondaryActions}
-          />
         </aside>
 
         {workspace.document ? (
@@ -393,9 +422,15 @@ export function ProjectWorkspace() {
               <p className="font-bold text-[#40504B]">{stageCopy.title}</p>
               <p className="mt-2 text-xs leading-5">{stageCopy.description}</p>
               {primaryAction ? (
-                <p className="mt-3 text-[11px] font-bold text-[#245D50]">
-                  왼쪽의 “{primaryAction.label}” 버튼으로 이어서 진행하세요.
-                </p>
+                <button
+                  type="button"
+                  data-testid={`${primaryAction.testId}-empty`}
+                  disabled={primaryAction.disabled}
+                  onClick={primaryAction.onClick}
+                  className="mt-4 rounded-full bg-[#245D50] px-4 py-2 text-xs font-extrabold text-white transition hover:bg-[#3A7A68] disabled:opacity-50"
+                >
+                  {primaryAction.label}
+                </button>
               ) : null}
             </div>
           </div>
@@ -406,6 +441,7 @@ export function ProjectWorkspace() {
           artifacts={artifacts}
           logs={logs}
           busy={busy}
+          localAgentFiles={localAgentFiles}
           onOpenArtifact={handleOpenArtifact}
           onSyncArtifact={handleSyncArtifact}
         />

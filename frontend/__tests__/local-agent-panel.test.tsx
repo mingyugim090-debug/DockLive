@@ -46,56 +46,76 @@ describe('LocalAgentPanel', () => {
     await waitFor(() => expect(screen.getByTestId('local-agent-status')).toHaveTextContent('연결됨'));
   });
 
-  it('shows launch guide and recheck button when agent is not running', async () => {
+  it('shows a compact guide and recheck button when agent is not running', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('refused')));
     render(<LocalAgentPanel />);
     await waitFor(() => expect(screen.getByTestId('local-agent-status')).toHaveTextContent('미실행'));
     expect(screen.getByTestId('local-agent-recheck')).toBeInTheDocument();
+    expect(screen.getByText(/DockLive PC Agent/)).toBeInTheDocument();
+    expect(screen.queryByText(/python src\/tray.py/)).not.toBeInTheDocument();
   });
 
-  it('streams tool events over websocket into the log', async () => {
-    render(<LocalAgentPanel />);
+  it('sends auto mode, source files, output folder, and open result preference', async () => {
+    render(
+      <LocalAgentPanel
+        sourceFiles={[{ name: 'sales.csv', path: 'C:\\work\\sales.csv' }]}
+        defaultTargetFile={'C:\\work\\sales.csv'}
+      />,
+    );
     await waitFor(() => expect(screen.getByTestId('local-agent-status')).toHaveTextContent('연결됨'));
 
-    fireEvent.change(screen.getByTestId('local-agent-file'), { target: { value: 'C:/견적서.xlsx' } });
-    fireEvent.change(screen.getByTestId('local-agent-request'), { target: { value: 'A사 품목 채워줘' } });
-    fireEvent.click(screen.getByTestId('local-agent-run'));
+    expect(screen.getByTestId('local-agent-mode-auto')).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.change(screen.getByLabelText('요청사항'), { target: { value: '매출 요약 차트를 만들어줘' } });
+    fireEvent.change(screen.getByLabelText('저장 폴더'), { target: { value: 'C:\\work\\done' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Agent 실행' }));
 
     const ws = FakeWebSocket.instances[0];
     expect(ws).toBeDefined();
     ws.onopen?.();
-    expect(JSON.parse(ws.sent[0])).toEqual({ request: 'A사 품목 채워줘', file: 'C:/견적서.xlsx' });
-
-    ws.emit({ type: 'tool_call', name: 'open_workbook', input: {} });
-    ws.emit({ type: 'tool_result', name: 'open_workbook', ok: true, output: '{}' });
-    ws.emit({ type: 'done', text: '요청 처리 완료', iterations: 2 });
-
-    await waitFor(() => {
-      const log = screen.getByTestId('local-agent-log');
-      expect(log).toHaveTextContent('▸ open_workbook 실행 중');
-      expect(log).toHaveTextContent('✓ open_workbook 완료');
-      expect(log).toHaveTextContent('완료 — 요청 처리 완료');
+    expect(JSON.parse(ws.sent[0])).toEqual({
+      mode: 'auto',
+      request: '매출 요약 차트를 만들어줘',
+      file: 'C:\\work\\sales.csv',
+      source_files: ['C:\\work\\sales.csv'],
+      output_dir: 'C:\\work\\done',
+      open_result: true,
     });
-    expect(ws.closed).toBe(true);
-    await waitFor(() => expect(screen.getByTestId('local-agent-run')).not.toBeDisabled());
   });
 
-  it('shows failed tool result with error text', async () => {
+  it('renders compact progress and saved path from streamed events', async () => {
     render(<LocalAgentPanel />);
     await waitFor(() => expect(screen.getByTestId('local-agent-status')).toHaveTextContent('연결됨'));
 
-    fireEvent.change(screen.getByTestId('local-agent-request'), { target: { value: '시트 정리해줘' } });
-    fireEvent.click(screen.getByTestId('local-agent-run'));
+    fireEvent.change(screen.getByLabelText('대상 파일'), { target: { value: 'C:\\work\\report.hwpx' } });
+    fireEvent.change(screen.getByLabelText('저장 폴더'), { target: { value: 'C:\\done' } });
+    fireEvent.change(screen.getByLabelText('요청사항'), { target: { value: '보고서를 작성해줘' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Agent 실행' }));
 
     const ws = FakeWebSocket.instances[0];
     ws.onopen?.();
-    ws.emit({ type: 'tool_result', name: 'list_sheets', ok: false, output: '열린 워크북 없음' });
-    ws.emit({ type: 'error', text: 'OPENAI_API_KEY 미설정' });
+    ws.emit({ type: 'run_started' });
+    ws.emit({ type: 'mode_selected', mode: 'hwpx' });
+    ws.emit({ type: 'tool_result', tool: 'export_hwpx_session', result: { saved_path: 'C:\\done\\report.hwpx' } });
+    ws.emit({ type: 'done' });
 
     await waitFor(() => {
-      const log = screen.getByTestId('local-agent-log');
-      expect(log).toHaveTextContent('✗ list_sheets 실패: 열린 워크북 없음');
-      expect(log).toHaveTextContent('오류: OPENAI_API_KEY 미설정');
+      expect(screen.getByText('HWPX 문서 작성 중')).toBeInTheDocument();
+      expect(screen.getByText('C:\\done\\report.hwpx')).toBeInTheDocument();
     });
+    expect(ws.closed).toBe(true);
+  });
+
+  it('fills the output folder from the desktop picker', async () => {
+    vi.stubGlobal('livedockDesktop', {
+      isDesktop: true,
+      platform: 'win32',
+      selectOutputFolder: vi.fn().mockResolvedValue('C:\\picked'),
+    });
+    render(<LocalAgentPanel />);
+    await waitFor(() => expect(screen.getByTestId('local-agent-status')).toHaveTextContent('연결됨'));
+
+    fireEvent.click(screen.getByRole('button', { name: '저장 폴더 선택' }));
+
+    await waitFor(() => expect(screen.getByLabelText('저장 폴더')).toHaveValue('C:\\picked'));
   });
 });

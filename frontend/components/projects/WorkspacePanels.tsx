@@ -5,6 +5,12 @@ import type { DocumentWorkspace, WorkspaceArtifact } from '@/lib/types';
 import { BlueprintPanel } from './BlueprintPanel';
 import { LocalAgentPanel } from './LocalAgentPanel';
 
+type LocalAgentFile = {
+  id?: string;
+  name: string;
+  path?: string;
+};
+
 const STATUS_LABELS: Record<string, string> = {
   empty: '자료 대기',
   files_added: '자료 추가됨',
@@ -171,6 +177,7 @@ export function WorkspaceContextPanel({
   artifacts,
   logs,
   busy,
+  localAgentFiles = [],
   onOpenArtifact,
   onSyncArtifact,
 }: {
@@ -178,21 +185,22 @@ export function WorkspaceContextPanel({
   artifacts: WorkspaceArtifact[];
   logs: string[];
   busy: boolean;
+  localAgentFiles?: LocalAgentFile[];
   onOpenArtifact: (artifactId: string) => void;
   onSyncArtifact: (artifactId: string) => void;
 }) {
+  const defaultTargetFile = localAgentFiles.find((file) => file.path)?.path ?? '';
+
   return (
-    <aside className="w-[300px] shrink-0 space-y-3 overflow-y-auto border-l border-[#DDE7E2] bg-[#F8FAF9] px-4 py-4">
+    <aside className="w-[380px] shrink-0 space-y-3 overflow-y-auto border-l border-[#DDE7E2] bg-[#F8FAF9] px-4 py-4">
       <AnalysisSummary workspace={workspace} />
       <ArtifactPanel artifacts={artifacts} busy={busy} onOpen={onOpenArtifact} onSync={onSyncArtifact} />
+      <LocalAgentPanel sourceFiles={localAgentFiles} defaultTargetFile={defaultTargetFile} />
       {workspace.blueprint ? (
         <CollapsiblePanel title="문서 구조">
           <BlueprintPanel blueprint={workspace.blueprint} />
         </CollapsiblePanel>
       ) : null}
-      <CollapsiblePanel title="내 PC 자동화">
-        <LocalAgentPanel />
-      </CollapsiblePanel>
       <CollapsiblePanel title={`작업 로그${logs.length ? ` ${logs.length}` : ''}`} open={logs.length > 0}>
         <WorkspaceLog logs={logs} />
       </CollapsiblePanel>

@@ -1021,6 +1021,10 @@ export interface ProjectFile {
   id: string;
   workspace_id: string;
   filename: string;
+  originalName?: string;
+  path?: string;
+  localPath?: string;
+  local_path?: string;
   file_kind: ProjectFileKind;
   source_type: string;
   text: string;
@@ -1161,6 +1165,17 @@ export interface DocumentWorkspaceResponse {
   success: boolean;
   data: DocumentWorkspace;
 }
+
+export type LocalAgentMode = 'auto' | 'excel' | 'hwpx';
+
+export type LocalAgentRunEvent =
+  | { type: 'run_started' }
+  | { type: 'mode_selected'; mode: 'excel' | 'hwpx' }
+  | { type: 'tool_call'; name?: string; tool?: string; input?: Record<string, unknown> }
+  | { type: 'tool_result'; name?: string; tool?: string; ok?: boolean; output?: string; result?: Record<string, unknown> }
+  | { type: 'error'; text?: string; message?: string }
+  | { type: 'max_iterations'; text?: string; message?: string }
+  | { type: 'done'; text?: string; iterations?: number };
 
 export interface GeneratedDocumentResponse {
   success: boolean;

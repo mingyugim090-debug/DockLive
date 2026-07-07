@@ -179,8 +179,11 @@ describe('ProjectWorkspace', () => {
     fireEvent.click(screen.getByTestId('start-demo'));
 
     await waitFor(() => expect(screen.getByTestId('workspace-file-list')).toBeInTheDocument());
-    expect(screen.getByText('예산.csv')).toBeInTheDocument();
+    expect(screen.getAllByText('예산.csv').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByTestId('local-agent-panel')).toBeInTheDocument();
+    expect(screen.getByLabelText('저장 폴더')).toBeInTheDocument();
     expect(screen.getByTestId('analysis-summary')).toBeInTheDocument();
+    expect(screen.queryByText('다음 작업')).not.toBeInTheDocument();
     expect(screen.getByText('소상공인 디지털전환 지원사업')).toBeInTheDocument();
   });
 
