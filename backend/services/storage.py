@@ -24,6 +24,7 @@ INSFORGE_EXPORT_TABLE = "exports"
 INSFORGE_AGENCY_NOTICE_TABLE = "notice_drafts"
 INSFORGE_AGENCY_PRIOR_NOTICE_TABLE = "agency_notice_references"
 INSFORGE_CLAUSE_LIBRARY_TABLE = "clause_library"
+INSFORGE_DOCUMENT_WORKSPACE_TABLE = "document_workspaces"
 
 
 def _file_path_for_key(key: str) -> Path:
@@ -339,6 +340,17 @@ def _save_insforge_json(key: str, data: dict) -> bool:
                 "updated_at": now,
             },
         )
+    if prefix == "document_workspace":
+        return _insforge_upsert(
+            INSFORGE_DOCUMENT_WORKSPACE_TABLE,
+            {
+                "id": item_id,
+                "title": data.get("title") or "",
+                "status": data.get("status") or "empty",
+                "payload": data,
+                "updated_at": now,
+            },
+        )
     return False
 
 
@@ -356,6 +368,8 @@ def _load_insforge_json(key: str) -> Optional[dict]:
         return _insforge_load_payload(INSFORGE_AGENCY_PRIOR_NOTICE_TABLE, item_id)
     if prefix == "clause_library":
         return _insforge_load_payload(INSFORGE_CLAUSE_LIBRARY_TABLE, item_id)
+    if prefix == "document_workspace":
+        return _insforge_load_payload(INSFORGE_DOCUMENT_WORKSPACE_TABLE, item_id)
     return None
 
 

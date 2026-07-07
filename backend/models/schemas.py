@@ -1177,13 +1177,5 @@ class VisualBlockResponse(BaseModel):
     data: VisualBlock
 
 
-class ExportStubResponse(BaseModel):
-    success: bool = False
-    implemented: bool = False
-    format: str = ""
-    integration_point: str = ""
-    message: str = ""
-
-
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")

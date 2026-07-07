@@ -800,11 +800,18 @@ export async function transformWorkspaceBlock(
   return res.json();
 }
 
+export type WorkspaceExportFormat = 'markdown' | 'html' | 'docx' | 'hwpx' | 'pdf';
+
 export async function exportWorkspace(
   workspaceId: string,
-  format: 'markdown' | 'html',
+  format: WorkspaceExportFormat,
 ): Promise<ExportResponse> {
-  const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/export/${format}`);
+  const res = await fetchWithTimeout(
+    `${API_URL}/api/workspaces/${workspaceId}/export/${format}`,
+    {},
+    120000,
+    '내보내기 응답이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.',
+  );
   if (!res.ok) throw await readError(res, `내보내기 실패: ${res.status}`);
   return res.json();
 }

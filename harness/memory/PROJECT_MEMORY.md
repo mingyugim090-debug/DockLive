@@ -72,11 +72,18 @@ source-grounded, and useful for future Codex or Claude Code work.
   blueprint→generate (`blueprint_service.py`), inline block transforms
   paragraph→table→chart (`block_transforms.py`, values only from source
   cells), Markdown/HTML export with chart→table fallback
-  (`workspace_export.py`), DOCX/HWPX/PDF export stubs naming their
-  integration points. Frontend at `/app/projects`
+  (`workspace_export.py`). Frontend at `/app/projects`
   (`components/projects/ProjectWorkspace.tsx`, pure-SVG `ChartBlock`).
-  LLM synthesis, XLSX/OCR parsing, and InsForge persistence for workspaces
-  are phase-2 work; see `contracts.document_workspace` in state-spec.
+  Phase 2 shipped: XLSX parsed via openpyxl (500-row/50-col caps, values
+  verbatim), LLM paragraph synthesis + rewrite in `workspace_drafting.py`
+  (mock/keyless mode stays byte-identical rule-based; LLM may only rewrite
+  existing paragraph blocks, never tables/charts/needs-input placeholders,
+  and falls back to rule-based on any failure), real DOCX/HWPX/PDF exports
+  (charts always render as fallback tables; HWPX via
+  `export_markdown_to_hwpx_with_validation`), and InsForge persistence via
+  the `document_workspaces` table (`document_workspace:` storage prefix,
+  migration `20260707110000`). OCR stays out of scope; see
+  `contracts.document_workspace` in state-spec.
 - Agency redesign Phases 2-4 (content library, agency LLM drafting, studio
   frontend rebuild) are ON HOLD after the pivot; the approved plan for them
   is in the 2026-07-06 session plan file if resumed.

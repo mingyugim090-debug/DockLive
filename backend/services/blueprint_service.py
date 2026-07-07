@@ -260,6 +260,10 @@ def generate_document(workspace: DocumentWorkspace) -> GeneratedDocument:
                 )
 
     document = GeneratedDocument(id=f"doc-{uuid4()}", title=title, blocks=blocks, warnings=warnings)
+
+    from services.workspace_drafting import synthesize_paragraphs
+
+    document = synthesize_paragraphs(workspace, document)
     workspace.document = document
     workspace.status = "generated"
     workspace_service.save_workspace(workspace)

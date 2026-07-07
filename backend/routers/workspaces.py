@@ -1,10 +1,11 @@
+import base64
+
 from fastapi import APIRouter, File, Form, UploadFile
 
 from core.errors import AnalysisError
 from models.schemas import (
     DocumentWorkspaceResponse,
     ExportResponse,
-    ExportStubResponse,
     GeneratedDocumentResponse,
     InlineTransformRequest,
     VisualBlockResponse,
@@ -16,7 +17,13 @@ from services.analyzer import build_analysis_result
 from services.block_transforms import apply_transform
 from services.blueprint_service import build_blueprint, generate_document
 from services.mock_data import get_mock_result
-from services.workspace_export import export_stub, render_html, render_markdown
+from services.workspace_export import (
+    export_docx,
+    export_hwpx,
+    export_pdf,
+    render_html,
+    render_markdown,
+)
 
 router = APIRouter()
 
@@ -137,9 +144,34 @@ async def export_workspace_html(workspace_id: str):
     )
 
 
-@router.get("/{workspace_id}/export/{export_format}", response_model=ExportStubResponse, status_code=501)
-async def export_workspace_stub(workspace_id: str, export_format: str):
-    if export_format not in {"docx", "hwpx", "pdf"}:
+_BINARY_EXPORTERS = {
+    "docx": ("application/vnd.openxmlformats-officedocument.wordprocessingml.document", export_docx),
+    "hwpx": ("application/vnd.hancom.hwpx", export_hwpx),
+    "pdf": ("application/pdf", export_pdf),
+}
+
+
+@router.get("/{workspace_id}/export/{export_format}", response_model=ExportResponse)
+async def export_workspace_binary(workspace_id: str, export_format: str):
+    if export_format not in _BINARY_EXPORTERS:
         raise AnalysisError("지원하지 않는 내보내기 형식입니다.")
-    workspace_service.get_workspace(workspace_id)  # 404-equivalent check
-    return ExportStubResponse(**export_stub(export_format))
+    workspace = workspace_service.get_workspace(workspace_id)
+    if workspace.document is None:
+        raise AnalysisError("아직 생성된 문서가 없습니다.")
+
+    content_type, exporter = _BINARY_EXPORTERS[export_format]
+    result = exporter(workspace.document)
+    filename, content = result[0], result[1]
+    validation_summary = result[2] if len(result) > 2 else {}
+    warnings = list(workspace.document.warnings)
+    if isinstance(validation_summary, dict):
+        warnings.extend(validation_summary.get("warnings", []) or [])
+    return ExportResponse(
+        success=True,
+        filename=filename,
+        content_type=content_type,
+        content=base64.b64encode(content).decode("ascii"),
+        encoding="base64",
+        warnings=warnings,
+        validation_summary=validation_summary if isinstance(validation_summary, dict) else {},
+    )

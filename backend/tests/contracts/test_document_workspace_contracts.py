@@ -67,10 +67,35 @@ class SpreadsheetIngestionContractTests(unittest.TestCase):
         self.assertEqual(sheet.rows[1][1], "18,000,000")
         self.assertEqual(data.warnings, [])
 
-    def test_xlsx_yields_warning_not_content(self):
+    def test_broken_xlsx_yields_warning_not_content(self):
         data = parse_spreadsheet(b"PK\x03\x04fakexlsx", "budget.xlsx")
         self.assertEqual(data.sheets, [])
-        self.assertTrue(any("2차" in warning for warning in data.warnings))
+        self.assertTrue(data.warnings)
+
+    def test_xlsx_parsing_preserves_values_verbatim(self):
+        try:
+            import io
+
+            import openpyxl
+        except ImportError:
+            self.skipTest("openpyxl is not installed in this Python environment")
+
+        workbook = openpyxl.Workbook()
+        sheet = workbook.active
+        sheet.title = "예산"
+        sheet.append(["항목", "1차년도", "2차년도"])
+        sheet.append(["인건비", 42000000, 45000000])
+        sheet.append(["장비비", 18000000, 6000000])
+        buffer = io.BytesIO()
+        workbook.save(buffer)
+
+        data = parse_spreadsheet(buffer.getvalue(), "예산.xlsx")
+        self.assertEqual(len(data.sheets), 1)
+        parsed = data.sheets[0]
+        self.assertEqual(parsed.headers, ["항목", "1차년도", "2차년도"])
+        self.assertEqual(parsed.rows[0], ["인건비", "42000000", "45000000"])
+        self.assertEqual(parsed.rows[1], ["장비비", "18000000", "6000000"])
+        self.assertEqual(data.warnings, [])
 
 
 class WorkspaceServiceContractTests(unittest.TestCase):
@@ -238,6 +263,34 @@ class ExportContractTests(unittest.TestCase):
         html = render_html(reloaded.document)
         self.assertIn("<table>", html)
         self.assertIn("인건비", html)
+
+    def test_docx_export_preserves_title_tables_and_chart_fallback(self):
+        try:
+            import io as io_module
+
+            from docx import Document as DocxDocument
+        except ImportError:
+            self.skipTest("python-docx is not installed in this Python environment")
+
+        from services.workspace_export import export_docx
+
+        workspace = _demo_workspace()
+        build_blueprint(workspace)
+        generate_document(workspace_service.get_workspace(workspace.id))
+        reloaded = workspace_service.get_workspace(workspace.id)
+
+        filename, content = export_docx(reloaded.document)
+        self.assertTrue(filename.endswith(".docx"))
+        self.assertTrue(content.startswith(b"PK"))
+
+        parsed = DocxDocument(io_module.BytesIO(content))
+        all_text = "\n".join(p.text for p in parsed.paragraphs)
+        self.assertIn(reloaded.document.title, all_text)
+        table_texts = [cell.text for table in parsed.tables for row in table.rows for cell in row.cells]
+        self.assertIn("인건비", table_texts)
+        self.assertIn("42000000", table_texts)
+        # Chart blocks appear as fallback tables, so at least two tables exist.
+        self.assertGreaterEqual(len(parsed.tables), 2)
 
 
 if __name__ == "__main__":

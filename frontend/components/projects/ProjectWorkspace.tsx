@@ -10,6 +10,7 @@ import {
   generateWorkspaceDocument,
   transformWorkspaceBlock,
   uploadWorkspaceFile,
+  type WorkspaceExportFormat,
 } from '@/lib/api';
 import type { DocumentWorkspace, InlineTransformCommand, WorkspaceStatus } from '@/lib/types';
 import { BlueprintPanel } from './BlueprintPanel';
@@ -28,8 +29,16 @@ function stepIndex(status: WorkspaceStatus): number {
   return STEPS.findIndex((step) => step.key.includes(status));
 }
 
-function downloadText(filename: string, content: string, contentType: string) {
-  const blob = new Blob([content], { type: contentType });
+function downloadContent(filename: string, content: string, contentType: string, encoding: string) {
+  let blob: Blob;
+  if (encoding === 'base64') {
+    const binary = atob(content);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    blob = new Blob([bytes], { type: contentType });
+  } else {
+    blob = new Blob([content], { type: contentType });
+  }
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
@@ -122,11 +131,11 @@ export function ProjectWorkspace() {
     }
   };
 
-  const handleExport = (format: 'markdown' | 'html') =>
+  const handleExport = (format: WorkspaceExportFormat) =>
     run(async () => {
       if (!workspace) return;
       const res = await exportWorkspace(workspace.id, format);
-      downloadText(res.filename, res.content, res.content_type);
+      downloadContent(res.filename, res.content, res.content_type, res.encoding ?? 'text');
     });
 
   if (!workspace) {

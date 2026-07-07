@@ -124,7 +124,13 @@ def apply_transform(workspace_id: str, block_id: str, request: InlineTransformRe
     elif request.command == "rewrite":
         if block.kind != "paragraph":
             raise AnalysisError("문단 블록만 다듬을 수 있습니다.")
-        block.markdown = rewrite_block(block.markdown)
+        from services.ai_provider import should_use_mock_ai
+        from services.workspace_drafting import ai_rewrite_paragraph
+
+        if should_use_mock_ai():
+            block.markdown = rewrite_block(block.markdown)
+        else:
+            block.markdown = ai_rewrite_paragraph(block.markdown, request.instruction)
     else:
         raise AnalysisError("지원하지 않는 변환 명령입니다.")
 

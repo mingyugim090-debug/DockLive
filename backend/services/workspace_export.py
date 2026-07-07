@@ -1,18 +1,15 @@
-"""Workspace document exports (v1: Markdown/HTML; DOCX/HWPX/PDF stubs).
+"""Workspace document exports (Markdown/HTML/DOCX/HWPX/PDF).
 
-Charts fall back to their source table in exports — native HWPX chart
-objects stay out of scope per the table-first contract.
+Charts fall back to their source table in every export format — native HWPX
+chart objects stay out of scope per the table-first contract.
 """
 
 import html as html_lib
+import io
+import re
+from typing import Any
 
 from models.schemas import ChartSpec, GeneratedDocument, ParsedTableCell, VisualBlock
-
-EXPORT_INTEGRATION_POINTS = {
-    "docx": "services.notice_service.export_notice_docx",
-    "hwpx": "services.drafting_service.export_markdown_to_hwpx_with_validation",
-    "pdf": "services.notice_service.export_notice_pdf",
-}
 
 
 def _chart_fallback_rows(chart: ChartSpec) -> list[list[str]]:
@@ -103,12 +100,69 @@ def render_html(document: GeneratedDocument) -> str:
     )
 
 
-def export_stub(export_format: str) -> dict:
-    integration_point = EXPORT_INTEGRATION_POINTS.get(export_format, "")
-    return {
-        "success": False,
-        "implemented": False,
-        "format": export_format,
-        "integration_point": integration_point,
-        "message": f"{export_format.upper()} 내보내기는 2차에서 지원 예정입니다. (연결점: {integration_point})",
-    }
+def _safe_filename(title: str) -> str:
+    cleaned = re.sub(r'[\\/:*?"<>|\r\n]+', "_", (title or "document").strip())
+    return cleaned[:80] or "document"
+
+
+def _docx_add_table(docx_document, rows: list[list[str]]) -> None:
+    if not rows:
+        return
+    width = max(len(row) for row in rows)
+    table = docx_document.add_table(rows=len(rows), cols=width)
+    table.style = "Table Grid"
+    for row_index, row in enumerate(rows):
+        for col_index in range(width):
+            cell_text = row[col_index] if col_index < len(row) else ""
+            cell = table.cell(row_index, col_index)
+            cell.text = cell_text
+            if row_index == 0:
+                for run in cell.paragraphs[0].runs:
+                    run.bold = True
+
+
+def export_docx(document: GeneratedDocument) -> tuple[str, bytes]:
+    from docx import Document as DocxDocument
+
+    docx_document = DocxDocument()
+    docx_document.add_heading(document.title or "문서", level=0)
+    for block in document.blocks:
+        if block.kind == "heading":
+            docx_document.add_heading(block.markdown, level=1)
+        elif block.kind == "paragraph":
+            for line in block.markdown.splitlines():
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                bullet = re.match(r"^[-*]\s+(.+)$", stripped)
+                if bullet:
+                    docx_document.add_paragraph(bullet.group(1), style="List Bullet")
+                else:
+                    docx_document.add_paragraph(stripped)
+        elif block.kind == "table":
+            _docx_add_table(docx_document, _rows_as_text(block.rows))
+        elif block.kind == "chart" and block.chart:
+            caption = docx_document.add_paragraph(
+                f"그래프: {block.chart.title or '차트'} (내보내기에서는 표로 표시됩니다)"
+            )
+            caption.runs[0].italic = True
+            _docx_add_table(docx_document, _chart_fallback_rows(block.chart))
+    buffer = io.BytesIO()
+    docx_document.save(buffer)
+    return f"{_safe_filename(document.title)}.docx", buffer.getvalue()
+
+
+def export_hwpx(document: GeneratedDocument) -> tuple[str, bytes, dict[str, Any]]:
+    from services.drafting_service import export_markdown_to_hwpx_with_validation
+
+    return export_markdown_to_hwpx_with_validation(render_markdown(document), document.title or "문서")
+
+
+def export_pdf(document: GeneratedDocument) -> tuple[str, bytes, dict[str, Any]]:
+    from services.pdf_export_service import convert_hwpx_bytes_to_pdf
+
+    hwpx_filename, hwpx_content, hwpx_summary = export_hwpx(document)
+    pdf_filename, pdf_content, pdf_summary = convert_hwpx_bytes_to_pdf(
+        hwpx_content, document.title or "문서", source_filename=hwpx_filename
+    )
+    return pdf_filename, pdf_content, {"hwpx_validation": hwpx_summary, "pdf_validation": pdf_summary}
