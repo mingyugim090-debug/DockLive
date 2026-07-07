@@ -56,6 +56,10 @@ def _ok(data) -> dict:
     return {"ok": True, "data": data}
 
 
+_EXCEL_SUFFIXES = {".xlsx", ".xlsm", ".xls"}
+_INVALID_FILENAME_CHARS = '<>:"/\\|?*'
+
+
 def _require_book():
     s = ExcelSession.get()
     if s.book is None:
@@ -82,6 +86,37 @@ def _normalize_2d(value) -> list[list]:
     return out
 
 
+def _safe_filename(name: str, default_name: str) -> str:
+    candidate = (name or default_name).strip()
+    cleaned = "".join("_" if char in _INVALID_FILENAME_CHARS else char for char in candidate).strip(" .")
+    return cleaned or default_name
+
+
+def _default_save_name(original_path: str | None) -> str:
+    if original_path:
+        original = Path(original_path)
+        return f"{original.stem}_완성본{original.suffix or '.xlsx'}"
+    return "workbook.xlsx"
+
+
+def _resolve_save_path(path: str | None, output_dir: str, filename: str, default_name: str) -> str:
+    if path:
+        target = Path(path).expanduser()
+        if target.parent != Path("."):
+            target.parent.mkdir(parents=True, exist_ok=True)
+        return str(target)
+
+    if not output_dir:
+        raise ValueError("output_dir is required when path is not provided")
+
+    output = Path(output_dir).expanduser()
+    output.mkdir(parents=True, exist_ok=True)
+    safe_name = _safe_filename(filename, default_name)
+    if Path(safe_name).suffix.lower() not in _EXCEL_SUFFIXES:
+        safe_name = f"{Path(safe_name).stem or 'workbook'}.xlsx"
+    return str(output / safe_name)
+
+
 def open_workbook(path: str, visible: bool = True) -> dict:
     if xw is None:
         return _err("xlwings 미설치 또는 비Windows 환경. 이 도구는 Windows + Excel 필요.")
@@ -103,11 +138,55 @@ def open_workbook(path: str, visible: bool = True) -> dict:
         return _err(f"열기 실패 (파일 잠김/권한 확인): {e}")
 
 
+def create_workbook(path: str = "", visible: bool = True) -> dict:
+    if xw is None:
+        return _err("xlwings 미설치 또는 비Windows 환경. 이 도구는 Windows + Excel 필요.")
+    s = ExcelSession.get()
+    if s.book is not None:
+        return _err(f"이미 '{s.original_path}' 가 열려 있음. 먼저 close_workbook 할 것.")
+    try:
+        s.app = xw.App(visible=visible, add_book=False)
+        s.book = s.app.books.add()
+        s.original_path = ""
+        if path:
+            target = Path(path).expanduser()
+            target.parent.mkdir(parents=True, exist_ok=True)
+            s.book.save(str(target))
+            s.original_path = str(target)
+        return _ok(
+            {
+                "workbook": getattr(s.book, "name", "Book1"),
+                "path": s.original_path,
+                "sheets": [sh.name for sh in s.book.sheets],
+            }
+        )
+    except Exception as e:
+        s.quit()
+        return _err(f"새 워크북 생성 실패: {e}")
+
+
 def list_sheets() -> dict:
     s, e = _require_book()
     if e:
         return e
     return _ok([sh.name for sh in s.book.sheets])
+
+
+def add_sheet(name: str) -> dict:
+    s, e = _require_book()
+    if e:
+        return e
+    sheet_name = (name or "").strip()
+    if not sheet_name:
+        return _err("sheet name is required")
+    existing = [sh.name for sh in s.book.sheets]
+    if sheet_name in existing:
+        return _err(f"시트 '{sheet_name}'가 이미 있음. 기존 시트: {existing}")
+    try:
+        sheet = s.book.sheets.add(name=sheet_name)
+        return _ok({"sheet": sheet.name})
+    except Exception as ex:
+        return _err(f"시트 추가 실패: {ex}")
 
 
 def read_range(sheet: str, range: str) -> dict:  # noqa: A002 (스키마 name과 일치 우선)
@@ -202,16 +281,61 @@ def format_range(sheet: str, range: str, bold: bool | None = None,  # noqa: A002
         return _err(f"서식 적용 실패: {ex}")
 
 
-def save_workbook(path: str | None = None) -> dict:
+def create_chart(
+    sheet: str,
+    source_range: str,
+    position: str = "H2",
+    chart_type: str = "bar",
+    title: str = "",
+) -> dict:
+    s, e = _require_book()
+    if e:
+        return e
+    sh, e = _get_sheet(s, sheet)
+    if e:
+        return e
+    chart_types = {
+        "bar": "column_clustered",
+        "column": "column_clustered",
+        "line": "line",
+        "pie": "pie",
+    }
+    if chart_type not in chart_types:
+        return _err("chart_type은 bar, column, line, pie 중 하나여야 함.")
+    try:
+        anchor = sh.range(position)
+        chart = sh.charts.add(left=anchor.left, top=anchor.top, width=420, height=260)
+        chart.set_source_data(sh.range(source_range))
+        chart.chart_type = chart_types[chart_type]
+        if title:
+            chart.name = title
+            try:
+                chart.api[1].ChartTitle.Text = title
+            except Exception:
+                pass
+        return _ok({"chart": title or chart_type, "sheet": sheet, "source_range": source_range, "position": position})
+    except Exception as ex:
+        return _err(f"차트 생성 실패: {ex}")
+
+
+def save_workbook(path: str | None = None, output_dir: str = "", filename: str = "") -> dict:
     s, e = _require_book()
     if e:
         return e
     try:
         if path is None:
-            orig = Path(s.original_path)
-            path = str(orig.with_name(f"{orig.stem}_완성본{orig.suffix}"))
+            default_name = _default_save_name(s.original_path)
+            if output_dir:
+                path = _resolve_save_path(None, output_dir, filename, default_name)
+            elif s.original_path:
+                orig = Path(s.original_path)
+                path = str(orig.with_name(default_name))
+            else:
+                return _err("새 워크북은 output_dir 또는 path를 지정해야 저장할 수 있음.")
+        else:
+            path = _resolve_save_path(path, "", filename, _default_save_name(s.original_path))
         s.book.save(path)
-        return _ok({"saved": path})
+        return _ok({"saved": path, "saved_path": path})
     except Exception as ex:
         return _err(f"저장 실패: {ex}")
 

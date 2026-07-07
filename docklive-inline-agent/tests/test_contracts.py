@@ -27,6 +27,15 @@ def test_excel_tools_fail_gracefully_without_com():
     assert out.ok is False  # 워크북 미오픈 → 에러 dict, 예외 아님
 
 
+def test_excel_chart_tool_fails_gracefully_without_open_workbook():
+    out = dispatcher.execute(
+        "create_chart",
+        {"sheet": "견적서", "source_range": "A1:B5", "position": "H2", "chart_type": "bar"},
+    )
+    assert out.ok is False
+    assert "열린 워크북" in out.text
+
+
 def test_list_files_contract():
     out = dispatcher.execute("list_files", {"dir_path": "/definitely/not/here"})
     assert out.ok is False

@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from tools import excel_tools, file_tools
+from tools import excel_tools, file_tools, hwpx_tools
 
 
 @dataclass
@@ -15,16 +15,23 @@ class ToolOutput:
 
 TOOL_REGISTRY = {
     "open_workbook": excel_tools.open_workbook,
+    "create_workbook": excel_tools.create_workbook,
     "list_sheets": excel_tools.list_sheets,
+    "add_sheet": excel_tools.add_sheet,
     "read_range": excel_tools.read_range,
     "write_range": excel_tools.write_range,
     "apply_formula": excel_tools.apply_formula,
     "insert_rows": excel_tools.insert_rows,
     "format_range": excel_tools.format_range,
+    "create_chart": excel_tools.create_chart,
     "save_workbook": excel_tools.save_workbook,
     "close_workbook": excel_tools.close_workbook,
     "read_document": file_tools.read_document,
     "list_files": file_tools.list_files,
+    "compose_hwpx_form": hwpx_tools.compose_hwpx_form,
+    "create_hwpx_session": hwpx_tools.create_hwpx_session,
+    "draft_hwpx_session": hwpx_tools.draft_hwpx_session,
+    "export_hwpx_session": hwpx_tools.export_hwpx_session,
 }
 
 

@@ -20,9 +20,31 @@ TOOLS: list[dict] = [
         },
     },
     {
+        "name": "create_workbook",
+        "description": "빈 Excel 워크북을 새로 열어 실시간 작성 표면을 만든다. 원본 파일이 없거나 새 완성본을 만들 때 사용한다.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "선택 저장 경로. 비우면 열기만 한다."},
+                "visible": {"type": "boolean", "description": "Excel 창 표시 여부", "default": True},
+            },
+        },
+    },
+    {
         "name": "list_sheets",
         "description": "현재 열린 워크북의 시트 이름 목록을 반환한다. 쓰기 전에 구조 파악용으로 사용.",
         "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "add_sheet",
+        "description": "현재 열린 워크북에 새 시트를 추가한다. 요약, 차트, 원문근거 등 구조가 필요할 때 사용한다.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "추가할 시트 이름"},
+            },
+            "required": ["name"],
+        },
     },
     {
         "name": "read_range",
@@ -101,6 +123,29 @@ TOOLS: list[dict] = [
         },
     },
     {
+        "name": "create_chart",
+        "description": (
+            "Excel 시트에 차트를 생성한다. 표나 숫자 범위를 먼저 read_range로 확인하고, "
+            "필요한 데이터가 있을 때만 사용한다."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sheet": {"type": "string"},
+                "source_range": {"type": "string", "description": "차트 원본 범위. 예: 'A3:B10'"},
+                "position": {"type": "string", "description": "차트 좌상단 위치. 예: 'H2'", "default": "H2"},
+                "chart_type": {
+                    "type": "string",
+                    "enum": ["bar", "column", "line", "pie"],
+                    "description": "차트 유형",
+                    "default": "bar",
+                },
+                "title": {"type": "string", "description": "차트 제목"},
+            },
+            "required": ["sheet", "source_range"],
+        },
+    },
+    {
         "name": "save_workbook",
         "description": (
             "워크북을 저장한다. path를 주면 SaveAs, 생략하면 원본 폴더에 "
@@ -110,6 +155,8 @@ TOOLS: list[dict] = [
             "type": "object",
             "properties": {
                 "path": {"type": "string", "description": "저장 경로 (선택)"},
+                "output_dir": {"type": "string", "description": "완성본 저장 폴더. path가 없을 때 사용"},
+                "filename": {"type": "string", "description": "완성본 파일명. output_dir와 함께 사용"},
             },
         },
     },
@@ -135,6 +182,71 @@ TOOLS: list[dict] = [
                 "path": {"type": "string"},
             },
             "required": ["path"],
+        },
+    },
+    {
+        "name": "compose_hwpx_form",
+        "description": (
+            "HWP/HWPX 양식을 DockLive 백엔드 HWPX 자동작성 파이프라인으로 채우고, "
+            "검증된 완성본 HWPX를 로컬 PC에 저장한다. Excel 도구가 아니라 HWPX/HWP 대상 파일에 사용한다."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "작성할 HWP 또는 HWPX 원본 절대 경로"},
+                "request": {"type": "string", "description": "양식 작성 요청"},
+                "applicant_context": {"type": "string", "description": "회사/기관/사업 정보 등 추가 입력"},
+                "output_path": {"type": "string", "description": "완성본 저장 경로. 비우면 원본 폴더에 자동 저장"},
+                "output_dir": {"type": "string", "description": "완성본 저장 폴더. output_path가 없을 때 사용"},
+                "filename": {"type": "string", "description": "완성본 파일명. output_dir와 함께 사용"},
+                "api_url": {"type": "string", "description": "DockLive API URL. 기본은 LIVEDOCK_API_URL"},
+                "title": {"type": "string", "description": "문서 제목 힌트"},
+                "open_result": {"type": "boolean", "description": "저장 후 결과 파일 열기", "default": False},
+            },
+            "required": ["path", "request"],
+        },
+    },
+    {
+        "name": "create_hwpx_session",
+        "description": "HWP/HWPX 원본을 DockLive 백엔드 HWPX 세션으로 열어 실시간 작성 표면을 만든다.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "HWP 또는 HWPX 원본 절대 경로"},
+                "api_url": {"type": "string", "description": "DockLive API URL. 기본은 LIVEDOCK_API_URL"},
+            },
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "draft_hwpx_session",
+        "description": "열린 HWPX 세션의 입력 영역을 사용자 요청과 근거 자료로 자동 작성한다. 없는 값은 confirmation_required로 남긴다.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "session_id": {"type": "string", "description": "create_hwpx_session이 반환한 세션 ID"},
+                "base_input": {"type": "string", "description": "사용자 제공 원문/근거 요약"},
+                "global_prompt": {"type": "string", "description": "전체 작성 지시"},
+                "overwrite_existing": {"type": "boolean", "default": False},
+                "api_url": {"type": "string", "description": "DockLive API URL. 기본은 LIVEDOCK_API_URL"},
+            },
+            "required": ["session_id"],
+        },
+    },
+    {
+        "name": "export_hwpx_session",
+        "description": "작성된 HWPX 세션을 검증된 HWPX 파일로 내보내고 로컬 PC의 지정 폴더에 저장한다.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "session_id": {"type": "string", "description": "내보낼 HWPX 세션 ID"},
+                "output_path": {"type": "string", "description": "완성본 저장 경로"},
+                "output_dir": {"type": "string", "description": "완성본 저장 폴더"},
+                "filename": {"type": "string", "description": "완성본 파일명"},
+                "api_url": {"type": "string", "description": "DockLive API URL. 기본은 LIVEDOCK_API_URL"},
+                "open_result": {"type": "boolean", "description": "저장 후 결과 파일 열기", "default": False},
+            },
+            "required": ["session_id"],
         },
     },
     {

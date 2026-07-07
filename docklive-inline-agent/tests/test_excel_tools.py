@@ -83,9 +83,15 @@ class FakeSheets:
     def __getitem__(self, name: str) -> FakeSheet:
         return next(s for s in self._sheets if s.name == name)
 
+    def add(self, name: str | None = None) -> FakeSheet:
+        sheet = FakeSheet(name or f"Sheet{len(self._sheets) + 1}")
+        self._sheets.append(sheet)
+        return sheet
+
 
 class FakeBook:
-    def __init__(self, names: list[str]):
+    def __init__(self, names: list[str], name: str = "Book1"):
+        self.name = name
         self.sheets = FakeSheets(names)
         self.saved_paths: list[object] = []
         self.closed = False
@@ -97,14 +103,24 @@ class FakeBook:
         self.closed = True
 
 
+class FakeBooks:
+    def __init__(self):
+        self.active: FakeBook | None = None
+
+    def open(self, path: str) -> FakeBook:
+        self.active = FakeBook(["견적서", "데이터"], name=Path(path).name)
+        return self.active
+
+    def add(self) -> FakeBook:
+        self.active = FakeBook(["Sheet1"], name="Book1")
+        return self.active
+
+
 class FakeApp:
     def __init__(self, visible=True, add_book=False):
         self.visible = visible
         self.quit_called = False
-        self.books = self
-
-    def open(self, path: str) -> FakeBook:
-        return FakeBook(["견적서", "데이터"])
+        self.books = FakeBooks()
 
     def quit(self):
         self.quit_called = True
@@ -162,6 +178,32 @@ class TestOpenWorkbook:
         monkeypatch.setattr(excel_tools, "xw", None)
         out = excel_tools.open_workbook(xlsx)
         assert out["ok"] is False and "xlwings" in out["error"]
+
+
+class TestCreateWorkbook:
+    def test_create_workbook_opens_visible_blank_book(self, monkeypatch):
+        fake_app = FakeApp()
+        monkeypatch.setattr(excel_tools.xw, "App", lambda visible=True, add_book=False: fake_app)
+
+        out = excel_tools.create_workbook(visible=True)
+
+        assert out["ok"] is True
+        assert out["data"]["workbook"] == fake_app.books.active.name
+        assert fake_app.visible is True
+        assert ExcelSession.get().book is fake_app.books.active
+
+    def test_add_sheet_creates_named_sheet(self, opened):
+        out = excel_tools.add_sheet("Summary")
+
+        assert out["ok"] is True
+        assert out["data"]["sheet"] == "Summary"
+        assert "Summary" in [sheet.name for sheet in ExcelSession.get().book.sheets]
+
+    def test_add_sheet_rejects_duplicate_name(self, opened):
+        out = excel_tools.add_sheet("견적서")
+
+        assert out["ok"] is False
+        assert "이미" in out["error"]
 
 
 class TestReadWrite:
@@ -235,6 +277,16 @@ class TestSaveClose:
         target = str(tmp_path / "결과.xlsx")
         out = excel_tools.save_workbook(target)
         assert out["ok"] is True and out["data"]["saved"] == target
+
+    def test_save_workbook_uses_output_dir_and_safe_filename(self, opened, tmp_path):
+        output_dir = tmp_path / "done"
+
+        out = excel_tools.save_workbook(output_dir=str(output_dir), filename="sales:summary.xlsx")
+
+        assert out["ok"] is True
+        assert out["data"]["saved_path"].endswith("sales_summary.xlsx")
+        assert out["data"]["saved"] == out["data"]["saved_path"]
+        assert str(output_dir) in out["data"]["saved_path"]
 
     def test_close_when_nothing_open_is_ok(self):
         out = excel_tools.close_workbook()
