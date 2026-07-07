@@ -10,50 +10,110 @@ fastapi_testclient = pytest.importorskip("fastapi.testclient")
 
 import server  # noqa: E402
 
-client = fastapi_testclient.TestClient(server.app)
+@pytest.fixture()
+def client():
+    with fastapi_testclient.TestClient(server.app) as test_client:
+        yield test_client
 
 
-def fake_run_agent(user_request: str, context: str = "", on_event=None):
-    on_event({"type": "tool_call", "name": "open_workbook", "input": {"path": "x.xlsx"}})
-    on_event({"type": "tool_result", "name": "open_workbook", "ok": True, "output": "{}"})
-    on_event({"type": "done", "text": f"요청 처리 완료: {user_request[:20]}", "iterations": 1})
-    return "요청 처리 완료"
+async def fake_run_agent(user_request: str, context: str = ""):
+    yield {"type": "tool_call", "name": "open_workbook", "input": {"path": "x.xlsx"}}
+    yield {"type": "tool_result", "name": "open_workbook", "ok": True, "output": "{}"}
 
 
-def test_health():
+def test_health(client):
     res = client.get("/health")
     assert res.status_code == 200
     assert res.json()["service"] == "docklive-inline-agent"
 
 
-def test_ws_streams_tool_events_then_done(monkeypatch):
+def test_build_request_auto_routes_excel_and_carries_output_dir():
+    built = server._build_request(
+        {
+            "mode": "auto",
+            "request": "Create a sales summary chart",
+            "file": r"C:\work\sales.csv",
+            "source_files": [r"C:\work\sales.csv", r"C:\work\brief.pdf"],
+            "output_dir": r"C:\work\done",
+            "open_result": True,
+        }
+    )
+
+    assert built.mode == "excel"
+    assert built.request.startswith("[Mode: excel]")
+    assert "C:\\work\\done" in built.request
+    assert "C:\\work\\sales.csv" in built.context
+    assert built.output_dir == r"C:\work\done"
+    assert built.open_result is True
+
+
+def test_build_request_auto_routes_hwpx_from_target_extension():
+    built = server._build_request(
+        {
+            "mode": "auto",
+            "request": "Fill the form from the uploaded notice",
+            "file": r"C:\work\form.hwpx",
+            "source_files": [r"C:\work\notice.pdf"],
+            "output_dir": r"C:\work\done",
+        }
+    )
+
+    assert built.mode == "hwpx"
+    assert "Use create_hwpx_session" in built.request
+    assert "Use draft_hwpx_session" in built.request
+    assert "Use export_hwpx_session" in built.request
+
+
+def test_build_request_rejects_missing_output_dir():
+    with pytest.raises(ValueError, match="output_dir"):
+        server._build_request({"mode": "auto", "request": "make report", "file": "x.xlsx"})
+
+
+def test_websocket_emits_normalized_start_events(monkeypatch, client):
+    events = []
+
+    async def fake_run_agent(request, context):
+        events.append((request, context))
+        yield {"type": "tool_result", "tool": "save_workbook", "result": {"saved_path": "out.xlsx"}}
+
     monkeypatch.setattr(server, "run_agent", fake_run_agent)
-    with client.websocket_connect("/ws") as ws:
-        ws.send_json({"request": "견적서 채워줘", "file": "C:/견적서.xlsx"})
-        first = ws.receive_json()
-        second = ws.receive_json()
-        last = ws.receive_json()
-    assert first["type"] == "tool_call" and first["name"] == "open_workbook"
-    assert second["type"] == "tool_result" and second["ok"] is True
-    assert last["type"] == "done"
-    assert "대상 파일" in last["text"] or "요청 처리" in last["text"]
+
+    with client.websocket_connect("/ws/agent") as websocket:
+        websocket.send_json(
+            {
+                "mode": "auto",
+                "request": "make workbook",
+                "file": r"C:\work\sales.csv",
+                "output_dir": r"C:\work\done",
+            }
+        )
+        first = websocket.receive_json()
+        second = websocket.receive_json()
+        third = websocket.receive_json()
+
+    assert first["type"] == "run_started"
+    assert second == {"type": "mode_selected", "mode": "excel"}
+    assert third["type"] == "tool_result"
 
 
-def test_ws_rejects_empty_request():
-    with client.websocket_connect("/ws") as ws:
-        ws.send_json({"request": ""})
+def test_ws_rejects_empty_request(client):
+    with client.websocket_connect("/ws/agent") as ws:
+        ws.send_json({"request": "", "output_dir": "C:/out"})
         event = ws.receive_json()
     assert event["type"] == "error"
-    assert "request" in event["text"]
+    assert "request" in event["message"]
 
 
-def test_ws_agent_exception_becomes_error_event(monkeypatch):
-    def boom(user_request, context="", on_event=None):
+def test_ws_agent_exception_becomes_error_event(monkeypatch, client):
+    async def boom(user_request, context=""):
         raise RuntimeError("OPENAI_API_KEY 미설정")
+        yield
 
     monkeypatch.setattr(server, "run_agent", boom)
-    with client.websocket_connect("/ws") as ws:
-        ws.send_json({"request": "아무거나"})
+    with client.websocket_connect("/ws/agent") as ws:
+        ws.send_json({"request": "아무거나", "file": "x.xlsx", "output_dir": "C:/out"})
+        assert ws.receive_json()["type"] == "run_started"
+        assert ws.receive_json() == {"type": "mode_selected", "mode": "excel"}
         event = ws.receive_json()
     assert event["type"] == "error"
-    assert "OPENAI_API_KEY" in event["text"]
+    assert "OPENAI_API_KEY" in event["message"]
