@@ -296,7 +296,7 @@ describe('ProjectWorkspace', () => {
     await waitFor(() => expect(apiMocks.generateWorkspaceExcelArtifact).toHaveBeenCalledWith('ws-1'));
     expect(screen.getByTestId('artifact-card-excel')).toHaveTextContent('dashboard.xlsx');
     expect(screen.getByTestId('workspace-log')).toHaveTextContent('Excel');
-    expect(screen.getByText('source confirmation: review exported cells before final submission')).toBeInTheDocument();
+    expect(screen.getByText('최종 제출 전 Excel 셀 값을 확인해 주세요.')).toBeInTheDocument();
   });
 
   it('syncs an existing Excel artifact and displays the synced status', async () => {
@@ -328,7 +328,7 @@ describe('ProjectWorkspace', () => {
     fireEvent.click(screen.getByTestId('artifact-sync-artifact-1'));
 
     await waitFor(() => expect(apiMocks.syncWorkspaceArtifact).toHaveBeenCalledWith('ws-1', 'artifact-1'));
-    expect(screen.getByTestId('artifact-card-excel')).toHaveTextContent('synced');
+    expect(screen.getByTestId('artifact-card-excel')).toHaveTextContent('저장 동기화됨');
     expect(screen.getByTestId('workspace-log')).toHaveTextContent('동기화');
   });
 
@@ -369,7 +369,7 @@ describe('ProjectWorkspace', () => {
       await Promise.resolve();
     });
 
-    expect(screen.getByTestId('artifact-card-excel')).toHaveTextContent('opened');
+    expect(screen.getByTestId('artifact-card-excel')).toHaveTextContent('Excel에서 편집 중');
     expect(apiMocks.syncWorkspaceArtifact).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -379,7 +379,7 @@ describe('ProjectWorkspace', () => {
     });
 
     expect(apiMocks.syncWorkspaceArtifact).toHaveBeenCalledWith('ws-1', 'artifact-1');
-    expect(screen.getByTestId('artifact-card-excel')).toHaveTextContent('synced');
+    expect(screen.getByTestId('artifact-card-excel')).toHaveTextContent('저장 동기화됨');
     expect(screen.getByTestId('workspace-log')).toHaveTextContent('Excel auto sync');
   });
 });

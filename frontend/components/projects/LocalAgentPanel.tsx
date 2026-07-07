@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 const AGENT_HTTP = 'http://127.0.0.1:8765';
 const AGENT_WS = 'ws://127.0.0.1:8765/ws';
 const TERMINAL_EVENTS = ['done', 'max_iterations', 'error'];
-const MAX_LOG_LINES = 30;
+const MAX_LOG_LINES = 10;
 
 type AgentEvent = {
   type: string;
@@ -49,6 +49,7 @@ export function LocalAgentPanel() {
   }, [checkHealth]);
 
   const pushLine = (line: string) => setLines((current) => [...current, line].slice(-MAX_LOG_LINES));
+  const latestLine = lines.length ? lines[lines.length - 1] : '';
 
   const runAgent = () => {
     if (!request.trim() || running) return;
@@ -139,12 +140,19 @@ export function LocalAgentPanel() {
         </div>
       )}
 
-      {lines.length ? (
-        <ol data-testid="local-agent-log" className="mt-3 space-y-1 rounded-lg bg-white px-2 py-2 text-[11px] leading-4 text-[#40504B]">
-          {lines.map((line, index) => (
-            <li key={`${index}-${line}`}>{line}</li>
-          ))}
-        </ol>
+      {latestLine ? (
+        <div className="mt-3 rounded-lg bg-white px-2 py-2 text-[11px] leading-4 text-[#40504B]">
+          <p className="font-bold text-[#24312D]">최근 상태</p>
+          <p className="mt-1">{latestLine}</p>
+          <details className="mt-2">
+            <summary className="cursor-pointer font-bold text-[#245D50]">상세 로그 {lines.length}개</summary>
+            <ol data-testid="local-agent-log" className="mt-2 space-y-1">
+              {lines.map((line, index) => (
+                <li key={`${index}-${line}`}>{line}</li>
+              ))}
+            </ol>
+          </details>
+        </div>
       ) : null}
     </section>
   );

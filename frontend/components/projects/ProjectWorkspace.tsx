@@ -16,10 +16,10 @@ import {
   type WorkspaceExportFormat,
 } from '@/lib/api';
 import type { DocumentWorkspace, InlineTransformCommand, WorkspaceArtifact, WorkspaceStatus } from '@/lib/types';
-import { BlueprintPanel } from './BlueprintPanel';
 import { DocumentCanvas } from './DocumentCanvas';
 import { ExportBar } from './ExportBar';
-import { LocalAgentPanel } from './LocalAgentPanel';
+import { WorkspaceNextAction, type WorkspaceAction } from './WorkspaceNextAction';
+import { WorkspaceContextPanel } from './WorkspacePanels';
 import { WorkspaceUploader } from './WorkspaceUploader';
 
 const STEPS: { key: WorkspaceStatus[]; label: string }[] = [
@@ -57,76 +57,35 @@ function replaceArtifact(workspace: DocumentWorkspace, artifact: WorkspaceArtifa
   return { ...workspace, artifacts: [...artifacts, artifact] };
 }
 
-function ArtifactPanel({
-  artifacts,
-  busy,
-  onOpen,
-  onSync,
-}: {
-  artifacts: WorkspaceArtifact[];
-  busy: boolean;
-  onOpen: (artifactId: string) => void;
-  onSync: (artifactId: string) => void;
-}) {
-  const excelArtifact = artifacts.find((artifact) => artifact.kind === 'excel');
-  if (!excelArtifact) return null;
-  const confirmation = excelArtifact.plan?.confirmation_required ?? [];
-  return (
-    <section data-testid="artifact-card-excel" className="rounded-xl border border-[#DDE7E2] bg-[#F8FBFA] px-3 py-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-xs font-extrabold text-[#24312D]">Excel artifact</h2>
-          <p className="mt-1 truncate text-[11px] font-semibold text-[#40504B]">{excelArtifact.filename}</p>
-          <p className="mt-1 text-[11px] text-[#65736E]">status: {excelArtifact.sync_state.status}</p>
-        </div>
-        <span className="rounded-full bg-[#EDF7F2] px-2 py-0.5 text-[10px] font-bold text-[#245D50]">XLSX</span>
-      </div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <button
-          type="button"
-          data-testid={`artifact-open-${excelArtifact.id}`}
-          disabled={busy}
-          onClick={() => onOpen(excelArtifact.id)}
-          className="rounded-full bg-[#245D50] px-3 py-1.5 text-[11px] font-bold text-white disabled:opacity-50"
-        >
-          Excel 열기
-        </button>
-        <button
-          type="button"
-          data-testid={`artifact-sync-${excelArtifact.id}`}
-          disabled={busy}
-          onClick={() => onSync(excelArtifact.id)}
-          className="rounded-full border border-[#245D50] px-3 py-1.5 text-[11px] font-bold text-[#245D50] disabled:opacity-50"
-        >
-          저장 동기화
-        </button>
-      </div>
-      {confirmation.length ? (
-        <div className="mt-3 space-y-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-2 text-[11px] leading-4 text-amber-800">
-          {confirmation.map((item) => (
-            <p key={item}>{item}</p>
-          ))}
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
-function WorkspaceLog({ logs }: { logs: string[] }) {
-  return (
-    <section data-testid="workspace-log" className="rounded-xl border border-[#DDE7E2] bg-white px-3 py-3">
-      <h2 className="mb-2 text-xs font-extrabold text-[#24312D]">작업 로그</h2>
-      {logs.length ? (
-        <ol className="space-y-1 text-[11px] leading-4 text-[#40504B]">
-          {logs.map((log, index) => (
-            <li key={`${index}-${log}`}>{log}</li>
-          ))}
-        </ol>
-      ) : (
-        <p className="text-[11px] leading-4 text-[#65736E]">파일과 산출물 작업이 여기에 기록됩니다.</p>
-      )}
-    </section>
-  );
+function workspaceStageCopy(workspace: DocumentWorkspace, hasAnalyzableFile: boolean) {
+  if (!workspace.files.length) {
+    return {
+      title: '자료를 먼저 모아 주세요',
+      description: '공고문, HWPX/PDF, 예산표, 참고 문서를 추가하면 다음 단계가 열립니다.',
+    };
+  }
+  if (!workspace.analysis && hasAnalyzableFile) {
+    return {
+      title: '공고에서 핵심 조건을 추출하세요',
+      description: '마감일, 지원 대상, 제출 서류, 평가 기준을 먼저 정리합니다.',
+    };
+  }
+  if (!workspace.blueprint) {
+    return {
+      title: '문서 구조를 잡으세요',
+      description: '업로드한 표와 공고 근거를 어떤 섹션에 배치할지 설계합니다.',
+    };
+  }
+  if (!workspace.document) {
+    return {
+      title: '초안 문서를 생성하세요',
+      description: '근거가 있는 내용만 넣고, 부족한 섹션은 입력 필요 상태로 남깁니다.',
+    };
+  }
+  return {
+    title: '문서를 검토하고 내보내세요',
+    description: '필요한 블록을 다듬은 뒤 HWPX, PDF, DOCX로 받을 수 있습니다.',
+  };
 }
 
 export function ProjectWorkspace() {
@@ -324,6 +283,59 @@ export function ProjectWorkspace() {
   const currentStep = stepIndex(workspace.status);
   const hasAnalyzableFile = workspace.files.some((file) => file.text);
   const artifacts = workspace.artifacts ?? [];
+  const stageCopy = workspaceStageCopy(workspace, hasAnalyzableFile);
+  const workflowActions: WorkspaceAction[] = [
+    {
+      id: 'analyze',
+      label: workspace.analysis ? '공고 다시 분석' : '공고 분석 시작',
+      description: '마감, 자격, 제출 서류를 정리합니다.',
+      disabled: busy || !hasAnalyzableFile,
+      testId: 'action-analyze',
+      onClick: handleAnalyze,
+    },
+    {
+      id: 'blueprint',
+      label: workspace.blueprint ? '문서 구조 다시 설계' : '문서 구조 설계',
+      description: '섹션과 표·그래프 배치를 만듭니다.',
+      disabled: busy || !workspace.files.length,
+      testId: 'action-blueprint',
+      onClick: handleBlueprint,
+    },
+    {
+      id: 'generate',
+      label: busy ? '작업 중…' : workspace.document ? '문서 다시 생성' : '문서 생성',
+      description: '근거 기반 초안 문서를 만듭니다.',
+      disabled: busy || !workspace.blueprint,
+      testId: 'action-generate',
+      onClick: handleGenerate,
+    },
+    {
+      id: 'excel',
+      label: artifacts.some((item) => item.kind === 'excel') ? 'Excel 대시보드 다시 만들기' : 'Excel 대시보드 생성',
+      description: '분석 요약과 표 자료를 XLSX로 정리합니다.',
+      disabled: busy || !workspace.files.length,
+      testId: 'action-excel-generate',
+      onClick: handleGenerateExcel,
+    },
+  ];
+  const primaryActionId: WorkspaceAction['id'] | null =
+    !workspace.files.length
+      ? null
+      : !workspace.analysis && hasAnalyzableFile
+        ? 'analyze'
+        : !workspace.blueprint
+          ? 'blueprint'
+          : !workspace.document
+            ? 'generate'
+            : 'excel';
+  const visibleActions = workflowActions.filter((action) => {
+    if (!workspace.files.length) return false;
+    if (action.id === 'analyze') return hasAnalyzableFile;
+    if (action.id === 'generate') return Boolean(workspace.blueprint);
+    return true;
+  });
+  const primaryAction = visibleActions.find((action) => action.id === primaryActionId) ?? null;
+  const secondaryActions = visibleActions.filter((action) => action.id !== primaryActionId);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -354,49 +366,17 @@ export function ProjectWorkspace() {
       ) : null}
 
       <div className="flex min-h-0 flex-1">
-        <aside className="w-[300px] shrink-0 space-y-4 overflow-y-auto border-r border-[#DDE7E2] bg-white px-4 py-4">
+        <aside className="w-[320px] shrink-0 space-y-4 overflow-y-auto border-r border-[#DDE7E2] bg-white px-4 py-4">
           <section>
             <h2 className="mb-2 text-xs font-extrabold text-[#24312D]">프로젝트 자료</h2>
             <WorkspaceUploader files={workspace.files} busy={busy} onUpload={handleUpload} />
           </section>
-          <section className="space-y-2">
-            <button
-              type="button"
-              data-testid="action-analyze"
-              disabled={busy || !hasAnalyzableFile}
-              onClick={handleAnalyze}
-              className="w-full rounded-xl border border-[#DDE7E2] px-3 py-2 text-left text-xs font-bold text-[#24312D] transition hover:border-[#6A9C89] disabled:opacity-50"
-            >
-              공고 분석 {workspace.analysis ? '✓' : ''}
-            </button>
-            <button
-              type="button"
-              data-testid="action-blueprint"
-              disabled={busy || !workspace.files.length}
-              onClick={handleBlueprint}
-              className="w-full rounded-xl border border-[#DDE7E2] px-3 py-2 text-left text-xs font-bold text-[#24312D] transition hover:border-[#6A9C89] disabled:opacity-50"
-            >
-              문서 구조 설계 {workspace.blueprint ? '✓' : ''}
-            </button>
-            <button
-              type="button"
-              data-testid="action-generate"
-              disabled={busy || !workspace.blueprint}
-              onClick={handleGenerate}
-              className="w-full rounded-xl bg-[#245D50] px-3 py-2 text-left text-xs font-bold text-white transition hover:bg-[#3A7A68] disabled:opacity-50"
-            >
-              {busy ? '작업 중…' : '문서 생성'}
-            </button>
-            <button
-              type="button"
-              data-testid="action-excel-generate"
-              disabled={busy || !workspace.files.length}
-              onClick={handleGenerateExcel}
-              className="w-full rounded-xl border border-[#245D50] bg-white px-3 py-2 text-left text-xs font-bold text-[#245D50] transition hover:bg-[#EDF7F2] disabled:opacity-50"
-            >
-              Excel 대시보드 생성
-            </button>
-          </section>
+          <WorkspaceNextAction
+            title={stageCopy.title}
+            description={stageCopy.description}
+            primaryAction={primaryAction}
+            secondaryActions={secondaryActions}
+          />
         </aside>
 
         {workspace.document ? (
@@ -409,46 +389,26 @@ export function ProjectWorkspace() {
           />
         ) : (
           <div className="flex flex-1 items-center justify-center bg-[#F0F4F2] px-6 text-center text-sm text-[#65736E]">
-            <div>
-              <p className="font-bold text-[#40504B]">아직 생성된 문서가 없습니다.</p>
-              <p className="mt-1 text-xs leading-5">
-                왼쪽에서 자료를 추가하고 ①분석 → ②구조 설계 → ③문서 생성 순서로 진행해 주세요.
-              </p>
+            <div className="max-w-sm rounded-lg border border-[#DDE7E2] bg-white px-5 py-5 shadow-sm">
+              <p className="font-bold text-[#40504B]">{stageCopy.title}</p>
+              <p className="mt-2 text-xs leading-5">{stageCopy.description}</p>
+              {primaryAction ? (
+                <p className="mt-3 text-[11px] font-bold text-[#245D50]">
+                  왼쪽의 “{primaryAction.label}” 버튼으로 이어서 진행하세요.
+                </p>
+              ) : null}
             </div>
           </div>
         )}
 
-        <aside className="w-[280px] shrink-0 space-y-4 overflow-y-auto border-l border-[#DDE7E2] bg-white px-4 py-4">
-          <ArtifactPanel artifacts={artifacts} busy={busy} onOpen={handleOpenArtifact} onSync={handleSyncArtifact} />
-          <LocalAgentPanel />
-          <WorkspaceLog logs={logs} />
-          {workspace.analysis ? (
-            <section data-testid="analysis-summary">
-              <h2 className="mb-2 text-xs font-extrabold text-[#24312D]">공고 핵심 정보</h2>
-              <div className="rounded-xl border border-[#DDE7E2] bg-[#F8FBFA] px-3 py-2 text-[11px] leading-5 text-[#40504B]">
-                <p className="font-bold text-[#24312D]">{workspace.analysis.title}</p>
-                <p>{workspace.analysis.organization}</p>
-                {workspace.analysis.timeline
-                  .filter((item) => item.is_deadline)
-                  .slice(0, 1)
-                  .map((item) => (
-                    <p key={item.id} className="mt-1 font-bold text-[#245D50]">
-                      마감: {item.date} (D-{item.d_day})
-                    </p>
-                  ))}
-                {workspace.analysis.eligibility.slice(0, 3).map((item) => (
-                  <p key={item}>· {item}</p>
-                ))}
-              </div>
-            </section>
-          ) : null}
-          {workspace.blueprint ? (
-            <section>
-              <h2 className="mb-2 text-xs font-extrabold text-[#24312D]">문서 구조 설계</h2>
-              <BlueprintPanel blueprint={workspace.blueprint} />
-            </section>
-          ) : null}
-        </aside>
+        <WorkspaceContextPanel
+          workspace={workspace}
+          artifacts={artifacts}
+          logs={logs}
+          busy={busy}
+          onOpenArtifact={handleOpenArtifact}
+          onSyncArtifact={handleSyncArtifact}
+        />
       </div>
     </div>
   );

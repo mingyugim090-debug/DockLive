@@ -1,6 +1,5 @@
 'use client';
 
-import { Input } from '@/components/ui/Input';
 import { useCreditContext } from '@/lib/creditContext';
 import { insforge } from '@/lib/insforge';
 import { useRouter } from 'next/navigation';
@@ -35,14 +34,11 @@ export function Header({ title, onMenu }: { title: string; onMenu: () => void })
         <div className="min-w-0">
           <h1 className="truncate text-xl font-bold text-[#24312D]">{title}</h1>
           <p className="hidden text-sm text-[#65736E] sm:block">
-            공고 분석부터 HWPX export까지 한 흐름으로 진행합니다.
+            자료 수집부터 검토, export까지 한 화면에서 이어갑니다.
           </p>
         </div>
-        <div className="ml-auto hidden w-full max-w-md md:block">
-          <Input placeholder="공고, 초안, export 검색" aria-label="검색" />
-        </div>
 
-        <div className="ml-auto flex items-center gap-2 md:ml-0">
+        <div className="ml-auto flex items-center gap-2">
           <div
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#3A7A68] text-xs font-bold text-white"
             title={displayName}
