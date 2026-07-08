@@ -4,7 +4,7 @@
 
 ### 로컬 AI Agent 기반 문서 작성 자동화 플랫폼
 
-[![Production](https://img.shields.io/badge/🌐_Production-InsForge-6366F1?style=for-the-badge)](https://trgf5yzm.ap-southeast.insforge.app)
+[![Production](https://img.shields.io/badge/🌐_Production-InsForge-6366F1?style=for-the-badge)](https://docklive.insforge.app)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](#-기술-스택)
 [![Next.js](https://img.shields.io/badge/Next.js-14-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)](#-기술-스택)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](#-기술-스택)
@@ -72,27 +72,17 @@ LiveDock의 핵심은 사용자 PC에서 실행되는 **MCP(Model Context Protoc
 
 ```mermaid
 flowchart TB
-    subgraph LOCAL["💻 사용자 PC"]
-        direction TB
-        AGENT["🤖 DockLive Agent<br/>MCP Server (localhost:8765)"]
-        FS["📁 로컬 파일시스템<br/>공고 PDF · HWP · Excel"]
-        HWPX_OUT["📄 생성된 문서<br/>HWPX · Excel · PDF"]
-
-        AGENT -->|"읽기"| FS
-        AGENT -->|"생성"| HWPX_OUT
-    end
-
+    AI["🧠 AI Provider"] <-->|"AI 분석"| API
+    
     subgraph CLOUD["☁️ InsForge Cloud"]
-        direction TB
-        WEB["🌐 웹 UI<br/>Next.js Frontend"]
-        API["⚡ Backend API<br/>FastAPI"]
-        DB["🗄️ InsForge<br/>Auth · DB · Storage"]
-
-        WEB --> API --> DB
+        WEB["🌐 웹 UI"] <--> API["⚡ API"] <--> DB["🗄️ DB"]
+    end
+    
+    subgraph LOCAL["💻 사용자 PC"]
+        AGENT["🤖 로컬 Agent"] <-->|"읽기/생성"| FS["📁 로컬 파일"]
     end
 
-    WEB <-->|"MCP 프로토콜"| AGENT
-    API <-->|"AI 분석 요청"| AI["🧠 AI Provider<br/>OpenAI / Gemini"]
+    WEB <-->|"MCP 연동"| AGENT
 
     style LOCAL fill:#ecfdf5,stroke:#10b981,stroke-width:2px,color:#000
     style CLOUD fill:#eff6ff,stroke:#3b82f6,stroke-width:2px,color:#000
@@ -116,16 +106,15 @@ flowchart TB
 sequenceDiagram
     participant U as 👤 사용자
     participant W as 🌐 웹 UI
-    participant A as 🤖 로컬 Agent
-    participant FS as 📁 파일시스템
+    participant A as 🤖 Agent
+    participant F as 📁 파일
 
     U->>W: 공고 분석 요청
     W->>W: AI 분석 (클라우드)
-    W->>A: MCP 도구 호출 (localhost:8765)
-    A->>FS: 로컬 파일 읽기/생성
-    A-->>W: 생성 결과 반환
-    W-->>U: 문서 생성 완료 알림
-    U->>FS: 로컬에서 바로 열기 (HWP, Excel)
+    W->>A: 문서 생성 요청 (MCP)
+    A->>F: 파일 읽기/생성
+    A-->>W: 결과 반환
+    W-->>U: 완료 알림
 ```
 
 ---
@@ -209,7 +198,7 @@ LiveDock은 **두 가지 사용자 트랙**을 동시에 지원합니다:
 flowchart TB
     subgraph V1["🟢 Ver1 — 신청자 트랙"]
         direction TB
-        A1["공고 수신"] --> A2["요구사항 분석"] --> A3["제출서류 초안"] --> A4["HWPX 제출"]
+        A1["공고 수신"] --> A2["요구사항 분석"] --> A3["초안 생성"] --> A4["제출"]
     end
 
     subgraph V2["🔵 Ver2 — 기관 담당자 트랙"]
@@ -265,14 +254,9 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-    A["📥 Input<br/>PDF / URL / Text<br/>HWP / HWPX / Excel"]
-    B["🔬 Analysis<br/>핵심 정보 추출<br/>자격·서류·기준"]
-    C["❓ Questions<br/>부족 정보만<br/>사용자에게 질문"]
-    D["✏️ Draft<br/>섹션별 초안<br/>근거 기반 작성"]
-    E["👁️ Review<br/>인라인 편집<br/>AI 재작성·채점"]
-    F["💻 Local Export<br/>HWPX / Excel<br/>PDF / DOCX"]
-
-    A --> B --> C --> D --> E --> F
+    A["📥 Input"] --> B["🔬 Analysis"]
+    B --> C["❓ Questions"] --> D["✏️ Draft"]
+    D --> E["👁️ Review"] --> F["💻 Local Export"]
 
     style A fill:#dbeafe,stroke:#3b82f6,color:#000
     style B fill:#fef3c7,stroke:#f59e0b,color:#000
@@ -299,15 +283,9 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-    S1["🛡️ Agent MVP<br/>제품 guardrail"]
-    S2["✏️ Section Draft<br/>섹션 초안"]
-    S3["📥 HWPX Intake<br/>양식 분석"]
-    S4["🎨 Render Edit<br/>영역 편집"]
-    S5["📝 Content<br/>치환 JSON"]
-    S6["💻 Local Export<br/>Agent가 생성"]
-    S7["✅ Validate<br/>검증"]
-
-    S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7
+    S1["🛡️ MVP"] --> S2["✏️ Section Draft"] --> S3["📥 Intake"]
+    S3 --> S4["🎨 Render Edit"] --> S5["📝 Content JSON"]
+    S5 --> S6["💻 Local Export"] --> S7["✅ Validate"]
 
     style S1 fill:#fee2e2,stroke:#ef4444,color:#000
     style S6 fill:#d1fae5,stroke:#059669,color:#000
@@ -347,28 +325,21 @@ flowchart TB
 flowchart TB
     U["👤 User"] --> FE
 
-    subgraph LOCAL["💻 사용자 PC — 로컬 Agent"]
-        AGENT["🤖 MCP Agent Server<br/>localhost:8765"]
-        TOOLS["🔧 Agent Tools<br/>HWPX · Excel · PDF · 파일"]
-        AGENT --> TOOLS
+    subgraph LOCAL["💻 로컬 환경"]
+        AGENT["🤖 Agent Server"] --> TOOLS["🔧 Tools (HWPX/Excel)"]
     end
 
     subgraph CLOUD["☁️ InsForge Cloud"]
-        FE["🌐 Frontend<br/>Next.js 14"]
-        API["⚡ Backend API<br/>FastAPI"]
-        DB["🗄️ InsForge<br/>Auth · Postgres · Storage"]
-        FE --> API --> DB
+        FE["🌐 Frontend"] --> API["⚡ Backend"] --> DB["🗄️ DB/Storage"]
     end
 
-    FE <-->|"MCP Protocol"| AGENT
-    API --> AI["🧠 AI Provider<br/>OpenAI · Gemini"]
-    API --> ING["📥 Ingestion<br/>PDF · URL · Text<br/>HWP · Excel"]
-    API --> DISC["🔍 Discovery Hub<br/>IRIS · 기업마당<br/>K-Startup"]
-
+    FE <-->|"MCP 연동"| AGENT
+    API --> AI["🧠 AI Provider"]
+    API --> ING["📥 데이터 Ingestion"]
+    
     style LOCAL fill:#ecfdf5,stroke:#10b981,stroke-width:2px,color:#000
     style CLOUD fill:#eff6ff,stroke:#3b82f6,stroke-width:2px,color:#000
     style AGENT fill:#d1fae5,stroke:#059669,stroke-width:2px,color:#000
-    style AI fill:#fce7f3,stroke:#ec4899,stroke-width:2px,color:#000
 ```
 
 ### 런타임 책임 분리
