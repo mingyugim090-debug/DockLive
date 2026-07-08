@@ -107,6 +107,31 @@ def test_tools_are_openai_function_format(monkeypatch):
     assert all("parameters" in t["function"] for t in tools)
 
 
+def test_transient_api_errors_are_retried(monkeypatch):
+    class FakeRateLimit(Exception):
+        pass
+
+    class FlakyClient(FakeClient):
+        def __init__(self, responses):
+            super().__init__(responses)
+            self.failures_left = 2
+
+        def create(self, **kwargs):
+            if self.failures_left:
+                self.failures_left -= 1
+                raise FakeRateLimit("429")
+            return super().create(**kwargs)
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(loop, "_RETRYABLE_ERRORS", (FakeRateLimit,))
+    monkeypatch.setattr(loop.time, "sleep", lambda _s: None)
+    client = FlakyClient([_response("완료")])
+    monkeypatch.setattr(loop.openai, "OpenAI", lambda: client)
+    final = loop.run_agent("테스트", on_event=lambda _e: None)
+    assert final == "완료"
+    assert client.failures_left == 0
+
+
 def test_max_iterations_guard_stops_infinite_tool_use(monkeypatch):
     responses = [
         _response(None, [_tool_call(f"tc_{i}", "list_sheets", "{}")])

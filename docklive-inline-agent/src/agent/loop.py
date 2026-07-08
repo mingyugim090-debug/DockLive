@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from pathlib import Path
 from typing import Callable
 
@@ -14,6 +15,27 @@ from tools.schemas import OPENAI_TOOLS
 
 MODEL = os.environ.get("AGENT_MODEL", "gpt-4o")
 MAX_ITERATIONS = 25
+
+# 일시적 API 오류(레이트리밋/네트워크/서버)는 백오프 후 재시도한다.
+_RETRYABLE_ERRORS: tuple = (
+    openai.RateLimitError,
+    openai.APIConnectionError,
+    openai.APITimeoutError,
+    openai.InternalServerError,
+)
+_MAX_API_RETRIES = 5
+
+
+def _create_with_retry(client, **kwargs):
+    delay = 1.0
+    for attempt in range(_MAX_API_RETRIES):
+        try:
+            return client.chat.completions.create(**kwargs)
+        except _RETRYABLE_ERRORS:
+            if attempt == _MAX_API_RETRIES - 1:
+                raise
+            time.sleep(delay)
+            delay = min(delay * 2, 15.0)
 
 EventCallback = Callable[[dict], None]
 
@@ -62,7 +84,8 @@ def run_agent(user_request: str, context: str = "", on_event: EventCallback | No
     ]
 
     for iteration in range(MAX_ITERATIONS):
-        resp = client.chat.completions.create(
+        resp = _create_with_retry(
+            client,
             model=MODEL,
             messages=messages,
             tools=OPENAI_TOOLS,

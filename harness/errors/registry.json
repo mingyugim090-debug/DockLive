@@ -292,6 +292,25 @@
         "frontend\\app\\app\\new\\page.tsx"
       ],
       "resolved_at": "2026-07-08T06:01:58+00:00"
+    },
+    {
+      "id": "ERR-20260708073835-4392b3e5",
+      "fingerprint": "4392b3e53174d768221ce85a",
+      "symptom": "Tests  1 failed | 70 passed (71)",
+      "root_cause": "",
+      "fix_summary": "",
+      "guard_test": "",
+      "first_seen": "2026-07-08T07:38:35+00:00",
+      "last_seen": "2026-07-08T07:38:35+00:00",
+      "occurrences": 1,
+      "status": "active",
+      "last_command": "npm.cmd run test",
+      "last_exit_code": 1,
+      "last_error_line": "Tests  1 failed | 70 passed (71)",
+      "last_log_path": "harness\\runs\\20260708-163827-frontend\\01-frontend-tests.log",
+      "related_paths": [
+        "frontend/app/app/new/page.tsx"
+      ]
     }
   ]
 }

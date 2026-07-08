@@ -170,9 +170,30 @@ class TestOpenWorkbook:
         out = excel_tools.open_workbook("C:/없는파일.xlsx")
         assert out["ok"] is False and "파일이 없음" in out["error"]
 
-    def test_double_open_returns_error(self, opened, xlsx):
+    def test_reopen_same_path_reuses_session(self, opened, xlsx):
+        first_book = ExcelSession.get().book
         out = excel_tools.open_workbook(xlsx)
-        assert out["ok"] is False and "이미" in out["error"]
+        assert out["ok"] is True
+        assert "그대로 사용" in out["data"]["note"]
+        assert ExcelSession.get().book is first_book
+
+    def test_open_other_path_autocloses_saved_book(self, opened, tmp_path):
+        first_book = ExcelSession.get().book
+        other = tmp_path / "다른양식.xlsx"
+        other.write_bytes(b"PK-fake-2")
+        out = excel_tools.open_workbook(str(other))
+        assert out["ok"] is True
+        assert ExcelSession.get().book is not first_book
+        assert ExcelSession.get().original_path == str(other)
+
+    def test_open_other_path_with_unsaved_changes_errors(self, opened, tmp_path):
+        from types import SimpleNamespace
+
+        ExcelSession.get().book.api = SimpleNamespace(Saved=False)
+        other = tmp_path / "다른양식.xlsx"
+        other.write_bytes(b"PK-fake-2")
+        out = excel_tools.open_workbook(str(other))
+        assert out["ok"] is False and "저장하지 않은 변경" in out["error"]
 
     def test_without_xlwings_returns_error(self, monkeypatch, xlsx):
         monkeypatch.setattr(excel_tools, "xw", None)
@@ -236,6 +257,55 @@ class TestReadWrite:
         assert out["ok"] is True
         sheet = ExcelSession.get().book.sheets["견적서"]
         assert sheet.range("A1:B2").value == [[1, 2], [3, 4]]
+
+
+class TestOverviewAggregate:
+    def test_read_range_caps_huge_ranges(self, opened):
+        sheet = ExcelSession.get().book.sheets["견적서"]
+        sheet.range("A1:A1300").value = [[i] for i in range(1300)]
+        out = excel_tools.read_range("견적서", "A1:A1300")
+        assert out["ok"] is False
+        assert "sheet_overview" in out["error"] and "aggregate_column" in out["error"]
+
+    def test_sheet_overview_returns_dims_and_sample(self, opened):
+        from types import SimpleNamespace
+
+        sheet = ExcelSession.get().book.sheets["견적서"]
+        rows = [["순번", "지역", "면적"]] + [[i, "서울", 20 + i] for i in range(1, 100)]
+        sheet.used_range = SimpleNamespace(address="$A$1:$C$100", value=rows)
+        out = excel_tools.sheet_overview("견적서", sample_rows=3)
+        assert out["ok"] is True
+        assert out["data"]["rows"] == 100 and out["data"]["cols"] == 3
+        assert out["data"]["sample_rows"][0] == ["순번", "지역", "면적"]
+        assert len(out["data"]["sample_rows"]) == 3
+
+    def test_aggregate_column_counts_by_key(self, opened):
+        sheet = ExcelSession.get().book.sheets["견적서"]
+        sheet.range("C2:C7").value = [["강남구"], ["강동구"], ["강동구"], ["강동구"], ["강남구"], [None]]
+        out = excel_tools.aggregate_column("견적서", "C2:C7")
+        assert out["ok"] is True
+        assert out["data"]["groups"] == [["강동구", 3], ["강남구", 2]]
+        assert out["data"]["rows_skipped"] == 1
+
+    def test_aggregate_column_sums_numeric_strings(self, opened):
+        sheet = ExcelSession.get().book.sheets["견적서"]
+        sheet.range("C2:C5").value = [["서울"], ["서울"], ["부산"], ["부산"]]
+        sheet.range("L2:L5").value = [["1,000원"], [500], ["2,000"], ["숫자아님"]]
+        out = excel_tools.aggregate_column("견적서", "C2:C5", value_range="L2:L5", agg="sum")
+        assert out["ok"] is True
+        assert out["data"]["groups"] == [["부산", 2000.0], ["서울", 1500.0]]
+        assert out["data"]["rows_skipped"] == 1
+
+    def test_aggregate_sum_requires_value_range(self, opened):
+        out = excel_tools.aggregate_column("견적서", "C2:C5", agg="sum")
+        assert out["ok"] is False and "value_range" in out["error"]
+
+    def test_aggregate_rejects_length_mismatch(self, opened):
+        sheet = ExcelSession.get().book.sheets["견적서"]
+        sheet.range("C2:C5").value = [["서울"], ["서울"], ["부산"], ["부산"]]
+        sheet.range("L2:L3").value = [[1], [2]]
+        out = excel_tools.aggregate_column("견적서", "C2:C5", value_range="L2:L3", agg="sum")
+        assert out["ok"] is False and "길이가 다름" in out["error"]
 
 
 class TestFormulaRowsFormat:

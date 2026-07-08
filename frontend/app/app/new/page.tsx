@@ -189,10 +189,13 @@ function InlineAgentEntry() {
       wsRef.current = ws;
       let settled = false;
       let resultPath = '';
+      let lastFailure = '';
       const finish = () => {
         if (settled) return;
         settled = true;
-        resolve(resultPath);
+        // 저장 결과 없이 실패만 남기고 끝났다면 조용히 완료로 넘기지 않는다.
+        if (!resultPath && lastFailure) reject(new Error(lastFailure));
+        else resolve(resultPath);
       };
 
       ws.onopen = () => {
@@ -218,19 +221,23 @@ function InlineAgentEntry() {
         }
         const line = describeAgentEvent(event);
         setAgentLines((current) => [...current, line].slice(-8));
+        // 도구 실패(tool_result ok=false)는 치명적이지 않다 — Agent가 에러를 읽고
+        // 스스로 복구하므로(예: 이미 열린 파일 → close 후 재시도) 연결을 유지한다.
+        // 다만 저장 결과 없이 끝나면 마지막 실패를 에러로 보여준다 (finish 참조).
         const failure = failureMessageFromEvent(event);
-        if (failure) {
-          ws.close();
-          if (!settled) {
-            settled = true;
-            reject(new Error(failure));
-          }
-          return;
-        }
+        if (failure) lastFailure = failure;
         const path = savedPathFromEvent(event);
         if (path) {
           resultPath = path;
           setSavedPath(path);
+        }
+        if (event.type === 'error' || event.type === 'max_iterations') {
+          ws.close();
+          if (!settled) {
+            settled = true;
+            reject(new Error(event.message ?? event.text ?? '로컬 PC Agent 작업에 실패했습니다.'));
+          }
+          return;
         }
         if (TERMINAL_EVENTS.includes(event.type)) {
           ws.close();

@@ -26,7 +26,7 @@ from agent.loop import run_agent  # noqa: E402
 from tools.file_tools import read_document, relevant_excerpt  # noqa: E402
 
 HOST = "127.0.0.1"
-PORT = 8765
+PORT = int(os.environ.get("AGENT_PORT", "8765"))
 _TERMINAL_EVENTS = {"done", "max_iterations", "error"}
 _EXCEL_SUFFIXES = {".csv", ".tsv", ".xlsx", ".xls", ".xlsm"}
 _HWPX_SUFFIXES = {".hwp", ".hwpx"}
@@ -102,6 +102,23 @@ def _safe_upload_name(name: str, index: int) -> str:
     return cleaned or f"upload-{index}"
 
 
+def _normalize_output_dir(raw: str) -> str:
+    """저장 폴더 입력을 폴더 경로로 정규화한다.
+
+    사용자가 파일 경로(…\\양식.xlsx)를 붙여넣는 실수가 잦아, 파일을 가리키면 그 부모 폴더를 쓴다.
+    """
+    cleaned = str(raw or "").strip().strip('"').strip("'")
+    if not cleaned:
+        return ""
+    path = Path(cleaned).expanduser()
+    if path.suffix and (path.is_file() or not path.is_dir()):
+        # 확장자가 있는 경로는 파일로 간주 (존재하지 않아도 부모 폴더로)
+        parent = path.parent
+        if str(parent) not in ("", "."):
+            return str(parent)
+    return str(path)
+
+
 def _materialize_source_uploads(payload: dict, output_dir: str) -> list[str]:
     raw_uploads = payload.get("source_uploads")
     if raw_uploads is None:
@@ -110,7 +127,12 @@ def _materialize_source_uploads(payload: dict, output_dir: str) -> list[str]:
         raise ValueError("source_uploads must be a list of uploaded files")
 
     upload_dir = Path(output_dir).expanduser() / _UPLOAD_INPUT_DIR
-    upload_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        upload_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise ValueError(
+            f"저장 폴더를 만들 수 없습니다: {output_dir} — 폴더 경로가 맞는지 확인해 주세요. ({exc})"
+        ) from exc
     saved_paths: list[str] = []
     used_names: set[str] = set()
     for index, upload in enumerate(raw_uploads, start=1):
@@ -137,7 +159,19 @@ def _materialize_source_uploads(payload: dict, output_dir: str) -> list[str]:
             raise ValueError(f"source_uploads[{index}] content_base64 is invalid") from exc
 
         target = upload_dir / unique_name
-        target.write_bytes(content)
+        try:
+            target.write_bytes(content)
+        except OSError:
+            # 같은 이름의 파일이 Excel 등에서 열려 잠겨 있으면 다른 이름으로 저장
+            fallback = upload_dir / f"{Path(unique_name).stem}-{index}{Path(unique_name).suffix}"
+            try:
+                fallback.write_bytes(content)
+                target = fallback
+            except OSError as exc:
+                raise ValueError(
+                    f"업로드 파일을 저장할 수 없습니다: {unique_name} — "
+                    f"같은 파일이 열려 있으면 닫고 다시 시도해 주세요. ({exc})"
+                ) from exc
         saved_paths.append(str(target))
     return saved_paths
 
@@ -228,7 +262,7 @@ def _build_request(payload: dict) -> BuiltAgentRequest:
     if not request:
         raise ValueError("request field is required")
 
-    output_dir = str(payload.get("output_dir") or "").strip()
+    output_dir = _normalize_output_dir(str(payload.get("output_dir") or ""))
     if not output_dir:
         raise ValueError("output_dir is required")
 
@@ -362,8 +396,8 @@ async def agent_ws(websocket: WebSocket) -> None:
 
     try:
         built = _build_request(payload)
-    except ValueError as exc:
-        await websocket.send_json({"type": "error", "message": str(exc)})
+    except Exception as exc:  # 요청 구성 실패는 traceback 대신 error 이벤트로 전달
+        await websocket.send_json({"type": "error", "message": _error_message(exc)})
         await websocket.close()
         return
 

@@ -62,6 +62,40 @@ TOOLS: list[dict] = [
         },
     },
     {
+        "name": "sheet_overview",
+        "description": (
+            "시트의 크기(행·열)와 상단 샘플 행을 반환한다. 데이터가 많은 시트는 read_range로 "
+            "통째로 읽지 말고 반드시 이 도구로 먼저 구조를 파악한다."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sheet": {"type": "string"},
+                "sample_rows": {"type": "integer", "description": "미리 볼 상단 행 수 (기본 5, 최대 10)"},
+            },
+            "required": ["sheet"],
+        },
+    },
+    {
+        "name": "aggregate_column",
+        "description": (
+            "key_range의 값별 개수(count) 또는 value_range 합계(sum)를 집계해 [라벨, 값] 목록을 반환한다. "
+            "지역별/유형별 현황처럼 큰 표를 요약해 차트 데이터를 만들 때 사용한다. "
+            "값은 전부 원본 셀에서만 계산된다."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sheet": {"type": "string"},
+                "key_range": {"type": "string", "description": "그룹 기준 열 범위. 예: 'C9:C500' (헤더 제외)"},
+                "value_range": {"type": "string", "description": "agg=sum일 때 합할 숫자 열 범위. 예: 'L9:L500'"},
+                "agg": {"type": "string", "enum": ["count", "sum"], "default": "count"},
+                "top": {"type": "integer", "description": "상위 몇 개 그룹까지 반환 (기본 30)"},
+            },
+            "required": ["sheet", "key_range"],
+        },
+    },
+    {
         "name": "write_range",
         "description": (
             "지정 범위에 값을 쓴다. values는 반드시 2차원 배열이며 range 크기와 정확히 일치해야 한다. "

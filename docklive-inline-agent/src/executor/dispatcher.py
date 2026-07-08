@@ -19,6 +19,8 @@ TOOL_REGISTRY = {
     "list_sheets": excel_tools.list_sheets,
     "add_sheet": excel_tools.add_sheet,
     "read_range": excel_tools.read_range,
+    "sheet_overview": excel_tools.sheet_overview,
+    "aggregate_column": excel_tools.aggregate_column,
     "write_range": excel_tools.write_range,
     "apply_formula": excel_tools.apply_formula,
     "insert_rows": excel_tools.insert_rows,

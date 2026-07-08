@@ -117,13 +117,60 @@ def _resolve_save_path(path: str | None, output_dir: str, filename: str, default
     return str(output / safe_name)
 
 
+def _book_is_alive(s: ExcelSession) -> bool:
+    """사용자가 Excel을 직접 닫는 등으로 핸들이 죽었으면 False."""
+    if s.book is None:
+        return False
+    try:
+        _ = s.book.sheets  # COM 핸들 생존 확인
+        return True
+    except Exception:
+        return False
+
+
+def _book_is_saved(s: ExcelSession) -> bool:
+    try:
+        return bool(s.book.api.Saved)
+    except Exception:
+        return True  # 확인 불가 시 저장된 것으로 간주 (fake/테스트 포함)
+
+
+def _release_current_book() -> dict | None:
+    """새 워크북을 열기 전 기존 세션 정리. 놓아줄 수 없으면 에러 dict 반환.
+
+    - 죽은 핸들(사용자가 Excel을 직접 닫음) → 조용히 정리
+    - 저장된 워크북 → 자동으로 닫고 진행 (자가 회복)
+    - 저장 안 된 변경이 있는 워크북 → 에러 (모델이 close_workbook(save=...)로 결정)
+    """
+    s = ExcelSession.get()
+    if s.book is None:
+        return None
+    if not _book_is_alive(s):
+        s.book = None
+        s.app = None
+        return None
+    if not _book_is_saved(s):
+        return _err(
+            f"'{s.original_path}' 에 저장하지 않은 변경이 있음. "
+            "close_workbook(save=true) 또는 close_workbook(save=false)로 먼저 정리할 것."
+        )
+    s.quit()
+    return None
+
+
 def open_workbook(path: str, visible: bool = True) -> dict:
     if xw is None:
         return _err("xlwings 미설치 또는 비Windows 환경. 이 도구는 Windows + Excel 필요.")
     s = ExcelSession.get()
-    if s.book is not None:
-        return _err(f"이미 '{s.original_path}' 가 열려 있음. 먼저 close_workbook 할 것.")
     p = Path(path)
+    if s.book is not None and _book_is_alive(s):
+        # 같은 파일이면 다시 열 필요 없음 — 그대로 사용
+        if s.original_path and Path(s.original_path).resolve() == p.resolve():
+            return _ok({"opened": p.name, "backup": s.backup_path, "note": "이미 열려 있어 그대로 사용",
+                        "sheets": [sh.name for sh in s.book.sheets]})
+    release_error = _release_current_book()
+    if release_error:
+        return release_error
     if not p.exists():
         return _err(f"파일이 없음: {path}")
     try:
@@ -141,9 +188,10 @@ def open_workbook(path: str, visible: bool = True) -> dict:
 def create_workbook(path: str = "", visible: bool = True) -> dict:
     if xw is None:
         return _err("xlwings 미설치 또는 비Windows 환경. 이 도구는 Windows + Excel 필요.")
+    release_error = _release_current_book()
+    if release_error:
+        return release_error
     s = ExcelSession.get()
-    if s.book is not None:
-        return _err(f"이미 '{s.original_path}' 가 열려 있음. 먼저 close_workbook 할 것.")
     try:
         s.app = xw.App(visible=visible, add_book=False)
         s.book = s.app.books.add()
@@ -189,6 +237,9 @@ def add_sheet(name: str) -> dict:
         return _err(f"시트 추가 실패: {ex}")
 
 
+_MAX_READ_CELLS = 1200
+
+
 def read_range(sheet: str, range: str) -> dict:  # noqa: A002 (스키마 name과 일치 우선)
     s, e = _require_book()
     if e:
@@ -197,9 +248,134 @@ def read_range(sheet: str, range: str) -> dict:  # noqa: A002 (스키마 name과
     if e:
         return e
     try:
-        return _ok(_normalize_2d(sh.range(range).value))
+        values = _read_range_2d(sh.range(range))
+        cells = len(values) * (len(values[0]) if values else 0)
+        if cells > _MAX_READ_CELLS:
+            return _err(
+                f"범위가 너무 큼 ({len(values)}행 x {len(values[0])}열 = {cells}셀 > {_MAX_READ_CELLS}). "
+                "sheet_overview로 구조를 파악하고, 집계가 목적이면 aggregate_column을 사용할 것. "
+                "원본 확인이 필요하면 더 좁은 범위로 나눠 읽을 것."
+            )
+        return _ok(values)
     except Exception as ex:
         return _err(f"범위 '{range}' 읽기 실패: {ex}")
+
+
+def sheet_overview(sheet: str, sample_rows: int = 5) -> dict:
+    """대용량 시트를 통째로 읽지 않고 구조(크기·헤더 후보·샘플)를 파악한다."""
+    s, e = _require_book()
+    if e:
+        return e
+    sh, e = _get_sheet(s, sheet)
+    if e:
+        return e
+    try:
+        used = sh.used_range
+        values = _normalize_2d(used.value)
+        rows = len(values)
+        cols = len(values[0]) if values else 0
+        max_cols = 30
+        sample = [row[:max_cols] for row in values[: max(1, min(sample_rows, 10))]]
+        return _ok({
+            "address": getattr(used, "address", ""),
+            "rows": rows,
+            "cols": cols,
+            "sample_rows": sample,
+            "note": "sample_rows는 상단 일부다. 집계는 aggregate_column, 좁은 확인은 read_range 사용.",
+        })
+    except Exception as ex:
+        return _err(f"시트 개요 파악 실패: {ex}")
+
+
+_MAX_AGG_ROWS = 50000
+
+
+def _read_range_2d(rng) -> list[list]:
+    """세로 한 열도 행 단위 2차원으로 읽는다 (xlwings는 기본이 flat list)."""
+    try:
+        return _normalize_2d(rng.options(ndim=2).value)
+    except Exception:
+        return _normalize_2d(rng.value)
+
+
+def _parse_number(value) -> float | None:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if value is None:
+        return None
+    text = str(value).strip().replace(",", "").replace("원", "").replace("%", "")
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def aggregate_column(
+    sheet: str,
+    key_range: str,
+    value_range: str = "",
+    agg: str = "count",
+    top: int = 30,
+) -> dict:
+    """key_range의 값별로 count 또는 value_range 합계를 집계한다 (차트 데이터 산출용).
+
+    반환 값은 전부 원본 셀에서만 나온다 — 지어내는 값 없음.
+    """
+    s, e = _require_book()
+    if e:
+        return e
+    sh, e = _get_sheet(s, sheet)
+    if e:
+        return e
+    if agg not in {"count", "sum"}:
+        return _err("agg는 count 또는 sum 이어야 함.")
+    try:
+        keys_2d = _read_range_2d(sh.range(key_range))
+        keys = [row[0] for row in keys_2d]
+        if len(keys) > _MAX_AGG_ROWS:
+            return _err(f"집계 범위가 너무 큼 ({len(keys)}행 > {_MAX_AGG_ROWS}).")
+        numbers: list[float | None] = []
+        if agg == "sum":
+            if not value_range:
+                return _err("agg=sum 이면 value_range가 필요함.")
+            values_2d = _read_range_2d(sh.range(value_range))
+            numbers = [_parse_number(row[0]) for row in values_2d]
+            if len(numbers) != len(keys):
+                return _err(f"key_range({len(keys)}행)와 value_range({len(numbers)}행) 길이가 다름.")
+
+        totals: dict[str, float] = {}
+        skipped = 0
+        for index, key in enumerate(keys):
+            label = str(key).strip() if key is not None else ""
+            if not label:
+                skipped += 1
+                continue
+            if agg == "count":
+                totals[label] = totals.get(label, 0) + 1
+            else:
+                number = numbers[index]
+                if number is None:
+                    skipped += 1
+                    continue
+                totals[label] = totals.get(label, 0.0) + number
+
+        ranked = sorted(totals.items(), key=lambda item: item[1], reverse=True)
+        top = max(1, min(int(top), 100))
+        result = {
+            "agg": agg,
+            "groups": [[label, value] for label, value in ranked[:top]],
+            "total_groups": len(ranked),
+            "rows_scanned": len(keys),
+            "rows_skipped": skipped,
+        }
+        if len(ranked) <= 1 and len(keys) > 1:
+            result["note"] = (
+                "그룹이 1개뿐이라 구분 기준으로 부적절할 수 있음. "
+                "다른 열(예: 구/동/유형이 담긴 열)로 다시 집계해 의미 있는 구분을 찾을 것."
+            )
+        return _ok(result)
+    except Exception as ex:
+        return _err(f"집계 실패: {ex}")
 
 
 def write_range(sheet: str, range: str, values: list[list]) -> dict:  # noqa: A002
@@ -334,8 +510,21 @@ def save_workbook(path: str | None = None, output_dir: str = "", filename: str =
                 return _err("새 워크북은 output_dir 또는 path를 지정해야 저장할 수 있음.")
         else:
             path = _resolve_save_path(path, "", filename, _default_save_name(s.original_path))
-        s.book.save(path)
-        return _ok({"saved": path, "saved_path": path})
+        last_error: Exception | None = None
+        target = Path(path)
+        for attempt in range(3):
+            candidate = target if attempt == 0 else target.with_name(f"{target.stem}_{attempt + 1}{target.suffix}")
+            try:
+                s.book.save(str(candidate))
+                result = {"saved": str(candidate), "saved_path": str(candidate)}
+                if attempt:
+                    result["note"] = f"'{target.name}'이 잠겨 있어 '{candidate.name}'으로 저장함."
+                return _ok(result)
+            except Exception as ex:  # 대상 파일이 다른 Excel에서 열려 잠긴 경우 등
+                last_error = ex
+        return _err(
+            f"저장 실패: {last_error} — 같은 이름의 파일이 다른 창에서 열려 있으면 닫고 재시도할 것."
+        )
     except Exception as ex:
         return _err(f"저장 실패: {ex}")
 
