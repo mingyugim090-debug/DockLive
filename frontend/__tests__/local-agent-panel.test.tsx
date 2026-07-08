@@ -78,6 +78,7 @@ describe('LocalAgentPanel', () => {
       file: 'C:\\work\\sales.csv',
       source_files: ['C:\\work\\sales.csv'],
       output_dir: 'C:\\work\\done',
+      api_url: 'http://localhost:8000',
       open_result: true,
     });
   });

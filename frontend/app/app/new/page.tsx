@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useRef, useState, type FormEvent } from 'react';
-import { createWorkspace, uploadWorkspaceFile } from '@/lib/api';
+import { createWorkspace, getApiUrl, uploadWorkspaceFile } from '@/lib/api';
 import type { LocalAgentRunEvent } from '@/lib/types';
 
 const ACCEPTED_FILES = [
@@ -127,6 +127,17 @@ function savedPathFromEvent(event: LocalAgentRunEvent): string {
   }
 }
 
+function failureMessageFromEvent(event: LocalAgentRunEvent): string {
+  if (event.type === 'tool_result' && event.ok === false) {
+    const toolName = event.name ?? event.tool ?? 'Agent tool';
+    return event.output ? `${toolName}: ${event.output}` : `${toolName} failed`;
+  }
+  if (event.type === 'error') {
+    return event.message ?? event.text ?? '로컬 PC Agent 작업에 실패했습니다.';
+  }
+  return '';
+}
+
 function describeAgentEvent(event: LocalAgentRunEvent): string {
   if (event.type === 'run_started') return 'Agent 준비 중';
   if (event.type === 'mode_selected') return event.mode === 'hwpx' ? 'HWPX 문서 작성 중' : 'Excel 문서 작성 중';
@@ -134,6 +145,8 @@ function describeAgentEvent(event: LocalAgentRunEvent): string {
   if (event.type === 'tool_result') {
     const savedPath = savedPathFromEvent(event);
     if (savedPath) return `완성본 저장됨: ${savedPath}`;
+    const failure = failureMessageFromEvent(event);
+    if (failure) return `확인 필요: ${failure}`;
     return `${event.name ?? event.tool ?? '도구'} 완료`;
   }
   if (event.type === 'done') return event.text ? `완료: ${event.text}` : '작업 완료';
@@ -191,6 +204,7 @@ function InlineAgentEntry() {
             source_files: localPaths,
             source_uploads: sourceUploads,
             output_dir: outputDir.trim(),
+            api_url: getApiUrl(),
             open_result: true,
           }),
         );
@@ -204,6 +218,15 @@ function InlineAgentEntry() {
         }
         const line = describeAgentEvent(event);
         setAgentLines((current) => [...current, line].slice(-8));
+        const failure = failureMessageFromEvent(event);
+        if (failure) {
+          ws.close();
+          if (!settled) {
+            settled = true;
+            reject(new Error(failure));
+          }
+          return;
+        }
         const path = savedPathFromEvent(event);
         if (path) {
           resultPath = path;

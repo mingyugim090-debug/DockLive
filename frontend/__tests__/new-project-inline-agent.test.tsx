@@ -16,6 +16,7 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('@/lib/api', () => ({
   createWorkspace: apiMocks.createWorkspace,
+  getApiUrl: () => 'https://docklive.onrender.com',
   uploadWorkspaceFile: apiMocks.uploadWorkspaceFile,
 }));
 
@@ -168,6 +169,7 @@ describe('NewProjectPage inline agent entry', () => {
       source_files: ['C:\\work\\form.hwpx'],
       source_uploads: [],
       output_dir: 'C:\\done',
+      api_url: 'https://docklive.onrender.com',
       open_result: true,
     });
 
@@ -214,6 +216,7 @@ describe('NewProjectPage inline agent entry', () => {
       file: '',
       source_files: [],
       output_dir: 'C:\\done',
+      api_url: 'https://docklive.onrender.com',
       open_result: true,
     });
     expect(payload.source_uploads).toEqual([
@@ -235,5 +238,40 @@ describe('NewProjectPage inline agent entry', () => {
     ws.emit({ type: 'done' });
 
     await waitFor(() => expect(screen.getByText('C:\\done\\estimate_completed.xlsx')).toBeInTheDocument());
+  });
+
+  it('surfaces local agent tool failures instead of completing silently', async () => {
+    render(<NewProjectPage />);
+
+    fireEvent.change(screen.getByTestId('inline-agent-output-dir'), {
+      target: { value: 'C:\\done' },
+    });
+    fireEvent.change(screen.getByTestId('inline-agent-file-input'), {
+      target: {
+        files: [file('application.hwp', 'application/x-hwp')],
+      },
+    });
+    fireEvent.change(screen.getByTestId('inline-agent-request'), {
+      target: { value: 'HWP 양식을 연구실 지원서로 채워줘.' },
+    });
+    fireEvent.click(screen.getByTestId('inline-agent-send'));
+
+    await waitFor(() => expect(FakeWebSocket.instances[0]).toBeDefined());
+    const ws = FakeWebSocket.instances[0];
+    ws.onopen?.();
+
+    ws.emit({ type: 'run_started' });
+    ws.emit({ type: 'mode_selected', mode: 'hwpx' });
+    ws.emit({
+      type: 'tool_result',
+      name: 'create_hwpx_session',
+      ok: false,
+      output: 'HWPX API 연결 실패: [Errno 10061] connection refused',
+    });
+    ws.emit({ type: 'done', text: 'HWPX API 연결 실패' });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('inline-agent-error')).toHaveTextContent('HWPX API 연결 실패');
+    });
   });
 });

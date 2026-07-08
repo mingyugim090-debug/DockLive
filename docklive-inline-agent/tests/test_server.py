@@ -1,5 +1,7 @@
 """로컬 서버 WebSocket 스트리밍 테스트 (Phase 5) — 에이전트는 가짜로 대체."""
 import base64
+import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -64,6 +66,46 @@ def test_build_request_auto_routes_hwpx_from_target_extension():
     assert "Use create_hwpx_session" in built.request
     assert "Use draft_hwpx_session" in built.request
     assert "Use export_hwpx_session" in built.request
+
+
+def test_build_request_carries_api_url_for_hwpx_tools():
+    built = server._build_request(
+        {
+            "mode": "auto",
+            "request": "Fill the uploaded HWP form",
+            "file": r"C:\work\application.hwp",
+            "output_dir": r"C:\work\done",
+            "api_url": "https://docklive.onrender.com",
+        }
+    )
+
+    assert built.mode == "hwpx"
+    assert built.api_url == "https://docklive.onrender.com"
+    assert "https://docklive.onrender.com" in built.request
+
+
+def test_stream_agent_events_sets_livedock_api_url_for_hwpx_tools(monkeypatch):
+    observed = {}
+
+    def callback_agent(user_request, context="", on_event=None):
+        observed["api_url"] = os.environ.get("LIVEDOCK_API_URL")
+        on_event({"type": "done", "text": "ok", "iterations": 1})
+        return "ok"
+
+    async def collect_events():
+        events = []
+        async for event in server._stream_agent_events("request", "context", "https://docklive.onrender.com"):
+            events.append(event)
+        return events
+
+    monkeypatch.delenv("LIVEDOCK_API_URL", raising=False)
+    monkeypatch.setattr(server, "run_agent", callback_agent)
+
+    events = asyncio.run(collect_events())
+
+    assert observed["api_url"] == "https://docklive.onrender.com"
+    assert os.environ.get("LIVEDOCK_API_URL") is None
+    assert events == [{"type": "done", "text": "ok", "iterations": 1}]
 
 
 def test_build_request_prefers_target_file_for_auto_route():

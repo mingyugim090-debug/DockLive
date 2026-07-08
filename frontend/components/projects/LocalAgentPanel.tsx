@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { getApiUrl } from '@/lib/api';
 import type { LocalAgentMode, LocalAgentRunEvent } from '@/lib/types';
 
 const AGENT_HTTP = 'http://127.0.0.1:8765';
@@ -137,6 +138,7 @@ export function LocalAgentPanel({ sourceFiles = [], defaultTargetFile = '' }: Lo
           file: targetFile.trim(),
           source_files: sourcePaths,
           output_dir: outputDir.trim(),
+          api_url: getApiUrl(),
           open_result: true,
         }),
       );

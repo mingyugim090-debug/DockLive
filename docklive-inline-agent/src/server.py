@@ -11,6 +11,7 @@ import asyncio
 import base64
 import binascii
 import inspect
+import os
 import re
 import sys
 from dataclasses import dataclass, field
@@ -53,6 +54,7 @@ class BuiltAgentRequest:
     context: str
     output_dir: str
     target_file: str
+    api_url: str = ""
     source_files: list[str] = field(default_factory=list)
     open_result: bool = True
 
@@ -156,6 +158,30 @@ def _coerce_open_result(value: object) -> bool:
     return str(value).strip().lower() not in {"0", "false", "no", "off"}
 
 
+def _clean_api_url(value: object) -> str:
+    return str(value or "").strip().rstrip("/")
+
+
+_ENV_MISSING = object()
+
+
+def _set_run_api_url(api_url: str):
+    if not api_url:
+        return _ENV_MISSING
+    previous = os.environ.get("LIVEDOCK_API_URL")
+    os.environ["LIVEDOCK_API_URL"] = api_url
+    return previous
+
+
+def _restore_run_api_url(previous) -> None:
+    if previous is _ENV_MISSING:
+        return
+    if previous is None:
+        os.environ.pop("LIVEDOCK_API_URL", None)
+    else:
+        os.environ["LIVEDOCK_API_URL"] = previous
+
+
 def _error_message(exc: Exception) -> str:
     if isinstance(exc, ValueError):
         return str(exc)
@@ -213,6 +239,7 @@ def _build_request(payload: dict) -> BuiltAgentRequest:
     if not target_file:
         target_file = _default_target_file(mode, source_files)
     open_result = _coerce_open_result(payload.get("open_result", True))
+    api_url = _clean_api_url(payload.get("api_url"))
 
     context = _build_context(
         request=request,
@@ -245,6 +272,7 @@ def _build_request(payload: dict) -> BuiltAgentRequest:
         mode_lines = [
             "",
             "HWPX tool plan:",
+            f"- HWPX API URL: {api_url or '(use local agent environment default)'}",
             "- Use create_hwpx_session through DockLive backend HWPX compose/session APIs.",
             "- Use draft_hwpx_session for grounded section and field drafting.",
             "- Use export_hwpx_session to write the validated completed HWPX under the output folder.",
@@ -257,6 +285,7 @@ def _build_request(payload: dict) -> BuiltAgentRequest:
         context=context,
         output_dir=output_dir,
         target_file=target_file,
+        api_url=api_url,
         source_files=source_files,
         open_result=open_result,
     )
@@ -298,24 +327,28 @@ async def _stream_callback_agent(user_request: str, context: str):
             pass
 
 
-async def _stream_agent_events(user_request: str, context: str):
-    signature = inspect.signature(run_agent)
-    is_callback_runner = (
-        "on_event" in signature.parameters
-        and not inspect.isasyncgenfunction(run_agent)
-        and not inspect.iscoroutinefunction(run_agent)
-    )
-    if is_callback_runner:
-        async for event in _stream_callback_agent(user_request, context):
-            yield event
-        return
+async def _stream_agent_events(user_request: str, context: str, api_url: str = ""):
+    previous_api_url = _set_run_api_url(api_url)
+    try:
+        signature = inspect.signature(run_agent)
+        is_callback_runner = (
+            "on_event" in signature.parameters
+            and not inspect.isasyncgenfunction(run_agent)
+            and not inspect.iscoroutinefunction(run_agent)
+        )
+        if is_callback_runner:
+            async for event in _stream_callback_agent(user_request, context):
+                yield event
+            return
 
-    result = run_agent(user_request, context)
-    if inspect.isawaitable(result):
-        result = await result
-    if hasattr(result, "__aiter__"):
-        async for event in result:
-            yield event
+        result = run_agent(user_request, context)
+        if inspect.isawaitable(result):
+            result = await result
+        if hasattr(result, "__aiter__"):
+            async for event in result:
+                yield event
+    finally:
+        _restore_run_api_url(previous_api_url)
 
 
 @app.websocket("/ws")
@@ -340,7 +373,7 @@ async def agent_ws(websocket: WebSocket) -> None:
     disconnected = False
     terminal_forwarded = False
     try:
-        async for event in _stream_agent_events(built.request, built.context):
+        async for event in _stream_agent_events(built.request, built.context, built.api_url):
             await websocket.send_json(event)
             if event.get("type") in _TERMINAL_EVENTS:
                 terminal_forwarded = True
