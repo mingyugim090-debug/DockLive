@@ -52,6 +52,7 @@ Thumbs.db
 # Tests / coverage
 # ==========================
 .pytest_cache/
+.tmp/
 htmlcov/
 .coverage
 coverage/

@@ -1,4 +1,5 @@
 backend/.tmp/
+.tmp/
 backend/.livedock_storage/
 backend/hwpx_toolchain/.hwp2hwpx-repo/
 backend/venv/

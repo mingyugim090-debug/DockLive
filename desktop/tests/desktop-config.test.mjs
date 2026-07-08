@@ -18,12 +18,12 @@ test("desktop package exposes an Electron entrypoint and local scripts", async (
   assert.match(packageJson.devDependencies.electron, /^\^/);
 });
 
-test("main process starts managed frontend/backend runtime for /app/projects", async () => {
+test("main process starts managed frontend/backend runtime for /app/new", async () => {
   const main = await readFile(path.join(desktopRoot, "src", "main.cjs"), "utf8");
 
   assert.match(main, /findFreePort/);
   assert.match(main, /spawnManagedProcess/);
-  assert.match(main, /\/app\/projects/);
+  assert.match(main, /\/app\/new/);
   assert.match(main, /LIVEDOCK_WORKSPACE_DIR/);
   assert.match(main, /frontend/);
   assert.match(main, /backend/);

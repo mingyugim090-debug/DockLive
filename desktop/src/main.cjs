@@ -97,7 +97,7 @@ async function startLocalRuntime() {
     Number.parseInt(process.env.LIVEDOCK_FRONTEND_PORT || "3111", 10),
   );
   const backendUrl = `http://127.0.0.1:${backendPort}`;
-  const frontendUrl = `http://127.0.0.1:${frontendPort}/app/projects`;
+  const frontendUrl = `http://127.0.0.1:${frontendPort}/app/new`;
   const pythonCommand = process.env.LIVEDOCK_PYTHON || "python";
   const runtimeEnv = {
     LIVEDOCK_DESKTOP: "1",
