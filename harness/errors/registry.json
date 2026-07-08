@@ -271,6 +271,27 @@
         "frontend\\\\.next\\\\server\\\\app\\\\app\\\\new.rsc"
       ],
       "resolved_at": "2026-07-08T04:45:19+00:00"
+    },
+    {
+      "id": "ERR-20260708060058-5936d457",
+      "fingerprint": "5936d45762aa8ec49014b803",
+      "symptom": "Type error: Type 'Uint8Array<ArrayBuffer>' can only be iterated through when using the '--downlevelIteration' flag or with a '--target' of 'es2015' or higher.",
+      "root_cause": "The new browser-upload base64 helper used spread syntax on a Uint8Array chunk, but the frontend TypeScript target does not allow Uint8Array iteration without downlevelIteration or an ES2015+ target.",
+      "fix_summary": "Replaced the Uint8Array spread with an index-based chunk loop before calling String.fromCharCode.",
+      "guard_test": "powershell -ExecutionPolicy Bypass -File .\\scripts\\harness.ps1 -Profile frontend -PythonPath C:\\Users\\alseh\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+      "first_seen": "2026-07-08T06:00:58+00:00",
+      "last_seen": "2026-07-08T06:00:58+00:00",
+      "occurrences": 1,
+      "status": "resolved",
+      "last_command": "npm.cmd run build",
+      "last_exit_code": 1,
+      "last_error_line": "Type error: Type 'Uint8Array<ArrayBuffer>' can only be iterated through when using the '--downlevelIteration' flag or with a '--target' of 'es2015' or higher.",
+      "last_log_path": "harness\\runs\\20260708-150032-frontend\\02-frontend-build.log",
+      "related_paths": [
+        "scripts/clean-next.mjs",
+        "frontend\\app\\app\\new\\page.tsx"
+      ],
+      "resolved_at": "2026-07-08T06:01:58+00:00"
     }
   ]
 }

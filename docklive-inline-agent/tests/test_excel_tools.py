@@ -183,6 +183,7 @@ class TestOpenWorkbook:
 class TestCreateWorkbook:
     def test_create_workbook_opens_visible_blank_book(self, monkeypatch):
         fake_app = FakeApp()
+        monkeypatch.setattr(excel_tools, "xw", FakeXw)
         monkeypatch.setattr(excel_tools.xw, "App", lambda visible=True, add_book=False: fake_app)
 
         out = excel_tools.create_workbook(visible=True)

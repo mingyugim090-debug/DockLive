@@ -156,8 +156,8 @@ describe('NewProjectPage inline agent entry', () => {
     });
     fireEvent.click(screen.getByTestId('inline-agent-send'));
 
+    await waitFor(() => expect(FakeWebSocket.instances[0]).toBeDefined());
     const ws = FakeWebSocket.instances[0];
-    expect(ws).toBeDefined();
     expect(ws.url).toBe('ws://127.0.0.1:8765/ws');
     ws.onopen?.();
 
@@ -166,6 +166,7 @@ describe('NewProjectPage inline agent entry', () => {
       request: 'HWPX 지원서 양식을 열어서 CVR 연구실 지원서로 채워줘.',
       file: 'C:\\work\\form.hwpx',
       source_files: ['C:\\work\\form.hwpx'],
+      source_uploads: [],
       output_dir: 'C:\\done',
       open_result: true,
     });
@@ -180,5 +181,59 @@ describe('NewProjectPage inline agent entry', () => {
       expect(screen.getByText('C:\\done\\form_completed.hwpx')).toBeInTheDocument();
     });
     expect(ws.closed).toBe(true);
+  });
+
+  it('sends browser-only uploads to the local agent when file paths are hidden', async () => {
+    render(<NewProjectPage />);
+
+    fireEvent.change(screen.getByTestId('inline-agent-output-dir'), {
+      target: { value: 'C:\\done' },
+    });
+    fireEvent.change(screen.getByTestId('inline-agent-file-input'), {
+      target: {
+        files: [
+          file('estimate.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
+          file('notice.pdf', 'application/pdf'),
+        ],
+      },
+    });
+    fireEvent.change(screen.getByTestId('inline-agent-request'), {
+      target: { value: '견적서 양식의 3개 품목을 채워줘.' },
+    });
+    fireEvent.click(screen.getByTestId('inline-agent-send'));
+
+    await waitFor(() => expect(FakeWebSocket.instances[0]).toBeDefined());
+    const ws = FakeWebSocket.instances[0];
+    ws.onopen?.();
+
+    await waitFor(() => expect(ws.sent[0]).toBeDefined());
+    const payload = JSON.parse(ws.sent[0]);
+    expect(payload).toMatchObject({
+      mode: 'auto',
+      request: '견적서 양식의 3개 품목을 채워줘.',
+      file: '',
+      source_files: [],
+      output_dir: 'C:\\done',
+      open_result: true,
+    });
+    expect(payload.source_uploads).toEqual([
+      {
+        name: 'estimate.xlsx',
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        content_base64: 'Y29udGVudA==',
+      },
+      {
+        name: 'notice.pdf',
+        type: 'application/pdf',
+        content_base64: 'Y29udGVudA==',
+      },
+    ]);
+    expect(apiMocks.createWorkspace).not.toHaveBeenCalled();
+
+    ws.emit({ type: 'mode_selected', mode: 'excel' });
+    ws.emit({ type: 'tool_result', tool: 'save_workbook', result: { saved_path: 'C:\\done\\estimate_completed.xlsx' } });
+    ws.emit({ type: 'done' });
+
+    await waitFor(() => expect(screen.getByText('C:\\done\\estimate_completed.xlsx')).toBeInTheDocument());
   });
 });

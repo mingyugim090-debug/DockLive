@@ -1,4 +1,5 @@
 """로컬 서버 WebSocket 스트리밍 테스트 (Phase 5) — 에이전트는 가짜로 대체."""
+import base64
 import sys
 from pathlib import Path
 
@@ -79,6 +80,34 @@ def test_build_request_prefers_target_file_for_auto_route():
 
     assert built.mode == "hwpx"
     assert built.target_file == r"C:\work\form.hwpx"
+
+
+def test_build_request_materializes_browser_uploads_and_targets_first_excel(tmp_path):
+    encoded = base64.b64encode(b"PK-fake-xlsx").decode("ascii")
+
+    built = server._build_request(
+        {
+            "mode": "auto",
+            "request": "Fill the estimate workbook",
+            "source_uploads": [
+                {
+                    "name": "estimate.xlsx",
+                    "type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "content_base64": encoded,
+                }
+            ],
+            "output_dir": str(tmp_path),
+        }
+    )
+
+    saved_source = Path(built.source_files[0])
+    assert built.mode == "excel"
+    assert saved_source.exists()
+    assert saved_source.read_bytes() == b"PK-fake-xlsx"
+    assert saved_source.name == "estimate.xlsx"
+    assert saved_source.parent == tmp_path / ".docklive-agent-inputs"
+    assert built.target_file == str(saved_source)
+    assert str(saved_source) in built.context
 
 
 def test_build_request_auto_routes_hwpx_from_source_files():

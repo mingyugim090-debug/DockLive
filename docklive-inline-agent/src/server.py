@@ -8,7 +8,10 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import inspect
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -26,6 +29,7 @@ PORT = 8765
 _TERMINAL_EVENTS = {"done", "max_iterations", "error"}
 _EXCEL_SUFFIXES = {".csv", ".tsv", ".xlsx", ".xls", ".xlsm"}
 _HWPX_SUFFIXES = {".hwp", ".hwpx"}
+_UPLOAD_INPUT_DIR = ".docklive-agent-inputs"
 
 app = FastAPI(title="DockLive Inline Agent", version="0.1.0")
 
@@ -90,6 +94,60 @@ def _source_files(payload: dict) -> list[str]:
     return source_files
 
 
+def _safe_upload_name(name: str, index: int) -> str:
+    candidate = str(name or "").replace("\\", "/").split("/")[-1].strip()
+    cleaned = re.sub(r'[<>:"/\\|?*\r\n]+', "_", candidate).strip(" .")
+    return cleaned or f"upload-{index}"
+
+
+def _materialize_source_uploads(payload: dict, output_dir: str) -> list[str]:
+    raw_uploads = payload.get("source_uploads")
+    if raw_uploads is None:
+        return []
+    if not isinstance(raw_uploads, list):
+        raise ValueError("source_uploads must be a list of uploaded files")
+
+    upload_dir = Path(output_dir).expanduser() / _UPLOAD_INPUT_DIR
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    saved_paths: list[str] = []
+    used_names: set[str] = set()
+    for index, upload in enumerate(raw_uploads, start=1):
+        if not isinstance(upload, dict):
+            raise ValueError("source_uploads entries must be objects")
+        name = _safe_upload_name(str(upload.get("name") or ""), index)
+        stem = Path(name).stem or f"upload-{index}"
+        suffix = Path(name).suffix
+        unique_name = name
+        counter = 2
+        while unique_name.lower() in used_names:
+            unique_name = f"{stem}-{counter}{suffix}"
+            counter += 1
+        used_names.add(unique_name.lower())
+
+        encoded = str(upload.get("content_base64") or upload.get("base64") or "").strip()
+        if "," in encoded and encoded.lower().startswith("data:"):
+            encoded = encoded.split(",", 1)[1]
+        if not encoded:
+            raise ValueError(f"source_uploads[{index}] content_base64 is required")
+        try:
+            content = base64.b64decode(encoded, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError(f"source_uploads[{index}] content_base64 is invalid") from exc
+
+        target = upload_dir / unique_name
+        target.write_bytes(content)
+        saved_paths.append(str(target))
+    return saved_paths
+
+
+def _default_target_file(mode: str, source_files: list[str]) -> str:
+    target_suffixes = _HWPX_SUFFIXES if mode == "hwpx" else _EXCEL_SUFFIXES
+    for path in source_files:
+        if _suffix(path) in target_suffixes:
+            return path
+    return ""
+
+
 def _coerce_open_result(value: object) -> bool:
     if isinstance(value, bool):
         return value
@@ -148,9 +206,12 @@ def _build_request(payload: dict) -> BuiltAgentRequest:
     if not output_dir:
         raise ValueError("output_dir is required")
 
-    target_file = str(payload.get("target_file") or payload.get("file") or "").strip()
     source_files = _source_files(payload)
+    source_files.extend(_materialize_source_uploads(payload, output_dir))
     mode = _select_mode(payload, source_files)
+    target_file = str(payload.get("target_file") or payload.get("file") or "").strip()
+    if not target_file:
+        target_file = _default_target_file(mode, source_files)
     open_result = _coerce_open_result(payload.get("open_result", True))
 
     context = _build_context(

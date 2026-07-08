@@ -57,3 +57,6 @@ user request ─→ loop.py ─→ OpenAI API
 
 웹(DockLive Next.js) ↔ WebSocket ↔ 로컬 트레이 에이전트(이 저장소).
 클라우드가 계정/결제/프롬프트를, 로컬이 실행 권한(Excel·폴더)을 담당하는 하이브리드.
+브라우저 보안상 업로드 파일의 `C:\...` 경로가 없는 경우, 웹은 파일 내용을
+`source_uploads`로 localhost Agent에 보내고 Agent가 저장 폴더 아래
+`.docklive-agent-inputs/`에 로컬 파일로 materialize한 뒤 기존 경로 기반 도구를 실행한다.

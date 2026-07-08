@@ -32,6 +32,12 @@ type DesktopFile = File & {
   path?: string;
 };
 
+type BrowserSourceUpload = {
+  name: string;
+  type: string;
+  content_base64: string;
+};
+
 declare global {
   interface Window {
     livedockDesktop?: {
@@ -85,6 +91,27 @@ function mergeFiles(current: File[], incoming: File[]) {
 
 function localPathOf(file: File): string {
   return (file as DesktopFile).path?.trim() || '';
+}
+
+async function fileToSourceUpload(file: File): Promise<BrowserSourceUpload> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    for (let offset = 0; offset < chunk.length; offset += 1) {
+      binary += String.fromCharCode(chunk[offset]);
+    }
+  }
+  return {
+    name: file.name,
+    type: file.type || 'application/octet-stream',
+    content_base64: btoa(binary),
+  };
+}
+
+async function sourceUploadsFor(files: File[]): Promise<BrowserSourceUpload[]> {
+  return Promise.all(files.filter((file) => !localPathOf(file)).map(fileToSourceUpload));
 }
 
 function savedPathFromEvent(event: LocalAgentRunEvent): string {
@@ -143,7 +170,7 @@ function InlineAgentEntry() {
     if (picked) setOutputDir(picked);
   };
 
-  const runLocalAgent = (trimmedRequest: string, localPaths: string[]) =>
+  const runLocalAgent = (trimmedRequest: string, localPaths: string[], sourceUploads: BrowserSourceUpload[]) =>
     new Promise<string>((resolve, reject) => {
       const ws = new WebSocket(AGENT_WS);
       wsRef.current = ws;
@@ -162,6 +189,7 @@ function InlineAgentEntry() {
             request: trimmedRequest,
             file: localPaths[0] ?? '',
             source_files: localPaths,
+            source_uploads: sourceUploads,
             output_dir: outputDir.trim(),
             open_result: true,
           }),
@@ -217,9 +245,11 @@ function InlineAgentEntry() {
 
     try {
       const localPaths = files.map(localPathOf).filter(Boolean);
+      const sourceUploads = await sourceUploadsFor(files);
       let completedPath = '';
-      if (trimmed && outputDir.trim() && localPaths.length) {
-        completedPath = await runLocalAgent(trimmed, localPaths);
+      if (trimmed && outputDir.trim() && (localPaths.length || sourceUploads.length)) {
+        if (sourceUploads.length) setAgentLines(['파일을 PC Agent로 전송 중']);
+        completedPath = await runLocalAgent(trimmed, localPaths, sourceUploads);
       } else if (files.length > 0) {
         const created = await createWorkspace(workspaceTitle(files));
         for (const file of files) {
