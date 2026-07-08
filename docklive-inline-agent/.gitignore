@@ -4,3 +4,4 @@ __pycache__/
 workspace/
 samples/*_완성본.*
 .env
+*.spec

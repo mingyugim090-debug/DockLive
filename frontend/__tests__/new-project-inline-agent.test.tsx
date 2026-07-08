@@ -59,6 +59,7 @@ describe('NewProjectPage inline agent entry', () => {
     vi.clearAllMocks();
     FakeWebSocket.instances = [];
     vi.stubGlobal('WebSocket', FakeWebSocket as unknown as typeof WebSocket);
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('agent not running')));
     apiMocks.createWorkspace.mockResolvedValue({
       success: true,
       data: {
@@ -87,6 +88,36 @@ describe('NewProjectPage inline agent entry', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it('shows a download guide with the backend exe link when the agent is not running', async () => {
+    render(<NewProjectPage />);
+
+    await waitFor(() => expect(screen.getByText('PC Agent 설치가 필요합니다')).toBeInTheDocument());
+    expect(screen.getByTestId('agent-download-link')).toHaveAttribute(
+      'href',
+      'https://docklive.onrender.com/downloads/DockLiveAgent.exe',
+    );
+    expect(screen.getByText(/알 수 없는 게시자/)).toBeInTheDocument();
+  });
+
+  it('shows a connected state once the local agent health check succeeds', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
+    render(<NewProjectPage />);
+
+    await waitFor(() => expect(screen.getByText(/PC Agent 연결됨/)).toBeInTheDocument());
+    expect(screen.queryByTestId('agent-download-link')).not.toBeInTheDocument();
+  });
+
+  it('rechecks agent health when the recheck button is clicked', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error('still down'));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<NewProjectPage />);
+
+    await waitFor(() => expect(screen.getByTestId('agent-recheck')).toBeInTheDocument());
+    const callsBefore = fetchMock.mock.calls.length;
+    fireEvent.click(screen.getByTestId('agent-recheck'));
+    await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(callsBefore));
   });
 
   it('shows an Inline AI style bottom composer instead of the old notice textarea', () => {

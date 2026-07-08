@@ -10,7 +10,7 @@ Inline AI를 벤치마킹한 **로컬 데스크톱 문서 자동화 에이전트
 [파일 업로드·파싱]   [사용자 요청]
         \              /
          v            v
-      [에이전트 코어]  ← OpenAI API tool 호출 루프 (src/agent/loop.py)
+      [에이전트 코어]  ← DockLive 백엔드 프록시(/api/agent/chat) tool 호출 루프 (src/agent/loop.py)
          |  ↑
    도구 명령 | 실행 결과
          v  |
@@ -36,7 +36,9 @@ Inline AI를 벤치마킹한 **로컬 데스크톱 문서 자동화 에이전트
 
 - Python 3.11+, Windows 전용 (COM 자동화 의존)
 - xlwings + pywin32 : Excel 실시간 제어
-- openai SDK : 에이전트 루프 (기본 모델 `gpt-4o`, 필요 시 env `AGENT_MODEL`로 변경)
+- 에이전트 루프는 OpenAI를 직접 호출하지 않는다. DockLive 백엔드 `/api/agent/chat`을
+  프록시로 호출한다 (`urllib` 표준 라이브러리만 사용, 신규 의존성 없음). 모델은 백엔드가
+  기본값을 정하고, 필요 시 env `AGENT_MODEL`로 재정의.
 - HWPX : Zip+XML 직접 조작 (기존 DockLive 파이프라인 이식, `.claude/skills/hwpx-pipeline` 참조)
 - 이 저장소는 macOS/Linux에서는 **문법 검사·단위 테스트까지만** 가능. COM 통합 테스트는 Windows에서만.
 
@@ -49,9 +51,12 @@ Inline AI를 벤치마킹한 **로컬 데스크톱 문서 자동화 에이전트
    반환하고, 에러는 문자열로 에이전트 루프에 피드백되어 모델이 스스로 복구를 시도하게 한다.
 4. COM 객체는 반드시 세션 매니저(`excel_tools.ExcelSession`)를 통해서만 접근한다.
    좀비 EXCEL.EXE 프로세스 방지를 위해 close/quit 경로를 명시적으로 관리.
-5. API 키는 환경변수 `OPENAI_API_KEY`만 사용 (없으면 이 저장소 `.env` → DockLive `backend/.env`
-   순으로 탐색). 코드/설정 파일에 하드코딩 금지.
-6. 시크릿, `.env`는 커밋 금지.
+5. OpenAI API 키는 **DockLive 백엔드에만** 존재한다 (`backend/.env`의 `OPENAI_API_KEY`).
+   이 저장소·배포판 어디에도 OpenAI 키를 두지 않는다. 로컬 에이전트는 공유 토큰
+   `AGENT_PROXY_TOKEN`(환경변수 → 이 저장소 `.env` → 배포판은 exe 옆 `.env` 순 탐색)만으로
+   백엔드 프록시를 호출한다. 코드/설정 파일에 하드코딩 금지.
+6. 시크릿, `.env`는 커밋 금지. 배포용 `.exe`에 `.env`(AGENT_PROXY_TOKEN)를 번들할 때도
+   git에는 올리지 않는다 — `scripts/build_agent_exe.ps1`이 로컬 `.env`만 참조.
 
 ## 자주 쓰는 명령
 

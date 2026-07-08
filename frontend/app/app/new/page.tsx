@@ -1,8 +1,11 @@
 'use client';
 
-import { Suspense, useRef, useState, type FormEvent } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { createWorkspace, getApiUrl, uploadWorkspaceFile } from '@/lib/api';
 import type { LocalAgentRunEvent } from '@/lib/types';
+
+const AGENT_HEALTH_URL = 'http://127.0.0.1:8765/health';
+const AGENT_HEALTH_POLL_MS = 4000;
 
 const ACCEPTED_FILES = [
   '.pdf',
@@ -154,6 +157,69 @@ function describeAgentEvent(event: LocalAgentRunEvent): string {
   return `확인이 필요합니다: ${event.message ?? event.text ?? '알 수 없는 오류'}`;
 }
 
+function AgentSetupGuide({ connected, onRecheck }: { connected: boolean | null; onRecheck: () => void }) {
+  const downloadUrl = `${getApiUrl()}/downloads/DockLiveAgent.exe`;
+
+  if (connected === null) {
+    return (
+      <section
+        data-testid="agent-setup-guide"
+        className="rounded-lg border border-[#CFE0D8] bg-white p-4 text-xs text-[#65736E]"
+      >
+        PC Agent 상태 확인 중…
+      </section>
+    );
+  }
+
+  if (connected) {
+    return (
+      <section
+        data-testid="agent-setup-guide"
+        className="flex items-center gap-2 rounded-lg border border-[#CFE0D8] bg-[#EDF7F2] p-3"
+      >
+        <span className="h-2 w-2 rounded-full bg-[#245D50]" aria-hidden />
+        <p className="text-xs font-bold text-[#245D50]">PC Agent 연결됨 — Excel/HWPX 실시간 작업 준비 완료</p>
+      </section>
+    );
+  }
+
+  return (
+    <section data-testid="agent-setup-guide" className="rounded-lg border border-[#CFE0D8] bg-white p-4">
+      <div className="flex items-center gap-2">
+        <span className="h-2 w-2 rounded-full bg-[#C9722B]" aria-hidden />
+        <h2 className="text-sm font-extrabold text-[#24312D]">PC Agent 설치가 필요합니다</h2>
+      </div>
+      <p className="mt-2 text-xs leading-5 text-[#65736E]">
+        내 PC의 Excel·HWPX를 직접 여닫으려면 작은 프로그램을 한 번 설치해야 합니다.
+        Windows 전용이며, 파일을 여신 뒤에는 채팅으로 바로 요청하시면 됩니다.
+      </p>
+      <a
+        href={downloadUrl}
+        data-testid="agent-download-link"
+        className="mt-3 flex w-full items-center justify-center rounded-full bg-[#245D50] px-4 py-2.5 text-xs font-extrabold text-white transition hover:bg-[#3A7A68]"
+      >
+        DockLive Agent 다운로드 (Windows)
+      </a>
+      <ol className="mt-3 space-y-1.5 text-[11px] leading-5 text-[#40504B]">
+        <li>1. 다운로드한 <code className="rounded bg-[#F2F7F5] px-1">DockLiveAgent.exe</code>를 더블클릭하세요.</li>
+        <li>
+          2. Windows가 &quot;알 수 없는 게시자&quot; 경고를 띄우면{' '}
+          <span className="font-bold">추가 정보 → 실행</span>을 눌러주세요.
+        </li>
+        <li>3. 작업 표시줄 트레이에 초록 아이콘이 뜨면 설치 완료입니다.</li>
+      </ol>
+      <button
+        type="button"
+        data-testid="agent-recheck"
+        onClick={onRecheck}
+        className="mt-3 w-full rounded-full border border-[#245D50] px-4 py-2 text-xs font-bold text-[#245D50] transition hover:bg-[#EDF7F2]"
+      >
+        설치 완료 — 다시 확인
+      </button>
+    </section>
+  );
+}
+
 function InlineAgentEntry() {
   const [files, setFiles] = useState<File[]>([]);
   const [request, setRequest] = useState('');
@@ -163,9 +229,25 @@ function InlineAgentEntry() {
   const [error, setError] = useState('');
   const [agentLines, setAgentLines] = useState<string[]>([]);
   const [savedPath, setSavedPath] = useState('');
+  const [agentConnected, setAgentConnected] = useState<boolean | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const desktop = typeof window !== 'undefined' ? window.livedockDesktop : undefined;
+
+  const checkAgentHealth = useCallback(async () => {
+    try {
+      const res = await fetch(AGENT_HEALTH_URL, { cache: 'no-store' });
+      setAgentConnected(res.ok);
+    } catch {
+      setAgentConnected(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkAgentHealth();
+    const interval = window.setInterval(checkAgentHealth, AGENT_HEALTH_POLL_MS);
+    return () => window.clearInterval(interval);
+  }, [checkAgentHealth]);
 
   const addFiles = (incoming: FileList | File[]) => {
     const nextFiles = Array.from(incoming);
@@ -356,6 +438,8 @@ function InlineAgentEntry() {
         </section>
 
         <aside className="space-y-4">
+          <AgentSetupGuide connected={agentConnected} onRecheck={checkAgentHealth} />
+
           <section className="rounded-lg border border-[#CFE0D8] bg-white p-4">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-sm font-extrabold text-[#24312D]">열려 있는 문서</h2>

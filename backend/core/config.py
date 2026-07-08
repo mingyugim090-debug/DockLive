@@ -37,6 +37,9 @@ if BaseSettings:
         WORKFLOW_TTL_SECONDS: int = 7 * 24 * 3600
         BIZINFO_API_KEY: str = ""
         KSTARTUP_API_KEY: str = ""
+        AGENT_PROXY_TOKEN: str = ""
+        AGENT_PROXY_MODEL: str = "gpt-4o"
+        AGENT_PROXY_MAX_PER_MINUTE: int = 30
 
         class Config:
             env_file = ".env"
@@ -73,6 +76,9 @@ else:
         WORKFLOW_TTL_SECONDS: int = int(os.getenv("WORKFLOW_TTL_SECONDS", str(7 * 24 * 3600)))
         BIZINFO_API_KEY: str = os.getenv("BIZINFO_API_KEY", "")
         KSTARTUP_API_KEY: str = os.getenv("KSTARTUP_API_KEY", "")
+        AGENT_PROXY_TOKEN: str = os.getenv("AGENT_PROXY_TOKEN", "")
+        AGENT_PROXY_MODEL: str = os.getenv("AGENT_PROXY_MODEL", "gpt-4o")
+        AGENT_PROXY_MAX_PER_MINUTE: int = int(os.getenv("AGENT_PROXY_MAX_PER_MINUTE", "30"))
 
 
 settings = Settings()

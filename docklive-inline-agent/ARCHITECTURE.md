@@ -10,11 +10,14 @@
 
 ### 2. 에이전트 코어 (`src/agent/loop.py`)
 - 입력: 사용자 요청 + 파싱된 문서 컨텍스트 + tool schema
-- 처리: OpenAI Chat Completions tool 호출 루프
-  - `message.tool_calls`가 있으면 → 각 tool call을 dispatcher에 전달
+- 처리: **OpenAI를 직접 호출하지 않는다.** DockLive 백엔드 `/api/agent/chat`을
+  프록시로 호출해 OpenAI 호환 message dict(`content`, `tool_calls`)를 돌려받는 tool 호출 루프
+  - `message["tool_calls"]`가 있으면 → 각 tool call을 dispatcher에 전달
   - 결과를 `role="tool"` 메시지로 append 후 재호출 (실패는 `[TOOL ERROR]` 접두어)
   - tool call이 없으면 → 최종 텍스트 반환
 - 가드: `MAX_ITERATIONS = 25`. 초과 시 중단하고 사용자에게 상황 보고.
+  프록시 호출은 429/5xx/네트워크 오류에 지수 백오프로 최대 5회 재시도
+- 인증: `AGENT_PROXY_TOKEN` 헤더(`X-Agent-Token`)만 사용. OpenAI 키는 백엔드에만 존재.
 - 상태: 대화 히스토리는 이 프로세스의 메모리에만 존재 (매 호출 전체 전송)
 
 ### 3. 로컬 실행기 (`src/executor/dispatcher.py`)
@@ -32,7 +35,7 @@
 ## 메시지 흐름 (한 턴)
 
 ```
-user request ─→ loop.py ─→ OpenAI API
+user request ─→ loop.py ─→ DockLive 백엔드 /api/agent/chat (X-Agent-Token) ─→ OpenAI API
                               │ tool_use: write_range(sheet="견적", range="B5:D7", values=[...])
                               ▼
                         dispatcher.execute()
@@ -41,7 +44,7 @@ user request ─→ loop.py ─→ OpenAI API
                         Excel 창에 즉시 반영 (사용자가 봄)
                               │ {"ok": true, "data": "3x3 written"}
                               ▼
-                        tool 메시지 ─→ OpenAI API ─→ (반복 또는 최종 답변)
+                        tool 메시지 ─→ 백엔드 프록시 ─→ (반복 또는 최종 답변)
 ```
 
 ## 실패 처리 원칙

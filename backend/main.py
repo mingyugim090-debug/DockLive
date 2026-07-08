@@ -1,10 +1,12 @@
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from core.config import settings
-from routers import agency, analyze, demo, hwpx, notices, workflow, workspaces
+from routers import agency, agent, analyze, demo, hwpx, notices, workflow, workspaces
 
 logging.basicConfig(
     level=logging.INFO,
@@ -37,6 +39,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(agent.router, prefix="/api/agent")
 app.include_router(analyze.router, prefix="/api")
 app.include_router(demo.router, prefix="/api")
 app.include_router(hwpx.router, prefix="/api")
@@ -44,6 +47,12 @@ app.include_router(notices.router, prefix="/api")
 app.include_router(agency.router, prefix="/api/agency")
 app.include_router(workflow.router, prefix="/api/workflow")
 app.include_router(workspaces.router, prefix="/api/workspaces")
+
+# 로컬 Excel 자동화 에이전트(DockLiveAgent.exe) 배포 파일. 빌드는
+# docklive-inline-agent/scripts/build_agent_exe.ps1 참조 — 재배포 시 다시 복사해 둘 것.
+_downloads_dir = Path(__file__).resolve().parent / "static" / "downloads"
+if _downloads_dir.is_dir():
+    app.mount("/downloads", StaticFiles(directory=str(_downloads_dir)), name="downloads")
 
 
 @app.on_event("startup")

@@ -20,7 +20,7 @@
 - [x] 실행 로그: 어떤 도구를 어떤 인자로 호출했는지 실시간 출력 (loop 이벤트 → CLI)
 - [x] 데모 시나리오: 견적서 양식 + "A사 3개 품목 채워줘" → Excel 창에서 실시간 입력 확인
       (도구 계층은 scripts/com_smoke.py 로 실제 Excel COM 검증 완료.
-       LLM 구동 E2E는 `OPENAI_API_KEY` 설정(미설정 시 backend/.env 자동 탐색) 후:
+       LLM 구동 E2E는 DockLive 백엔드 프록시 경유(`AGENT_PROXY_TOKEN` 설정) 후:
        `python src/cli.py --file samples/견적서양식.xlsx --request "A사 데이터 3개 품목 채워줘"`)
 - [x] 실패 시나리오: 없는 시트 → 에러 dict 피드백 확인(com_smoke), 백업/원복은 test_backup.py
       (잠긴 파일은 Excel이 파일을 연 상태에서 CLI 실행으로 수동 확인 가능)
@@ -37,6 +37,12 @@
       — frontend/components/projects/LocalAgentPanel.tsx (health 감지 + WS 이벤트 로그,
        ProjectWorkspace 우측 패널에 통합)
 - [x] 한글(HWP) 제어 검토: HWPX 직접 조작 확정, HwpCtrl COM 보류 — docs/HWP_CONTROL.md
+- [x] OpenAI 키 배포 문제 해결: 에이전트가 OpenAI를 직접 호출하지 않고 DockLive 백엔드
+      `/api/agent/chat`을 프록시로 호출 (공유 토큰 + 분당 레이트리밋). 사용자 PC에는
+      어떤 AI 키도 두지 않는다 — backend/routers/agent.py, src/agent/loop.py
+- [x] 터미널 없는 배포: PyInstaller로 `DockLiveAgent.exe` 단일 실행파일 패키징
+      (scripts/build_agent_exe.ps1, AGENT_PROXY_TOKEN 번들), 백엔드 `/downloads/`에서 서빙,
+      `/app/new` 우측 패널에 다운로드 가이드(AgentSetupGuide) 연결
 
 ## Backlog
 - [ ] 편집 diff 미리보기 (쓰기 전 사용자 승인 모드)

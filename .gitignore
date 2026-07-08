@@ -70,6 +70,11 @@ backend/hwpx_toolchain/.hwp2hwpx-repo/
 # ==========================
 *.log
 
+# 로컬 에이전트 배포 바이너리 (~50MB) — git에 커밋하지 않음.
+# 재배포 전 docklive-inline-agent/scripts/build_agent_exe.ps1로 재생성해
+# backend/static/downloads/에 복사해 둘 것.
+backend/static/downloads/*.exe
+
 .vercel
 
 # InsForge & AI agent skills
