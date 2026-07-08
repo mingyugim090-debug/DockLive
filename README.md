@@ -4,7 +4,7 @@
 
 ### 로컬 AI Agent 기반 문서 작성 자동화 플랫폼
 
-[![Production](https://img.shields.io/badge/🌐_Production-dock--live-0066FF?style=for-the-badge)](https://dock-live.vercel.app)
+[![Production](https://img.shields.io/badge/🌐_Production-InsForge-6366F1?style=for-the-badge)](https://trgf5yzm.ap-southeast.insforge.app)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](#-기술-스택)
 [![Next.js](https://img.shields.io/badge/Next.js-14-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)](#-기술-스택)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](#-기술-스택)
@@ -208,12 +208,12 @@ LiveDock은 **두 가지 사용자 트랙**을 동시에 지원합니다:
 ```mermaid
 flowchart TB
     subgraph V1["🟢 Ver1 — 신청자 트랙"]
-        direction LR
+        direction TB
         A1["공고 수신"] --> A2["요구사항 분석"] --> A3["제출서류 초안"] --> A4["HWPX 제출"]
     end
 
     subgraph V2["🔵 Ver2 — 기관 담당자 트랙"]
-        direction LR
+        direction TB
         B1["사업 기획"] --> B2["공고 초안 작성"] --> B3["필수조항 검증"] --> B4["결재·발행"]
     end
 
@@ -264,7 +264,7 @@ flowchart TB
 ### Ver1 — 신청자 워크플로우
 
 ```mermaid
-flowchart LR
+flowchart TB
     A["📥 Input<br/>PDF / URL / Text<br/>HWP / HWPX / Excel"]
     B["🔬 Analysis<br/>핵심 정보 추출<br/>자격·서류·기준"]
     C["❓ Questions<br/>부족 정보만<br/>사용자에게 질문"]
@@ -298,7 +298,7 @@ flowchart LR
 > AI는 **내용 분석과 치환 JSON만** 생성하고, 실제 파일 생성은 HWPX 툴체인 + 로컬 Agent가 담당합니다.
 
 ```mermaid
-flowchart LR
+flowchart TB
     S1["🛡️ Agent MVP<br/>제품 guardrail"]
     S2["✏️ Section Draft<br/>섹션 초안"]
     S3["📥 HWPX Intake<br/>양식 분석"]
