@@ -359,6 +359,31 @@ class TestSaveClose:
         assert out["data"]["saved"] == out["data"]["saved_path"]
         assert str(output_dir) in out["data"]["saved_path"]
 
+    def test_save_sanitizes_excel_forbidden_brackets(self, monkeypatch, tmp_path):
+        # '[서울]_...' 같은 대괄호 파일명은 Excel SaveAs가 거부한다 → 괄호로 치환돼야 함
+        monkeypatch.setattr(excel_tools, "xw", FakeXw)
+        src = tmp_path / "[서울]_공급주택목록.xlsx"
+        src.write_bytes(b"PK-fake")
+        assert excel_tools.open_workbook(str(src))["ok"]
+        out = excel_tools.save_workbook()
+        assert out["ok"] is True
+        assert "[" not in Path(out["data"]["saved"]).name
+        assert Path(out["data"]["saved"]).name == "(서울)_공급주택목록_완성본.xlsx"
+
+    def test_save_output_dir_sanitizes_brackets_in_default_name(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(excel_tools, "xw", FakeXw)
+        src = tmp_path / "[서울]_목록.xlsx"
+        src.write_bytes(b"PK-fake")
+        assert excel_tools.open_workbook(str(src))["ok"]
+        out = excel_tools.save_workbook(output_dir=str(tmp_path / "done"))
+        assert out["ok"] is True
+        assert Path(out["data"]["saved"]).name == "(서울)_목록_완성본.xlsx"
+
+    def test_save_explicit_path_forces_excel_suffix_and_sanitizes(self, opened, tmp_path):
+        out = excel_tools.save_workbook(str(tmp_path / "완성본[v2].ver"))
+        assert out["ok"] is True
+        assert Path(out["data"]["saved"]).name == "완성본(v2).xlsx"
+
     def test_close_when_nothing_open_is_ok(self):
         out = excel_tools.close_workbook()
         assert out["ok"] is True and "이미" in out["data"]

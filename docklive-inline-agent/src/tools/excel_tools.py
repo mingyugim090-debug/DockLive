@@ -87,7 +87,13 @@ def _normalize_2d(value) -> list[list]:
 
 
 def _safe_filename(name: str, default_name: str) -> str:
+    """Excel SaveAs가 허용하지 않는 문자를 정리한다.
+
+    대괄호는 Excel 저장 파일명 금지 문자다 (예: '[서울]_목록.xlsx' → SaveAs 실패).
+    가독성을 위해 괄호로 바꾸고, 나머지 금지 문자는 밑줄로 바꾼다.
+    """
     candidate = (name or default_name).strip()
+    candidate = candidate.replace("[", "(").replace("]", ")")
     cleaned = "".join("_" if char in _INVALID_FILENAME_CHARS else char for char in candidate).strip(" .")
     return cleaned or default_name
 
@@ -104,7 +110,10 @@ def _resolve_save_path(path: str | None, output_dir: str, filename: str, default
         target = Path(path).expanduser()
         if target.parent != Path("."):
             target.parent.mkdir(parents=True, exist_ok=True)
-        return str(target)
+        safe_name = _safe_filename(target.name, default_name)
+        if Path(safe_name).suffix.lower() not in _EXCEL_SUFFIXES:
+            safe_name = f"{Path(safe_name).stem or 'workbook'}.xlsx"
+        return str(target.parent / safe_name)
 
     if not output_dir:
         raise ValueError("output_dir is required when path is not provided")
@@ -505,7 +514,7 @@ def save_workbook(path: str | None = None, output_dir: str = "", filename: str =
                 path = _resolve_save_path(None, output_dir, filename, default_name)
             elif s.original_path:
                 orig = Path(s.original_path)
-                path = str(orig.with_name(default_name))
+                path = str(orig.with_name(_safe_filename(default_name, "workbook.xlsx")))
             else:
                 return _err("새 워크북은 output_dir 또는 path를 지정해야 저장할 수 있음.")
         else:
