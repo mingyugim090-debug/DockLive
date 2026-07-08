@@ -6,6 +6,9 @@ pyobjc-framework-Cocoa>=10; sys_platform == "darwin"
 pytest>=8
 fastapi>=0.111
 uvicorn>=0.29
+# uvicorn 단독으로는 WebSocket 프로토콜 구현체가 없어 /ws가 무조건 404가 된다
+# (fastapi.testclient는 인프로세스 ASGI라 이 결함을 못 잡음 — 반드시 실제 uvicorn+브라우저로 확인할 것).
+websockets>=12
 python-docx>=1.1
 pypdf>=4
 openpyxl>=3.1
