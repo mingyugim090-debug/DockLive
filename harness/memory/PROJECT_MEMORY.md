@@ -87,6 +87,12 @@ source-grounded, and useful for future Codex or Claude Code work.
 - Agency redesign Phases 2-4 (content library, agency LLM drafting, studio
   frontend rebuild) are ON HOLD after the pivot; the approved plan for them
   is in the 2026-07-06 session plan file if resumed.
+- Local Inline Agent direction: Excel can be edited live through the PC agent
+  (`open_workbook`, `write_range`, `create_chart`). HWP/HWPX authoring must
+  go through DockLive's backend HWPX compose/validate pipeline
+  (`compose_hwpx_form`) and then save a verified completed file locally; do not
+  add direct local HWPX XML writes or HwpCtrl COM automation without a new
+  product decision.
 
 ## Harness Decisions
 

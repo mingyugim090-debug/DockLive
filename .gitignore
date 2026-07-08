@@ -63,6 +63,9 @@ tools/hwp-mcp/pytest-cache-files-*/
 backend/.livedock_storage/
 backend/.tmp/
 backend/hwpx_toolchain/.hwp2hwpx-repo/
+docklive-inline-agent-v2/
+docklive-inline-agent-v3/
+docklive-web-redesign/
 
 # ==========================
 # Misc

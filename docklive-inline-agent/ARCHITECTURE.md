@@ -28,6 +28,13 @@
 - xlwings `App(visible=True)` — 사용자 눈앞에서 실시간 편집이 보이는 것이 제품 핵심
 - ExcelSession 싱글턴이 App/Book 핸들 보유. 도구 함수는 세션을 통해서만 접근
 - SaveAs는 사용자 지정 폴더 (기본: 원본과 같은 폴더에 `_완성본` 접미사)
+- 표/그래프/차트는 `read_range`로 데이터 확인 후 `create_chart`로 생성
+
+### 5. HWPX 자동작성 (`src/tools/hwpx_tools.py`)
+- 로컬 Agent가 HWPX XML을 직접 수정하지 않는다.
+- `compose_hwpx_form`은 로컬 HWP/HWPX 파일을 DockLive 백엔드 `/api/hwpx/compose`로 보내고,
+  검증된 완성본 HWPX를 PC에 저장한다.
+- 실시간 한글 창 직접 타이핑은 HwpCtrl COM 의존성이 커서 별도 검토 항목으로 둔다.
 
 ## 메시지 흐름 (한 턴)
 
@@ -53,7 +60,8 @@ user request ─→ loop.py ─→ OpenAI API
 | 쓰기 중 크래시 | 백업본에서 restore_backup() 안내 |
 | Excel 미설치/비Windows | open_workbook이 즉시 감지하고 명확한 에러 반환 |
 
-## Phase 5 통합 형태 (예정)
+## Phase 5 통합 형태
 
 웹(DockLive Next.js) ↔ WebSocket ↔ 로컬 트레이 에이전트(이 저장소).
 클라우드가 계정/결제/프롬프트를, 로컬이 실행 권한(Excel·폴더)을 담당하는 하이브리드.
+LiveDock Desktop은 backend, frontend와 함께 이 로컬 에이전트 서버도 자동 기동한다.

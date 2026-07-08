@@ -21,10 +21,12 @@
 | 5 | `apply_formula` | 수식 입력 | sheet, range, formula | `=SUM(...)` 형태, range 전체에 채움 |
 | 6 | `insert_rows` | 행 삽입 | sheet, at_row, count | 양식 표 확장용 |
 | 7 | `format_range` | 서식 적용 | sheet, range, bold?, number_format?, bg_color?(hex) | 최소 서식만 |
-| 8 | `save_workbook` | 저장 | path(선택) | path 없으면 원본폴더에 `_완성본.xlsx` |
-| 9 | `close_workbook` | 닫기 | save(bool) | App quit 포함, 좀비 프로세스 방지 |
-| 10 | `read_document` | 소스 문서 텍스트 추출 | path | HWPX/DOCX/PDF (Phase 4) |
-| 11 | `list_files` | 폴더 파일 목록 | dir_path | 업로드 폴더 탐색용 |
+| 8 | `create_chart` | Excel 차트 생성 | sheet, source_range, position?, chart_type?, title? | read_range로 데이터 확인 후 사용 |
+| 9 | `save_workbook` | 저장 | path(선택) | path 없으면 원본폴더에 `_완성본.xlsx` |
+| 10 | `close_workbook` | 닫기 | save(bool) | App quit 포함, 좀비 프로세스 방지 |
+| 11 | `read_document` | 소스 문서 텍스트 추출 | path | HWPX/DOCX/PDF (Phase 4) |
+| 12 | `compose_hwpx_form` | HWP/HWPX 양식 자동작성 | path, request, applicant_context?, output_path?, api_url?, title? | DockLive 백엔드 검증 파이프라인으로 완성본 저장 |
+| 13 | `list_files` | 폴더 파일 목록 | dir_path | 업로드 폴더 탐색용 |
 
 ## 에러 시맨틱
 

@@ -1,0 +1,28 @@
+{
+  "forms": [
+    {
+      "file": "sample_apply.hwpx",
+      "source": "vol3 synthetic corpus",
+      "program": "HWPX application form round-trip baseline"
+    },
+    {
+      "file": "sample_budget.xlsx",
+      "source": "vol3 synthetic corpus",
+      "program": "XLSX budget form round-trip baseline",
+      "slots": [
+        {
+          "id": "인건비산출",
+          "kind": "cell",
+          "ref": "사업비!B3",
+          "max_chars": 50
+        },
+        {
+          "id": "재료비산출",
+          "kind": "cell",
+          "ref": "사업비!B4",
+          "max_chars": 50
+        }
+      ]
+    }
+  ]
+}

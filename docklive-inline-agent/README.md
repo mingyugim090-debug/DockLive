@@ -1,6 +1,6 @@
 # DockLive Inline Agent — Claude Code 하네스
 
-Inline AI 벤치마킹: 파일 업로드 → 자연어 요청 → 실제 Excel 실시간 편집 → 폴더 저장.
+Inline AI 벤치마킹: 파일 업로드 → 자연어 요청 → 실제 Excel 실시간 편집 또는 HWPX 자동작성 → 폴더 저장.
 
 ## 시작하기 (Windows)
 1. 이 폴더를 열고 `claude` 실행 (Claude Code가 CLAUDE.md, hooks, skills를 자동 로드)
@@ -9,6 +9,7 @@ Inline AI 벤치마킹: 파일 업로드 → 자연어 요청 → 실제 Excel �
 4. E2E: `OPENAI_API_KEY` 설정 (미설정 시 `backend/.env`에서 자동 탐색) 후
    `python src/cli.py --file 양식.xlsx --request "..."`
 5. 트레이 상주: `python src/tray.py` — 로컬 서버(127.0.0.1:8765)를 백그라운드로 켠 채 트레이에 상주
+6. LiveDock Desktop에서는 이 로컬 서버가 함께 시작되므로 웹 화면에서 바로 Agent 패널을 사용할 수 있음
 
 ## 구조
 - `CLAUDE.md` — 프로젝트 헌법 (아키텍처, 불변 규칙)

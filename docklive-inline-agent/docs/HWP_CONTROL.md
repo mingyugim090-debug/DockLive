@@ -15,9 +15,9 @@
 ## 결정 사항
 
 1. **읽기**: 이미 구현됨 — `src/tools/file_tools.py`의 `read_document`가 HWPX(zip → `Contents/section*.xml`)를 파싱한다.
-2. **쓰기**: 로컬 에이전트에서 직접 구현하지 않는다. HWPX 생성·수정은 DockLive 백엔드의
-   `hwpx_toolchain` 스크립트(검증 포함)를 단일 경로로 유지한다 — 로컬에서 중복 구현하면
-   검증(validate/verify) 없는 HWPX가 생길 위험이 있다 (CLAUDE.md 금지사항과 동일한 취지).
+2. **쓰기**: 로컬 에이전트가 XML을 직접 수정하지 않는다. `compose_hwpx_form` 도구가 로컬 파일을
+   DockLive 백엔드의 `hwpx_toolchain` 자동작성 API로 보내고, 검증(validate/verify)된 완성본만
+   PC에 저장한다. 로컬에서 중복 구현하면 검증 없는 HWPX가 생길 위험이 있다.
 3. **HwpCtrl COM 보류 사유**: 사용자 PC에 한컴 설치 + 보안모듈 등록을 요구하는 순간
    "트레이 하나 켜면 동작"하는 배포 모델이 깨진다. Excel(xlwings)과 달리 사전 준비 비용이 크다.
 4. **재검토 조건**: (a) .hwp 구형 파일의 인라인 편집 요구가 실제 사용자에게서 확인되고,
@@ -26,5 +26,6 @@
 
 ## 사용자 흐름 (현재)
 
-- 한글 문서가 필요한 경우: 웹(DockLive) 워크스페이스에서 HWPX export → 사용자가 한글로 열기.
-- 로컬 에이전트는 Excel 실시간 편집에 집중하고, HWPX는 참고자료 읽기(`read_document`)만 담당.
+- 한글 문서가 필요한 경우: 웹(DockLive) 워크스페이스 HWPX 자동작성 또는 로컬 Agent의
+  `compose_hwpx_form` → 검증된 완성본 저장 → 사용자가 한글로 열어 최종 확인.
+- 로컬 에이전트의 실시간 창 편집은 Excel에 집중한다. HWPX는 백엔드 검증 파이프라인을 경유한다.
