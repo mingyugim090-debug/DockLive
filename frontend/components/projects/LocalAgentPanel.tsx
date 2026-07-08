@@ -6,6 +6,7 @@ import type { LocalAgentMode, LocalAgentRunEvent } from '@/lib/types';
 
 const AGENT_HTTP = 'http://127.0.0.1:8765';
 const AGENT_WS = 'ws://127.0.0.1:8765/ws';
+const AGENT_OUTPUT_PICKER_URL = `${AGENT_HTTP}/select-output-folder`;
 const TERMINAL_EVENTS = ['done', 'max_iterations', 'error'];
 const MAX_LOG_LINES = 12;
 
@@ -85,6 +86,7 @@ export function LocalAgentPanel({ sourceFiles = [], defaultTargetFile = '' }: Lo
   const [outputDir, setOutputDir] = useState('');
   const [extraSourcePaths, setExtraSourcePaths] = useState('');
   const [running, setRunning] = useState(false);
+  const [error, setError] = useState('');
   const [lines, setLines] = useState<string[]>([]);
   const [savedPath, setSavedPath] = useState('');
   const wsRef = useRef<WebSocket | null>(null);
@@ -119,8 +121,29 @@ export function LocalAgentPanel({ sourceFiles = [], defaultTargetFile = '' }: Lo
   const canRun = Boolean(request.trim() && targetFile.trim() && outputDir.trim() && !running);
 
   const selectOutputFolder = async () => {
-    const picked = await desktop?.selectOutputFolder?.();
-    if (picked) setOutputDir(picked);
+    setError('');
+    try {
+      const picked = await desktop?.selectOutputFolder?.();
+      if (picked) {
+        setOutputDir(picked);
+        return;
+      }
+      const res = await fetch(AGENT_OUTPUT_PICKER_URL, { cache: 'no-store' });
+      const payload = (await res.json().catch(() => ({}))) as {
+        selected?: boolean;
+        path?: string;
+        message?: string;
+        detail?: string | { message?: string };
+      };
+      if (!res.ok) {
+        const detailMessage =
+          typeof payload.detail === 'string' ? payload.detail : payload.detail?.message ?? payload.message;
+        throw new Error(detailMessage || '저장 폴더 선택창을 열 수 없습니다.');
+      }
+      if (payload.selected && payload.path) setOutputDir(payload.path);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '저장 폴더 선택창을 열 수 없습니다.');
+    }
   };
 
   const runAgent = () => {
@@ -247,7 +270,7 @@ export function LocalAgentPanel({ sourceFiles = [], defaultTargetFile = '' }: Lo
                 placeholder="예: C:\작업\완성본"
                 className="min-w-0 flex-1 rounded-lg border border-[#BFD5CB] bg-white px-3 py-2.5 text-sm text-[#24312D] outline-none placeholder:text-[#8A9893] focus:border-[#245D50] focus:ring-2 focus:ring-[#DCEEE7]"
               />
-              {desktop?.selectOutputFolder ? (
+              {desktop?.selectOutputFolder || connected ? (
                 <button
                   type="button"
                   onClick={selectOutputFolder}
@@ -303,6 +326,11 @@ export function LocalAgentPanel({ sourceFiles = [], defaultTargetFile = '' }: Lo
           >
             {running ? '실행 중' : 'Agent 실행'}
           </button>
+          {error ? (
+            <p data-testid="local-agent-error" className="text-[11px] font-semibold text-red-600">
+              {error}
+            </p>
+          ) : null}
           <p className="text-[11px] leading-4 text-[#65736E]">{MODE_COPY[mode].hint}</p>
         </div>
       )}

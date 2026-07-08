@@ -1,7 +1,8 @@
 pystray>=0.19
 pillow>=10
-xlwings>=0.31; sys_platform == "win32"
+xlwings>=0.31
 pywin32>=306; sys_platform == "win32"
+pyobjc-framework-Cocoa>=10; sys_platform == "darwin"
 pytest>=8
 fastapi>=0.111
 uvicorn>=0.29

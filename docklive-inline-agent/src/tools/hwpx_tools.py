@@ -10,6 +10,8 @@ import json
 import mimetypes
 import os
 import re
+import subprocess
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -56,7 +58,13 @@ def _safe_output_path(source: Path, output_path: str = "", output_dir: str = "",
 
 
 def _open_path(path: str) -> None:
-    os.startfile(path)  # type: ignore[attr-defined]
+    if sys.platform == "win32":
+        os.startfile(path)  # type: ignore[attr-defined]
+        return
+    if sys.platform == "darwin":
+        subprocess.Popen(["open", path])
+        return
+    subprocess.Popen(["xdg-open", path])
 
 
 def _require_hwpx_source(path: str) -> Path:

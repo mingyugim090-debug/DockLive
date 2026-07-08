@@ -169,7 +169,7 @@ def _release_current_book() -> dict | None:
 
 def open_workbook(path: str, visible: bool = True) -> dict:
     if xw is None:
-        return _err("xlwings 미설치 또는 비Windows 환경. 이 도구는 Windows + Excel 필요.")
+        return _err("xlwings가 설치되어 있지 않습니다. Microsoft Excel과 xlwings가 설치된 Windows 또는 macOS 환경이 필요합니다.")
     s = ExcelSession.get()
     p = Path(path)
     if s.book is not None and _book_is_alive(s):
@@ -196,7 +196,7 @@ def open_workbook(path: str, visible: bool = True) -> dict:
 
 def create_workbook(path: str = "", visible: bool = True) -> dict:
     if xw is None:
-        return _err("xlwings 미설치 또는 비Windows 환경. 이 도구는 Windows + Excel 필요.")
+        return _err("xlwings가 설치되어 있지 않습니다. Microsoft Excel과 xlwings가 설치된 Windows 또는 macOS 환경이 필요합니다.")
     release_error = _release_current_book()
     if release_error:
         return release_error
@@ -552,6 +552,5 @@ def close_workbook(save: bool = False) -> dict:
         return _err(f"닫기 실패: {ex}")
 
 
-if sys.platform != "win32" and xw is not None:
-    # macOS xlwings는 동작이 달라 계약이 깨질 수 있음 — 명시적으로 알림
-    print("[warn] 비Windows 환경: COM 통합 테스트는 Windows에서 수행할 것", file=sys.stderr)
+if sys.platform == "darwin" and xw is not None:
+    print("[info] macOS Excel automation enabled through xlwings.", file=sys.stderr)

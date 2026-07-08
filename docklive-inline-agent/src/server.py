@@ -20,6 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect  # noqa: E402
+from fastapi.responses import JSONResponse  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
 from agent.loop import run_agent  # noqa: E402
@@ -36,7 +37,13 @@ app = FastAPI(title="DockLive Inline Agent", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://trgf5yzm.insforge.site"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3111",
+        "http://127.0.0.1:3111",
+        "https://trgf5yzm.insforge.site",
+    ],
+    allow_origin_regex=r"https://.*\.(vercel\.app|insforge\.site|insforge\.app)",
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -45,6 +52,38 @@ app.add_middleware(
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok", "service": "docklive-inline-agent"}
+
+
+def _select_output_folder_path() -> str:
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+    except Exception as exc:  # pragma: no cover - depends on local Python GUI build
+        raise RuntimeError(f"folder dialog unavailable: {exc}") from exc
+
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        try:
+            root.attributes("-topmost", True)
+        except Exception:
+            pass
+        selected = filedialog.askdirectory(title="Select DockLive output folder", mustexist=False)
+        return str(selected or "")
+    finally:
+        root.destroy()
+
+
+@app.get("/select-output-folder", response_model=None)
+async def select_output_folder() -> dict | JSONResponse:
+    try:
+        path = await asyncio.to_thread(_select_output_folder_path)
+    except Exception as exc:
+        return JSONResponse(
+            status_code=503,
+            content={"selected": False, "path": "", "message": str(exc)},
+        )
+    return {"selected": bool(path), "path": path}
 
 
 @dataclass(frozen=True)

@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import NewProjectPage from '@/app/app/new/page';
 
 const pushMock = vi.fn();
+const AGENT_DOWNLOAD_BASE_URL =
+  'https://trgf5yzm.ap-southeast.insforge.app/api/storage/buckets/agent-downloads/objects';
 
 const apiMocks = vi.hoisted(() => ({
   createWorkspace: vi.fn(),
@@ -60,6 +62,10 @@ describe('NewProjectPage inline agent entry', () => {
     FakeWebSocket.instances = [];
     vi.stubGlobal('WebSocket', FakeWebSocket as unknown as typeof WebSocket);
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('agent not running')));
+    Object.defineProperty(window.navigator, 'userAgent', {
+      value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+      configurable: true,
+    });
     apiMocks.createWorkspace.mockResolvedValue({
       success: true,
       data: {
@@ -90,15 +96,77 @@ describe('NewProjectPage inline agent entry', () => {
     vi.unstubAllGlobals();
   });
 
-  it('shows a download guide with the backend exe link when the agent is not running', async () => {
+  it('shows a macOS agent download when the service is opened from a Mac', async () => {
+    Object.defineProperty(window.navigator, 'userAgent', {
+      value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6)',
+      configurable: true,
+    });
+
+    render(<NewProjectPage />);
+
+    await waitFor(() => expect(screen.getByTestId('agent-download-link')).toBeInTheDocument());
+    expect(screen.getByTestId('agent-download-platform')).toHaveTextContent('macOS');
+    expect(screen.getByTestId('agent-download-link')).toHaveAttribute(
+      'href',
+      `${AGENT_DOWNLOAD_BASE_URL}/DockLiveAgent-mac.zip`,
+    );
+  });
+
+  it('shows a download guide with the InsForge Storage Windows zip when the agent is not running', async () => {
     render(<NewProjectPage />);
 
     await waitFor(() => expect(screen.getByText('PC Agent 설치가 필요합니다')).toBeInTheDocument());
     expect(screen.getByTestId('agent-download-link')).toHaveAttribute(
       'href',
-      'https://docklive.onrender.com/downloads/DockLiveAgent.exe',
+      `${AGENT_DOWNLOAD_BASE_URL}/DockLiveAgent-windows.zip`,
     );
-    expect(screen.getByText(/알 수 없는 게시자/)).toBeInTheDocument();
+    expect(screen.getByText(/Start-DockLiveAgent\.cmd/)).toBeInTheDocument();
+    expect(screen.getByText(/ZIP 파일의 압축을 푼 뒤/)).toBeInTheDocument();
+  });
+
+  it('selects an output folder through the running local agent when the desktop bridge is unavailable', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/health')) return Promise.resolve({ ok: true });
+      if (url.includes('/select-output-folder')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ selected: true, path: 'C:\\picked' }),
+        });
+      }
+      return Promise.reject(new Error(`unexpected url ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<NewProjectPage />);
+
+    await waitFor(() => expect(screen.getByTestId('inline-agent-output-picker')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('inline-agent-output-picker'));
+
+    await waitFor(() => expect(screen.getByTestId('inline-agent-output-dir')).toHaveValue('C:\\picked'));
+    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:8765/select-output-folder', { cache: 'no-store' });
+  });
+
+  it('shows a clear error when the local folder picker is not available', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/health')) return Promise.resolve({ ok: true });
+      if (url.includes('/select-output-folder')) {
+        return Promise.resolve({
+          ok: false,
+          json: () => Promise.resolve({ message: 'folder dialog unavailable' }),
+        });
+      }
+      return Promise.reject(new Error(`unexpected url ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<NewProjectPage />);
+
+    await waitFor(() => expect(screen.getByTestId('inline-agent-output-picker')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('inline-agent-output-picker'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('inline-agent-error')).toHaveTextContent('folder dialog unavailable');
+    });
   });
 
   it('shows a connected state once the local agent health check succeeds', async () => {

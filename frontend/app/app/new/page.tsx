@@ -5,7 +5,11 @@ import { createWorkspace, getApiUrl, uploadWorkspaceFile } from '@/lib/api';
 import type { LocalAgentRunEvent } from '@/lib/types';
 
 const AGENT_HEALTH_URL = 'http://127.0.0.1:8765/health';
+const AGENT_OUTPUT_PICKER_URL = 'http://127.0.0.1:8765/select-output-folder';
 const AGENT_HEALTH_POLL_MS = 4000;
+const AGENT_DOWNLOAD_BASE_URL =
+  process.env.NEXT_PUBLIC_AGENT_DOWNLOAD_BASE_URL ??
+  'https://trgf5yzm.ap-southeast.insforge.app/api/storage/buckets/agent-downloads/objects';
 
 const ACCEPTED_FILES = [
   '.pdf',
@@ -39,6 +43,15 @@ type BrowserSourceUpload = {
   name: string;
   type: string;
   content_base64: string;
+};
+
+type AgentDownloadInfo = {
+  platform: 'Windows' | 'macOS';
+  href: string;
+  label: string;
+  fileName: string;
+  steps: string[];
+  note: string;
 };
 
 declare global {
@@ -117,6 +130,45 @@ async function sourceUploadsFor(files: File[]): Promise<BrowserSourceUpload[]> {
   return Promise.all(files.filter((file) => !localPathOf(file)).map(fileToSourceUpload));
 }
 
+function detectAgentPlatform(desktopPlatform?: string): 'Windows' | 'macOS' {
+  const platform = `${desktopPlatform ?? ''} ${typeof navigator !== 'undefined' ? navigator.userAgent : ''}`.toLowerCase();
+  if (platform.includes('darwin') || platform.includes('macintosh') || platform.includes('mac os')) return 'macOS';
+  return 'Windows';
+}
+
+function agentDownloadUrl(fileName: string): string {
+  return `${AGENT_DOWNLOAD_BASE_URL.replace(/\/$/, '')}/${encodeURIComponent(fileName)}`;
+}
+
+function agentDownloadInfo(platform: 'Windows' | 'macOS'): AgentDownloadInfo {
+  if (platform === 'macOS') {
+    return {
+      platform,
+      href: agentDownloadUrl('DockLiveAgent-mac.zip'),
+      label: 'DockLive Agent 다운로드 (macOS)',
+      fileName: 'DockLiveAgent-mac.zip',
+      note: '웹 브라우저는 다운로드한 앱을 자동 실행할 수 없습니다. ZIP 파일의 압축을 푼 뒤 DockLiveAgent 앱을 한 번 열면 이후 이 화면에서 바로 연결됩니다.',
+      steps: [
+        '다운로드한 DockLiveAgent-mac.zip의 압축을 풉니다.',
+        'DockLiveAgent 앱을 열고, macOS 보안 경고가 뜨면 시스템 설정 > 개인정보 보호 및 보안에서 열기를 허용합니다.',
+        '메뉴 막대에 DockLive Agent가 표시되면 이 화면에서 다시 확인을 누릅니다.',
+      ],
+    };
+  }
+  return {
+    platform,
+    href: agentDownloadUrl('DockLiveAgent-windows.zip'),
+    label: 'DockLive Agent 다운로드 (Windows)',
+    fileName: 'DockLiveAgent-windows.zip',
+    note: '웹 브라우저는 다운로드한 프로그램을 자동 실행할 수 없습니다. ZIP 파일의 압축을 푼 뒤 Agent를 한 번 열면 이후 이 화면에서 바로 연결됩니다.',
+    steps: [
+      '다운로드한 DockLiveAgent-windows.zip의 압축을 풉니다.',
+      '압축을 푼 폴더 안의 Start-DockLiveAgent.cmd를 더블클릭하세요.',
+      '작업 표시줄 트레이에 초록 아이콘이 뜨면 설치 완료입니다.',
+    ],
+  };
+}
+
 function savedPathFromEvent(event: LocalAgentRunEvent): string {
   if (event.type !== 'tool_result') return '';
   const direct = event.result?.saved_path;
@@ -157,8 +209,16 @@ function describeAgentEvent(event: LocalAgentRunEvent): string {
   return `확인이 필요합니다: ${event.message ?? event.text ?? '알 수 없는 오류'}`;
 }
 
-function AgentSetupGuide({ connected, onRecheck }: { connected: boolean | null; onRecheck: () => void }) {
-  const downloadUrl = `${getApiUrl()}/downloads/DockLiveAgent.exe`;
+function AgentSetupGuide({
+  connected,
+  desktopPlatform,
+  onRecheck,
+}: {
+  connected: boolean | null;
+  desktopPlatform?: string;
+  onRecheck: () => void;
+}) {
+  const download = agentDownloadInfo(detectAgentPlatform(desktopPlatform));
 
   if (connected === null) {
     return (
@@ -189,24 +249,29 @@ function AgentSetupGuide({ connected, onRecheck }: { connected: boolean | null; 
         <span className="h-2 w-2 rounded-full bg-[#C9722B]" aria-hidden />
         <h2 className="text-sm font-extrabold text-[#24312D]">PC Agent 설치가 필요합니다</h2>
       </div>
+      <p data-testid="agent-download-platform" className="mt-2 text-[11px] font-extrabold text-[#245D50]">
+        {download.platform}
+      </p>
       <p className="mt-2 text-xs leading-5 text-[#65736E]">
-        내 PC의 Excel·HWPX를 직접 여닫으려면 작은 프로그램을 한 번 설치해야 합니다.
-        Windows 전용이며, 파일을 여신 뒤에는 채팅으로 바로 요청하시면 됩니다.
+        내 PC의 Excel·HWPX를 직접 여닫으려면 작은 Agent를 한 번 실행해야 합니다. {download.note}
       </p>
       <a
-        href={downloadUrl}
+        href={download.href}
+        download={download.fileName}
         data-testid="agent-download-link"
         className="mt-3 flex w-full items-center justify-center rounded-full bg-[#245D50] px-4 py-2.5 text-xs font-extrabold text-white transition hover:bg-[#3A7A68]"
       >
-        DockLive Agent 다운로드 (Windows)
+        {download.label}
       </a>
       <ol className="mt-3 space-y-1.5 text-[11px] leading-5 text-[#40504B]">
-        <li>1. 다운로드한 <code className="rounded bg-[#F2F7F5] px-1">DockLiveAgent.exe</code>를 더블클릭하세요.</li>
         <li>
-          2. Windows가 &quot;알 수 없는 게시자&quot; 경고를 띄우면{' '}
-          <span className="font-bold">추가 정보 → 실행</span>을 눌러주세요.
+          1. 다운로드한 <code className="rounded bg-[#F2F7F5] px-1">{download.fileName}</code>를 여세요.
         </li>
-        <li>3. 작업 표시줄 트레이에 초록 아이콘이 뜨면 설치 완료입니다.</li>
+        {download.steps.slice(1).map((step, index) => (
+          <li key={step}>
+            {index + 2}. {step}
+          </li>
+        ))}
       </ol>
       <button
         type="button"
@@ -261,8 +326,32 @@ function InlineAgentEntry() {
   };
 
   const selectOutputFolder = async () => {
-    const picked = await desktop?.selectOutputFolder?.();
-    if (picked) setOutputDir(picked);
+    setError('');
+    try {
+      const picked = await desktop?.selectOutputFolder?.();
+      if (picked) {
+        setOutputDir(picked);
+        return;
+      }
+
+      const res = await fetch(AGENT_OUTPUT_PICKER_URL, { cache: 'no-store' });
+      const payload = (await res.json().catch(() => ({}))) as {
+        selected?: boolean;
+        path?: string;
+        message?: string;
+        detail?: string | { message?: string };
+      };
+      if (!res.ok) {
+        const detailMessage =
+          typeof payload.detail === 'string' ? payload.detail : payload.detail?.message ?? payload.message;
+        throw new Error(detailMessage || '저장 폴더 선택창을 열 수 없습니다.');
+      }
+      if (payload.selected && payload.path) {
+        setOutputDir(payload.path);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '저장 폴더 선택창을 열 수 없습니다.');
+    }
   };
 
   const runLocalAgent = (trimmedRequest: string, localPaths: string[], sourceUploads: BrowserSourceUpload[]) =>
@@ -312,6 +401,14 @@ function InlineAgentEntry() {
         if (path) {
           resultPath = path;
           setSavedPath(path);
+        }
+        if (event.type === 'done' && !resultPath && lastFailure) {
+          ws.close();
+          if (!settled) {
+            settled = true;
+            reject(new Error(event.text ?? lastFailure));
+          }
+          return;
         }
         if (event.type === 'error' || event.type === 'max_iterations') {
           ws.close();
@@ -438,7 +535,7 @@ function InlineAgentEntry() {
         </section>
 
         <aside className="space-y-4">
-          <AgentSetupGuide connected={agentConnected} onRecheck={checkAgentHealth} />
+          <AgentSetupGuide connected={agentConnected} desktopPlatform={desktop?.platform} onRecheck={checkAgentHealth} />
 
           <section className="rounded-lg border border-[#CFE0D8] bg-white p-4">
             <div className="flex items-center justify-between gap-3">
@@ -513,7 +610,7 @@ function InlineAgentEntry() {
                 className="mt-2 w-full rounded-lg border border-[#BFD5CB] px-3 py-2 text-sm text-[#24312D] outline-none placeholder:text-[#8A9893] focus:border-[#245D50] focus:ring-2 focus:ring-[#DCEEE7]"
               />
             </label>
-            {desktop?.selectOutputFolder ? (
+            {desktop?.selectOutputFolder || agentConnected ? (
               <button
                 type="button"
                 data-testid="inline-agent-output-picker"

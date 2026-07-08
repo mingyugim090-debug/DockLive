@@ -33,5 +33,21 @@ $pyinstallerArgs += "src/tray.py"
 
 python -m PyInstaller @pyinstallerArgs
 
+$exePath = Join-Path (Get-Location) "dist\DockLiveAgent.exe"
+$signtool = $env:WINDOWS_SIGNTOOL_PATH
+if (-not $signtool) {
+    $signtoolCommand = Get-Command signtool.exe -ErrorAction SilentlyContinue
+    if ($signtoolCommand) {
+        $signtool = $signtoolCommand.Source
+    }
+}
+
+if ($signtool -and $env:WINDOWS_CERT_SHA1) {
+    & $signtool sign /fd SHA256 /tr "http://timestamp.digicert.com" /td SHA256 /sha1 $env:WINDOWS_CERT_SHA1 $exePath
+    Write-Host "Authenticode signed: $exePath" -ForegroundColor Green
+} else {
+    Write-Warning "DockLiveAgent.exe is unsigned. Edge/SmartScreen may warn until an Authenticode certificate is configured with WINDOWS_CERT_SHA1."
+}
+
 Write-Host ""
 Write-Host "빌드 완료: dist/DockLiveAgent.exe" -ForegroundColor Green

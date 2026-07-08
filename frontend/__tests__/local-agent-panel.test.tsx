@@ -119,4 +119,24 @@ describe('LocalAgentPanel', () => {
 
     await waitFor(() => expect(screen.getByLabelText('저장 폴더')).toHaveValue('C:\\picked'));
   });
+
+  it('fills the output folder through the local agent picker in a browser session', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/health')) return Promise.resolve({ ok: true });
+      if (url.includes('/select-output-folder')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ selected: true, path: 'C:\\browser-picked' }),
+        });
+      }
+      return Promise.reject(new Error(`unexpected url ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<LocalAgentPanel />);
+    await waitFor(() => expect(screen.getByTestId('local-agent-status')).toHaveTextContent('연결됨'));
+
+    fireEvent.click(screen.getByRole('button', { name: '저장 폴더 선택' }));
+
+    await waitFor(() => expect(screen.getByLabelText('저장 폴더')).toHaveValue('C:\\browser-picked'));
+  });
 });

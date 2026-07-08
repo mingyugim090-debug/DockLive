@@ -1,6 +1,6 @@
 # LiveDock Desktop
 
-Electron shell for the Windows-first LiveDock desktop experience.
+Electron shell for the Windows and macOS LiveDock desktop experience.
 
 The shell starts the local FastAPI backend, the Inline Agent WebSocket server,
 the Next.js frontend, and passes the Excel helper path through environment
@@ -12,8 +12,9 @@ server deployments.
 
 ## Requirements
 
-- Windows with Microsoft Excel for the Excel automation loop.
-- A HWP/HWPX-capable local toolchain for direct HWPX editing and opening.
+- Windows or macOS.
+- Microsoft Excel for the live Excel automation loop.
+- A HWP/HWPX-capable local toolchain for direct HWPX opening.
 - Python dependencies from the backend.
 - Frontend dependencies from `frontend/package.json`.
 - Electron installed in this package when running the desktop app.

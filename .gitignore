@@ -74,6 +74,11 @@ backend/hwpx_toolchain/.hwp2hwpx-repo/
 # 재배포 전 docklive-inline-agent/scripts/build_agent_exe.ps1로 재생성해
 # backend/static/downloads/에 복사해 둘 것.
 backend/static/downloads/*.exe
+backend/static/downloads/*.zip
+backend/static/downloads/*.dmg
+frontend/public/downloads/*.exe
+frontend/public/downloads/*.zip
+frontend/public/downloads/*.dmg
 
 .vercel
 

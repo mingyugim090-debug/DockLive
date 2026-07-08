@@ -31,6 +31,24 @@ def test_health(client):
     assert res.json()["service"] == "docklive-inline-agent"
 
 
+def test_select_output_folder_returns_path(monkeypatch, client):
+    monkeypatch.setattr(server, "_select_output_folder_path", lambda: r"C:\work\done")
+
+    res = client.get("/select-output-folder")
+
+    assert res.status_code == 200
+    assert res.json() == {"selected": True, "path": r"C:\work\done"}
+
+
+def test_select_output_folder_reports_cancel(monkeypatch, client):
+    monkeypatch.setattr(server, "_select_output_folder_path", lambda: "")
+
+    res = client.get("/select-output-folder")
+
+    assert res.status_code == 200
+    assert res.json() == {"selected": False, "path": ""}
+
+
 def test_build_request_auto_routes_excel_and_carries_output_dir():
     built = server._build_request(
         {

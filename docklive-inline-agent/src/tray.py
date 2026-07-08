@@ -6,11 +6,35 @@
 """
 from __future__ import annotations
 
+import os
 import sys
 import threading
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+
+def _log_path() -> Path:
+    base = os.environ.get("LOCALAPPDATA") or os.environ.get("TMPDIR") or str(Path.home())
+    log_dir = Path(base) / "DockLiveAgent"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir / "agent.log"
+
+
+def _ensure_std_streams() -> None:
+    """pythonw.exe / --windowed 환경에서는 sys.stdout·stderr가 None이라
+    uvicorn 로깅 등이 첫 로그에서 크래시한다(서버 스레드 조용히 사망).
+    로그 파일로 리다이렉트해 안정화하고, 동시에 진단 로그를 확보한다."""
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+    stream = open(_log_path(), "a", encoding="utf-8", buffering=1)
+    if sys.stdout is None:
+        sys.stdout = stream
+    if sys.stderr is None:
+        sys.stderr = stream
+
+
+_ensure_std_streams()
 
 from server import HOST, PORT, app  # noqa: E402
 
@@ -32,9 +56,17 @@ def make_icon_image(size: int = 64):
 
 
 def _run_server() -> None:
+    import traceback
+
     import uvicorn
 
-    uvicorn.run(app, host=HOST, port=PORT, log_level="warning")
+    try:
+        # log_config=None: uvicorn 기본 로깅(ext://sys.stderr 핸들러)이 무콘솔 환경에서
+        # 크래시하는 것을 피하고, 상위에서 리다이렉트한 스트림만 사용한다.
+        uvicorn.run(app, host=HOST, port=PORT, log_level="warning", log_config=None)
+    except Exception:
+        # 서버 스레드가 죽어도 트레이는 남으므로, 원인을 로그에 남겨 진단 가능하게.
+        traceback.print_exc()
 
 
 def main() -> None:
@@ -56,4 +88,10 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import traceback
+
+    try:
+        main()
+    except Exception:
+        traceback.print_exc()
+        raise

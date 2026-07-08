@@ -297,20 +297,21 @@
       "id": "ERR-20260708073835-4392b3e5",
       "fingerprint": "4392b3e53174d768221ce85a",
       "symptom": "Tests  1 failed | 70 passed (71)",
-      "root_cause": "",
-      "fix_summary": "",
-      "guard_test": "",
+      "root_cause": "InlineAgentEntry recorded tool_result ok=false only in progress lines, then a later done event resolved the local-agent promise without surfacing the failure when no saved result path existed.",
+      "fix_summary": "Added regression coverage and changed the local-agent run flow to reject done-after-tool-failure when no result was saved; added OS-aware download guidance and local Agent folder-picker fallback.",
+      "guard_test": "powershell -ExecutionPolicy Bypass -File .\\scripts\\harness.ps1 -Profile frontend -PythonPath C:\\Users\\alseh\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
       "first_seen": "2026-07-08T07:38:35+00:00",
       "last_seen": "2026-07-08T07:38:35+00:00",
       "occurrences": 1,
-      "status": "active",
+      "status": "resolved",
       "last_command": "npm.cmd run test",
       "last_exit_code": 1,
       "last_error_line": "Tests  1 failed | 70 passed (71)",
       "last_log_path": "harness\\runs\\20260708-163827-frontend\\01-frontend-tests.log",
       "related_paths": [
         "frontend/app/app/new/page.tsx"
-      ]
+      ],
+      "resolved_at": "2026-07-08T11:01:53+00:00"
     }
   ]
 }
