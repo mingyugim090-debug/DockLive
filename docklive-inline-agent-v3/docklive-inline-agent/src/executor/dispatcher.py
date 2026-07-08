@@ -1,0 +1,58 @@
+"""로컬 실행기: tool_use 명령을 실제 함수로 라우팅. 예외는 절대 밖으로 던지지 않는다."""
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+
+from tools import chart_tools, excel_tools, file_tools, hwp_tools
+
+
+@dataclass
+class ToolOutput:
+    ok: bool
+    text: str  # tool_result content로 그대로 전달되는 문자열
+
+
+TOOL_REGISTRY = {
+    "open_workbook": excel_tools.open_workbook,
+    "list_sheets": excel_tools.list_sheets,
+    "read_range": excel_tools.read_range,
+    "write_range": excel_tools.write_range,
+    "apply_formula": excel_tools.apply_formula,
+    "insert_rows": excel_tools.insert_rows,
+    "format_range": excel_tools.format_range,
+    "save_workbook": excel_tools.save_workbook,
+    "close_workbook": excel_tools.close_workbook,
+    "read_document": file_tools.read_document,
+    "list_files": file_tools.list_files,
+    # v2: 시각화
+    "create_chart": excel_tools.create_chart,
+    "create_table": excel_tools.create_table,
+    "render_chart_image": chart_tools.render_chart_image,
+    # v2: 한글(HWP) 실시간 제어
+    "hwp_open": hwp_tools.hwp_open,
+    "hwp_list_fields": hwp_tools.hwp_list_fields,
+    "hwp_fill_field": hwp_tools.hwp_fill_field,
+    "hwp_replace_text": hwp_tools.hwp_replace_text,
+    "hwp_insert_text": hwp_tools.hwp_insert_text,
+    "hwp_insert_table": hwp_tools.hwp_insert_table,
+    "hwp_insert_image": hwp_tools.hwp_insert_image,
+    "hwp_save": hwp_tools.hwp_save,
+    "hwp_close": hwp_tools.hwp_close,
+}
+
+
+def execute(tool_name: str, tool_input: dict) -> ToolOutput:
+    fn = TOOL_REGISTRY.get(tool_name)
+    if fn is None:
+        return ToolOutput(False, f"알 수 없는 도구: {tool_name}")
+    try:
+        result = fn(**tool_input)  # 각 도구는 {"ok":..., "data"|"error":...} dict 반환
+    except TypeError as e:
+        return ToolOutput(False, f"인자 오류: {e}")
+    except Exception as e:  # 도구가 계약을 어기고 예외를 던진 경우의 최후 방어선
+        return ToolOutput(False, f"{tool_name} 실행 중 예외: {type(e).__name__}: {e}")
+
+    ok = bool(result.get("ok"))
+    payload = result.get("data") if ok else result.get("error")
+    return ToolOutput(ok, json.dumps(payload, ensure_ascii=False, default=str))

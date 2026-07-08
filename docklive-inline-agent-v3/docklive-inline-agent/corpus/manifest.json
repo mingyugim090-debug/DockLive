@@ -1,0 +1,28 @@
+{
+  "forms": [
+    {
+      "file": "sample_apply.hwpx",
+      "source": "합성 표본",
+      "program": "채점기 자가검증"
+    },
+    {
+      "file": "sample_budget.xlsx",
+      "source": "합성 표본",
+      "program": "채점기 자가검증",
+      "slots": [
+        {
+          "id": "인건비산출",
+          "kind": "cell",
+          "ref": "사업비!B3",
+          "max_chars": 50
+        },
+        {
+          "id": "재료비산출",
+          "kind": "cell",
+          "ref": "사업비!B4",
+          "max_chars": 50
+        }
+      ]
+    }
+  ]
+}

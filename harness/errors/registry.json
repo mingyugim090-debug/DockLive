@@ -229,6 +229,48 @@
         "frontend\\\\.next\\\\server\\\\pages\\\\_document.js.nft.json"
       ],
       "resolved_at": "2026-07-07T01:45:36+00:00"
+    },
+    {
+      "id": "ERR-20260708030103-ca168fe1",
+      "fingerprint": "ca168fe18e132f2cc490cf6f",
+      "symptom": "Type error: Argument of type '{ id: string; value: string; }[]' is not assignable to parameter of type '{ field_id: string; value: string; }[]'.",
+      "root_cause": "Retired Phase A/B workspace code still lived in the active Next.js route/type-check surface and called saveWorkflowInputs with legacy { id, value } payloads instead of the API contract's { field_id, value } shape.",
+      "fix_summary": "Moved retired routes into frontend/legacy/phase-c-routes, excluded legacy from frontend type checking, and kept the active /app/p/:id/:stage questions flow on the field_id payload shape.",
+      "guard_test": "powershell -ExecutionPolicy Bypass -File .\\scripts\\harness.ps1 -Profile frontend -PythonPath C:\\Users\\alseh\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+      "first_seen": "2026-07-08T03:01:03+00:00",
+      "last_seen": "2026-07-08T03:01:03+00:00",
+      "occurrences": 1,
+      "status": "resolved",
+      "last_command": "npm.cmd run build",
+      "last_exit_code": 1,
+      "last_error_line": "Type error: Argument of type '{ id: string; value: string; }[]' is not assignable to parameter of type '{ field_id: string; value: string; }[]'.",
+      "last_log_path": "harness\\runs\\20260708-120038-frontend\\02-frontend-build.log",
+      "related_paths": [
+        "scripts/clean-next.mjs"
+      ],
+      "resolved_at": "2026-07-08T04:44:43+00:00"
+    },
+    {
+      "id": "ERR-20260708044435-8a05d263",
+      "fingerprint": "8a05d263b1209c7c008e9a83",
+      "symptom": "[Error: EBUSY: resource busy or locked, unlink 'C:\\Users\\alseh\\OneDrive\\바탕 화면\\LiveDock\\frontend\\.next\\server\\app\\app\\new.rsc'] {",
+      "root_cause": "Transient Windows/OneDrive file lock on a Next.js build artifact while clean-next attempted to remove frontend/.next before rebuild.",
+      "fix_summary": "Re-ran the frontend harness after the lock cleared; frontend tests and production build passed.",
+      "guard_test": "powershell -ExecutionPolicy Bypass -File .\\scripts\\harness.ps1 -Profile frontend -PythonPath C:\\Users\\alseh\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+      "first_seen": "2026-07-08T04:44:35+00:00",
+      "last_seen": "2026-07-08T04:44:35+00:00",
+      "occurrences": 1,
+      "status": "resolved",
+      "last_command": "npm.cmd run build",
+      "last_exit_code": 1,
+      "last_error_line": "[Error: EBUSY: resource busy or locked, unlink 'C:\\Users\\alseh\\OneDrive\\바탕 화면\\LiveDock\\frontend\\.next\\server\\app\\app\\new.rsc'] {",
+      "last_log_path": "harness\\runs\\20260708-134426-frontend\\02-frontend-build.log",
+      "related_paths": [
+        "scripts/clean-next.mjs",
+        "frontend\\.next\\server\\app\\app\\new.rsc",
+        "frontend\\\\.next\\\\server\\\\app\\\\app\\\\new.rsc"
+      ],
+      "resolved_at": "2026-07-08T04:45:19+00:00"
     }
   ]
 }

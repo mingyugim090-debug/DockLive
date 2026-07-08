@@ -383,7 +383,7 @@ export function HeroSection() {
           </p>
 
           <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-            <ButtonLink href="/auth?next=/app">
+            <ButtonLink href="/app/new">
               공고 분석 시작
               <svg className="ml-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
@@ -434,7 +434,7 @@ export function HeroSection() {
                 공고 분석, 확인 질문, 섹션별 초안, 검토, HWPX export까지 데모 흐름으로 바로 확인할 수 있습니다.
               </p>
             </div>
-            <ButtonLink href="/auth?next=/app" className="px-7 py-2.5 text-sm">
+            <ButtonLink href="/app/new" className="px-7 py-2.5 text-sm">
               데모 워크스페이스 열기
             </ButtonLink>
           </div>

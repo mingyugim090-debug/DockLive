@@ -12,9 +12,9 @@ const titles: Array<[string, string]> = [
   ['/app/projects', '문서 프로젝트'],
   ['/app/templates', 'Templates'],
   ['/app/documents', 'Document'],
-  ['/app/billing', 'Billing'],
-  ['/app/settings', 'Settings'],
-  ['/app', 'Workspace'],
+  ['/account/billing', '결제·플랜'],
+  ['/account/settings', '설정'],
+  ['/app', '프로젝트'],
 ];
 
 function AppLayoutInner({ children, title }: { children: ReactNode; title: string }) {
@@ -51,7 +51,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     () =>
       titles.find(
         ([path]) => pathname === path || (path !== '/app' && pathname.startsWith(path)),
-      )?.[1] ?? 'Workspace',
+      )?.[1] ?? '프로젝트',
     [pathname],
   );
 

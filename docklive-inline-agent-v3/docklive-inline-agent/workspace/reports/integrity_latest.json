@@ -1,0 +1,70 @@
+{
+  "timestamp": "2026-07-07T11:17:15",
+  "total": 2,
+  "passed": 2,
+  "pass_rate": 100.0,
+  "results": [
+    {
+      "file": "sample_apply.hwpx",
+      "checks": {
+        "채움": [
+          true,
+          "3개 슬롯 채움"
+        ],
+        "C1 zip/mimetype": [
+          true,
+          "zip/mimetype 정상"
+        ],
+        "C2 XML well-formed": [
+          true,
+          "XML 전부 well-formed"
+        ],
+        "C3 태그구조 보존": [
+          true,
+          "태그 구조 보존"
+        ],
+        "C4 스타일 무변경": [
+          true,
+          "스타일(header.xml) 무변경"
+        ],
+        "C5 미채움 칸 없음": [
+          true,
+          "미채움 칸 없음"
+        ]
+      },
+      "passed": true,
+      "slot_count": 3
+    },
+    {
+      "file": "sample_budget.xlsx",
+      "checks": {
+        "채움": [
+          true,
+          "2개 슬롯 채움"
+        ],
+        "C1 파일 로드": [
+          true,
+          "정상 로드"
+        ],
+        "C2 시트 보존": [
+          true,
+          "시트 보존"
+        ],
+        "C3 병합셀 보존": [
+          true,
+          "병합 셀 보존"
+        ],
+        "C4 수식 보존": [
+          true,
+          "수식 보존"
+        ],
+        "C5 글자수 제한": [
+          true,
+          "글자수 제한 준수"
+        ]
+      },
+      "passed": true,
+      "slot_count": 2
+    }
+  ]
+}

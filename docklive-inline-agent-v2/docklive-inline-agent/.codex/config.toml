@@ -1,0 +1,12 @@
+#:schema https://developers.openai.com/codex/config-schema.json
+# DockLive Inline Agent 프로젝트 설정 (trusted 프로젝트에서만 로드됨)
+
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+developer_instructions = """
+이 저장소의 AGENTS.md와 src/tools/AGENTS.md 규약을 항상 따른다.
+코드 수정 후에는 반드시 `python scripts/verify.py`를 실행해 전부 통과시킨다.
+samples/originals/ 아래 파일은 절대 수정하지 않는다.
+자격증명, auth 상태, API 키를 커밋하지 않는다.
+"""

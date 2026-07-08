@@ -65,7 +65,7 @@ export function PainSection() {
             공고를 읽은 뒤에도 정리할 일이 남습니다
           </h2>
           <p className="mt-3 text-sm leading-6 text-[#6B7280]">
-            LiveDock은 공고에 있는 사실과 사용자가 채워야 할 정보를 먼저 나눕니다.
+            DockLive는 공고에 있는 사실과 사용자가 채워야 할 정보를 먼저 나눕니다.
           </p>
         </motion.div>
 

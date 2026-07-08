@@ -30,7 +30,7 @@ export function FinalCTASection() {
           </p>
 
           <div className="relative mt-7 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-            <ButtonLink href="/auth?next=/app" className="px-7 py-3 text-sm">
+            <ButtonLink href="/app/new" className="px-7 py-3 text-sm">
               공고 분석 시작
               <svg className="ml-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />

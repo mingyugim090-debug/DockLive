@@ -172,6 +172,36 @@ export async function getWorkflow(id: string): Promise<WorkflowResponse> {
   return res.json();
 }
 
+export type IntegrityCheck = {
+  code: string;
+  label: string;
+  passed: boolean;
+  detail?: string | null;
+  /** 실패 시 점프할 5단계 섹션 id */
+  section_id?: string | null;
+};
+
+export type IntegrityReport = {
+  passed: boolean;
+  checks: IntegrityCheck[];
+  checked_at?: string | null;
+};
+
+/** 무결성 검사 (DockLive 본체 Phase 9 계약: GET /api/projects/:id/integrity).
+ * 백엔드 미구현(404 등)이면 null을 반환 — 호출부는 "검사 준비 중"으로 표시한다. */
+export async function getProjectIntegrity(id: string): Promise<IntegrityReport | null> {
+  try {
+    const res = await fetch(`${API_URL}/api/projects/${id}/integrity`);
+    if (!res.ok) return null;
+    const body = await res.json();
+    const data = body?.data ?? body;
+    if (!data || !Array.isArray(data.checks)) return null;
+    return data as IntegrityReport;
+  } catch {
+    return null;
+  }
+}
+
 export async function restoreWorkflow(id: string, workflow: WorkflowSession): Promise<WorkflowResponse> {
   const res = await fetch(`${API_URL}/api/workflow/${id}/restore`, {
     method: 'POST',

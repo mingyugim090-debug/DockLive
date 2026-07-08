@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion';
 
 const STATS = [
-  { value: '5종', label: '대표 공고 fixture' },
+  { value: '5종', label: '대표 공고 예시' },
   { value: '6단계', label: 'Agent 작성 흐름' },
   { value: 'HWPX', label: '검증 가능한 export' },
 ];
