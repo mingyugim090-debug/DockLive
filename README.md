@@ -522,6 +522,14 @@ HWPX 신청서 연동 (신청서 양식을 같이 첨부했을 때)
 cd backend
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
+
+Mac 터미널 다운로드
+curl -L -o ~/Downloads/DockLiveAgent-mac.zip "https://trgf5yzm.ap-southeast.insforge.app/api/storage/buckets/agent-downloads/objects/DockLiveAgent-mac.zip"
+cd ~/Downloads
+xattr -d com.apple.quarantine DockLiveAgent-mac.zip 2>/dev/null
+unzip DockLiveAgent-mac.zip -d DockLiveAgent
+cd DockLiveAgent
+
 ```
 
 ## 📚 문서
